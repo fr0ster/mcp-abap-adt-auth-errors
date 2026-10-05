@@ -38,8 +38,10 @@
  * What an attempt commits stays with the caller: `start`'s value is handed
  * to the waiters, never applied here.
  *
- * **A waiter's signal is foreign.** Its `aborted` is read once and must be a
- * boolean; its listener is added and removed inside a `try`. A signal that
+ * **A waiter's signal is foreign.** Its `aborted` must be a boolean, read
+ * before its listener is added and again after (a signal aborting during its
+ * own registration never calls the listener); the listener is added and
+ * removed inside a `try`, its removal in place before the registration runs. A signal that
  * is not an object, whose `aborted` throws or is not a boolean, or whose
  * `addEventListener` throws cannot be honoured: its waiter is refused
  * `aborted` at once, so it neither starts nor keeps an attempt. Its listener
@@ -296,13 +298,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     signal: AbortSignal,
   ): void {
     const onAbort = (): void => abandon(attempt, waiter);
-    try {
-      signal.addEventListener('abort', onAbort, { once: true });
-    } catch {
-      abandon(attempt, waiter);
-      return;
-    }
-    if (waiter.done) return;
+    // The cleanup is in place before the foreign registration runs.
     waiter.detach = () => {
       try {
         signal.removeEventListener('abort', onAbort);
@@ -310,6 +306,15 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
         // Ignored: the waiter is settled whatever the signal does.
       }
     };
+    try {
+      signal.addEventListener('abort', onAbort, { once: true });
+    } catch {
+      abandon(attempt, waiter);
+      return;
+    }
+    // A signal that aborted during its registration (before forwarding it)
+    // never calls the listener: read it again.
+    if (readSignal(signal) !== 'live') abandon(attempt, waiter);
   }
 
   function join(start: AttemptStart<T>, signal?: AbortSignal): Promise<T> {
@@ -365,9 +370,10 @@ export interface Parties {
   /**
    * Attaches a party. The same signal attached again is the same party. An
    * attachment is released when its signal aborts (its listener removed) or
-   * when any `detach` returned for it is called. A signal already aborted,
-   * or one that cannot be read or listened to (as `join` judges a waiter's),
-   * is not added; its `detach` does nothing.
+   * when any `detach` returned for it is called. A signal already aborted —
+   * before its registration or during it — or one that cannot be read or
+   * listened to (as `join` judges a waiter's), is not added; its listener is
+   * removed and its `detach` does nothing.
    */
   attach(signal: AbortSignal): () => void;
   /**
@@ -446,6 +452,11 @@ export function createParties(): Parties {
     try {
       signal.addEventListener('abort', party.onAbort, { once: true });
     } catch {
+      release(party, false);
+      return ignore;
+    }
+    // Aborted during its registration (or unreadable now): never added.
+    if (readSignal(signal) !== 'live') {
       release(party, false);
       return ignore;
     }

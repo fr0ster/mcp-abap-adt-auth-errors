@@ -1064,3 +1064,80 @@ describe('createParties — attached parties', () => {
     expect(Object.isFrozen(momentOf(parties))).toBe(true);
   });
 });
+
+/**
+ * A foreign signal over a real one that aborts it inside addEventListener,
+ * before forwarding the registration: the forwarded listener never fires.
+ */
+function abortingAdapter(): {
+  readonly signal: AbortSignal;
+  readonly inner: AbortSignal;
+} {
+  const controller = new AbortController();
+  const inner = controller.signal;
+  const signal = {
+    get aborted() {
+      return inner.aborted;
+    },
+    addEventListener(
+      type: string,
+      listener: () => void,
+      options?: AddEventListenerOptions,
+    ) {
+      controller.abort();
+      inner.addEventListener(type, listener, options);
+    },
+    removeEventListener(type: string, listener: () => void) {
+      inner.removeEventListener(type, listener);
+    },
+  } as unknown as AbortSignal;
+  return { signal, inner };
+}
+
+describe('a signal that aborts while its listener is registered', () => {
+  it('join: the waiter is refused aborted, the attempt leaves the slot, no listener stays', async () => {
+    const slot = sharedAttempt<string>('token-request');
+    const held = heldStart<string>();
+    const { signal, inner } = abortingAdapter();
+    const waiter = track(slot.join(held.start, signal));
+    await flush();
+    expectAborted(waiter.reason());
+    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    const fresh = heldStart<string>();
+    void slot.join(fresh.start);
+    expect(fresh.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('join beside a live waiter: only it is refused', async () => {
+    const slot = sharedAttempt<string>('token-request');
+    const held = heldStart<string>();
+    const kept = track(slot.join(held.start));
+    const { signal, inner } = abortingAdapter();
+    const refused = track(slot.join(held.start, signal));
+    await flush();
+    expectAborted(refused.reason());
+    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    held.result.resolve('token');
+    await flush();
+    expect(kept.value()).toBe('token');
+  });
+
+  it('attach: the party is not added, no listener stays', () => {
+    const parties = createParties();
+    const { signal, inner } = abortingAdapter();
+    const detach = parties.attach(signal);
+    expect(parties.waiterSignal()).toBeUndefined();
+    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    detach();
+  });
+
+  it('attach during a moment: it does not join it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    parties.attach(a.signal);
+    const moment = momentOf(parties);
+    parties.attach(abortingAdapter().signal);
+    a.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+});

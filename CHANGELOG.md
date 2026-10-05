@@ -169,7 +169,9 @@ README.md documents the whole surface.
   it, raced only against the attempt's signal. A waiter's signal is read
   guarded: one that is not an object, whose `aborted` throws or is not a
   boolean, or whose `addEventListener` throws refuses only its own waiter
-  (`aborted`). No timer; what an attempt commits stays with the caller.
+  (`aborted`); `aborted` is read again after the listener is added, so a
+  signal aborting during its own registration refuses its waiter too (and
+  is not added as a party), its listener removed. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
@@ -211,7 +213,11 @@ README.md documents the whole surface.
   root, or a package specifier resolved as the compiler does); a class
   reaches it only through that declaration — a same-named class elsewhere
   exempts nothing — and the base's own four moments must each only `return
-  guard(this.#moments.<moment>, () => …, () => …)` (reported as rule 1;
+  guard(this.#moments.<moment>, () => …, () => …)`, with no constructor
+  parameter property named after a moment and no write replacing one
+  (`this.<moment> =`, `AuthProviderBase.prototype.<moment> =`,
+  `Object.assign` / `Object.defineProperty` onto its `this` or prototype)
+  (reported as rule 1;
   required methods only, for a base read from a declaration file). It exits
   2 rather than pass in silence: on a program that does not type-check, a
   given file that does not exist, nothing to check, rules 4 / 5 without the
