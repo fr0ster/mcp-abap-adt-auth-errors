@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - Unreleased
+
+The first release: the runtime half of the authentication error contract,
+whose types `@mcp-abap-adt/interfaces-auth` 6.0.0 declares. Every producer
+obtains its errors here and every reader classifies what it caught here.
+README.md documents the whole surface.
+
 ### Dependencies
 
 - `@mcp-abap-adt/interfaces-auth` `^6.0.0` — the only dependency, resolved
@@ -15,9 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The package scaffold: build, type check (tests and type tests included),
-  Biome with warnings as errors, Jest, CI on Node.js 22, 24 and 26, and a
-  release workflow on a `v*.*.*` tag.
+- The package: build, type check (tests and type tests included), Biome with
+  warnings as errors and the shape check in `lint:check`, Jest, CI on
+  Node.js 22, 24 and 26, and a release workflow on a `v*.*.*` tag.
 - `OK` — the one success outcome, `{ ok: true }`, frozen, typed as the
   `{ ok: true }` member of `AuthOutcome` from
   `@mcp-abap-adt/interfaces-auth` 6.0.0.
@@ -181,3 +188,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   script's header (Limits). This repository runs rules 4 and 6 in
   `lint:check`, its four assertion sites being `mint` and the three integer
   makers.
+- README.md: what an error is; the sixteen kinds and their facts; the words
+  of every kind and every discriminant value, in a table generated from the
+  built package's builders by `scripts/generate-kinds-table.mjs`
+  (`npm run docs:kinds`) — a test fails when the committed table differs;
+  diagnostics and their admission; catching with `classify` / `readFailure`
+  and never `instanceof`; the two exhaustiveness patterns; `guard`,
+  `relayOutcome` and a pointer to `AuthProviderBase`; `sharedAttempt` and
+  `createParties` with the caller's rules; the allowlist guards; the brand
+  and its limit; the shape check (copying it byte for byte, `--rules`, exit
+  codes, limits); versioning against interfaces-auth.
+- A test that exported allowlists cannot be widened: after a push through a
+  cast, an index assignment, `Object.defineProperty` of an index or
+  `length`, `splice`, and `Set` / `Map` methods called with `.call` on every
+  allowlist array of interfaces-auth and on every export of this package
+  (one level down included), and with `Set.prototype.has`,
+  `Array.prototype.includes` and `Array.prototype.indexOf` patched, every
+  guard answers as before, a foreign code, OAuth error, rule, kind,
+  operation or field is still refused by `classify`, `classifyOutcome`,
+  `readFailure`, the builders and `render`, and appears in no word, log
+  field or diagnostic. No export is a `Set`, `Map`, `WeakSet` or `WeakMap`,
+  nested one level, and an array one level down is frozen.
+
+### Known limits
+
+- `structuredClone` of an `AuthProviderFailure` comes back a plain `Error`:
+  `isAuthProviderFailure` answers false and `readFailure` answers
+  `unknown`. A JSON round-trip keeps the kind and facts.
+- `guard` / `relayOutcome`: a target or grant thunk answering a rejecting
+  Promise subclass or a proxied promise can still cause an unhandled
+  rejection; handling it would run its code.
+- The type brand does not refuse a type assertion; the shape check does
+  (rule 4), in the repositories that run it.

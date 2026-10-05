@@ -28,11 +28,13 @@ package). A change that departs from it changes the spec first.
    whose target is or contains an error, an outcome, a failure or a branded
    integer is a defect.
 2. **One builder per kind** (`builders.ts`) — the only exported way to obtain
-   an error. A builder normalises the facts (absent keys omitted, arrays
-   capped and deduplicated, everything frozen), admits each diagnostic
-   (`admission.ts`), renders `reason` / `hint` with the default words, and
-   mints. Facts are not re-checked at run time — their types are the check;
-   facts from an unknown source go through classification, never a builder.
+   an error. A builder never throws: it reads every fact as an own data
+   property and checks it (`factCheck.ts`) against its allowlist guard or
+   branded-integer maker, drops an invalid optional fact, answers `unknown`
+   (`unfamiliar-error`) for an invalid required one, normalises (absent keys
+   omitted, arrays copied, capped and deduplicated, everything frozen), admits
+   each diagnostic (`admission.ts`), renders `reason` / `hint` with the
+   default words, and mints. `render` runs the same check.
 3. **No secret and no foreign text in any error.** `reason` / `hint` come only
    from `WORDS` (`words.ts`), rendered from `kind` and `facts`. Facts are
    allowlist members and branded ranges only. Diagnostics are admitted field
@@ -52,7 +54,9 @@ package). A change that departs from it changes the spec first.
    `Set.prototype.has` captured at load. Tables (`WORDS`, the diagnostics and
    blame tables) are module-private or exported only deeply frozen. `OK` is
    frozen. A consumer that needs a list uses the frozen `as const` array from
-   `interfaces-auth`.
+   `interfaces-auth`. `widening.test.ts` runs the attacks of spec §11.1 on
+   every export (one level down) and every allowlist array, and sweeps the
+   namespace for a `Set` / `Map`: a new export that is one fails there.
 6. **Exhaustive by construction.** `WORDS` `satisfies` a mapped type over
    every kind; within a kind every discriminant is a `switch` ending in
    `unreachable(x: never)`. A kind or variant without words does not compile.
@@ -64,6 +68,17 @@ package). A change that departs from it changes the spec first.
    `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noImplicitOverride`,
    `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`; `noExplicitAny`
    is an error, and Biome warnings fail `lint:check`.
+
+9. **Words in the README are generated, never copied.** The kinds table
+   between the `BEGIN GENERATED` / `END GENERATED` markers is what
+   `scripts/generate-kinds-table.mjs` prints from the built builders;
+   `kindsTable.test.ts` fails when they differ. After changing a word or a
+   list: `npm run build && npm run docs:kinds`. Prose quotes no word.
+10. **The shape check is canonical here.** `tools/check-provider-shape.mjs` is
+   published (`files`); connection, auth-providers and the broker keep
+   byte-identical copies with a test comparing them. A change to it is a
+   change for every repository: keep its header's rules and Limits current,
+   and the README's summary with them.
 
 ## Dependencies
 
@@ -79,6 +94,7 @@ npm run build:fast   # tsc -p tsconfig.build.json
 npm run test:check   # tsc --noEmit over sources, tests and __typechecks__
 npm run lint:check   # Biome, --error-on-warnings, then the shape check (rules 4, 6)
 npm run lint         # Biome with --write
+npm run docs:kinds   # regenerate the README kinds table (after a build)
 npm test             # Jest (needs a build: tests load dist/ as a consumer would)
 ```
 
@@ -104,7 +120,11 @@ src/
 ├── exhaustive.ts     # matchKind, unreachableKind (§9)
 ├── sharedAttempt.ts  # the waiter rules of a shared attempt (§6b)
 ├── __tests__/        # Jest; built-package tests require dist/ by path
+│                     #   widening.test.ts — §11.1 "allowlists cannot be widened"
+│                     #   kindsTable.test.ts — README table equals the generated one
 └── __typechecks__/   # compiled by test:check only, never built or run
+scripts/
+└── generate-kinds-table.mjs  # the README kinds table from dist/ (§11.4); not published
 tools/
 ├── check-provider-shape.mjs  # the shape check (§8.2), published; other repos copy it byte for byte
 ├── assertion-sites.json      # rule 4's sites: mint and the three integer makers
