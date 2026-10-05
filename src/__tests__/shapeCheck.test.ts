@@ -276,6 +276,61 @@ describe('check-provider-shape: the base, by declaration', () => {
     );
   });
 
+  it('the base may not replace a verified moment: every write is refused under rule 1', () => {
+    for (const rules of ['1', '2', '3']) {
+      const run = check([
+        '--rules',
+        rules,
+        '--root',
+        fixtures,
+        '--base',
+        './bases/RewritingBase#AuthProviderBase',
+        join(fixtures, 'bases', 'RewritingBase.ts'),
+      ]);
+      expect(run.status).toBe(1);
+      expect(run.findings.map((finding) => finding.line)).toEqual([
+        expect.stringMatching(
+          /rule 1: AuthProviderBase assigns this\.authorize; /,
+        ),
+        expect.stringMatching(
+          /rule 1: AuthProviderBase assigns this\.prepare; /,
+        ),
+        expect.stringMatching(
+          /rule 1: Object\.assign writes rejected onto AuthProviderBase; /,
+        ),
+        expect.stringMatching(
+          /rule 1: Object\.defineProperty writes establish onto AuthProviderBase; /,
+        ),
+        expect.stringMatching(
+          /rule 1: AuthProviderBase assigns AuthProviderBase\.prototype\.prepare; /,
+        ),
+        expect.stringMatching(
+          /rule 1: Object\.assign writes authorize onto AuthProviderBase; /,
+        ),
+        expect.stringMatching(
+          /rule 1: Object\.defineProperty writes rejected onto AuthProviderBase; /,
+        ),
+      ]);
+    }
+  });
+
+  it('the base may not declare a moment as a constructor parameter property', () => {
+    const run = check([
+      '--rules',
+      '1',
+      '--root',
+      fixtures,
+      '--base',
+      './bases/ParameterBase#AuthProviderBase',
+      join(fixtures, 'bases', 'ParameterBase.ts'),
+    ]);
+    expect(run.findings.map((finding) => finding.line)).toEqual([
+      expect.stringMatching(
+        /^bases\/ParameterBase\.ts:\d+:\d+: rule 1: AuthProviderBase declares establish as a constructor parameter property; /,
+      ),
+    ]);
+  });
+
   it('a provider of the named base is clean; with another base named, it reaches none', () => {
     const obeys = join(fixtures, 'src', 'obeys.ts');
     const clean = check([

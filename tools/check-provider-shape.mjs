@@ -39,7 +39,12 @@
  * exempts nothing. The base itself is verified under rule 1: each of its
  * four moments must be one method whose body is only
  * `return guard(this.#moments.<moment>, () => …, () => …)`, the callee
- * auth-errors' `guard`. A base read from a declaration file has no bodies:
+ * auth-errors' `guard`, no constructor parameter property may be named after
+ * a moment, and no write may replace a moment: `this.<moment> = …` (a
+ * computed key from a constant, through assertions, included) in the base,
+ * `AuthProviderBase.prototype.<moment> = …`, and `Object.assign` /
+ * `Object.defineProperty` of a moment onto the base's `this` or prototype —
+ * in any checked file. A base read from a declaration file has no bodies:
  * there only the four methods are required, and the bodies are verified
  * where the base is written (auth-providers runs rules 1–3 on its source).
  *
@@ -858,14 +863,41 @@ function createRules(program, contractFile, baseFile, options, sites) {
     return current;
   }
 
+  /** Whether the base's own writes are checked: any of rules 1–3. */
+  function checksBase() {
+    return options.rules.has(1) || options.rules.has(2) || options.rules.has(3);
+  }
+
   /**
-   * Rule 2 through an assignment: `this.<moment> = …` in a class reaching
-   * the base, or `X.prototype.<moment> = …` of one — `this` or the target
-   * unwrapped of parentheses and assertions, a computed key folded from its
-   * literal type (`(this as any)[NAME]`, `X.prototype[NAME]`).
+   * Where a moment written onto `target` lands: `'base'` (the base named by
+   * --base — reported under rule 1, its verification), `'provider'` (a class
+   * reaching it — rule 2), or undefined. Each only when its rule runs.
+   */
+  function momentTarget(target) {
+    const kind = targetKind(target);
+    if (kind === 'base') return checksBase() ? 'base' : undefined;
+    if (kind === 'provider')
+      return options.rules.has(2) ? 'provider' : undefined;
+    return undefined;
+  }
+
+  /** Reports a moment written onto the base or a class reaching it. */
+  function reportWrite(node, where, baseWhat, providerWhat) {
+    if (where === 'base') {
+      report(node, 1, `${baseWhat}; its moments only delegate to guard`);
+    } else {
+      report(node, 2, `${providerWhat}; ${BASE} owns the four methods`);
+    }
+  }
+
+  /**
+   * Rules 1 (the base) and 2 through an assignment: `this.<moment> = …` in
+   * the base or a class reaching it, or `X.prototype.<moment> = …` of one —
+   * `this` or the target unwrapped of parentheses and assertions, a computed
+   * key folded from its literal type (`(this as any)[NAME]`,
+   * `X.prototype[NAME]`).
    */
   function checkMomentAssignment(node) {
-    if (!options.rules.has(2)) return;
     const kind = node.operatorToken.kind;
     if (
       kind < ts.SyntaxKind.FirstAssignment ||
@@ -883,29 +915,32 @@ function createRules(program, contractFile, baseFile, options, sites) {
       : keyOf(target.argumentExpression);
     if (name === undefined || !MOMENTS.has(name)) return;
     const owner = unwrap(target.expression);
-    if (!targetsProvider(owner)) return;
+    const where = momentTarget(owner);
+    if (where === undefined) return;
     const written =
       owner.kind === ts.SyntaxKind.ThisKeyword
         ? `this.${name}`
         : `${owner.getText()}.${name}`;
-    report(
+    reportWrite(
       node,
-      2,
-      `a class reaching ${BASE} assigns ${written}; ${BASE} owns the four methods`,
+      where,
+      `${BASE} assigns ${written}`,
+      `a class reaching ${BASE} assigns ${written}`,
     );
   }
 
   /**
-   * Rule 2 through a call: `Object.assign` or `Object.defineProperty` onto
-   * `this` of a class reaching the base, or onto `X.prototype` of one,
-   * with a moment's key.
+   * Rules 1 (the base) and 2 through a call: `Object.assign` or
+   * `Object.defineProperty` onto `this` of the base or a class reaching it,
+   * or onto `X.prototype` of one, with a moment's key.
    */
   function checkMomentCall(node) {
-    if (!options.rules.has(2)) return;
     const method = globalObjectMethod(node);
     if (method !== 'assign' && method !== 'defineProperty') return;
     const target = node.arguments[0];
-    if (target === undefined || !targetsProvider(unwrap(target))) return;
+    if (target === undefined) return;
+    const where = momentTarget(unwrap(target));
+    if (where === undefined) return;
     const names =
       method === 'defineProperty'
         ? [keyOf(node.arguments[1])]
@@ -921,19 +956,28 @@ function createRules(program, contractFile, baseFile, options, sites) {
       (name) => name !== undefined && MOMENTS.has(name),
     );
     if (moment !== undefined) {
-      report(
+      reportWrite(
         node,
-        2,
-        `Object.${method} writes ${moment} onto a class reaching ${BASE}; ${BASE} owns the four methods`,
+        where,
+        `Object.${method} writes ${moment} onto ${BASE}`,
+        `Object.${method} writes ${moment} onto a class reaching ${BASE}`,
       );
     }
   }
 
-  /** `this` inside a class reaching the base, or `X.prototype` of one. */
-  function targetsProvider(target) {
+  /** What a class declaration is: the base, one reaching it, or neither. */
+  function classKind(declaration) {
+    if (isBaseClass(declaration)) return 'base';
+    return ts.isClassLike(declaration) && reachesBase(declaration)
+      ? 'provider'
+      : undefined;
+  }
+
+  /** `this` inside the base or a class reaching it, or `X.prototype` of one. */
+  function targetKind(target) {
     if (target.kind === ts.SyntaxKind.ThisKeyword) {
       const owner = ts.findAncestor(target, ts.isClassLike);
-      return owner !== undefined && reachesBase(owner);
+      return owner === undefined ? undefined : classKind(owner);
     }
     if (
       ts.isPropertyAccessExpression(target) &&
@@ -944,13 +988,11 @@ function createRules(program, contractFile, baseFile, options, sites) {
         symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias
           ? checker.getAliasedSymbol(symbol)
           : symbol;
-      const declarations = resolved?.declarations ?? [];
-      return declarations.some(
-        (declaration) =>
-          ts.isClassLike(declaration) && reachesBase(declaration),
-      );
+      const kinds = (resolved?.declarations ?? []).map(classKind);
+      if (kinds.includes('base')) return 'base';
+      if (kinds.includes('provider')) return 'provider';
     }
-    return false;
+    return undefined;
   }
 
   function isAbstract(node) {
@@ -1471,7 +1513,24 @@ function createRules(program, contractFile, baseFile, options, sites) {
   function verifyBase() {
     for (const declaration of baseDeclarations) {
       const declarationFile = declaration.getSourceFile().isDeclarationFile;
+      const parameters = declaration.members
+        .filter(ts.isConstructorDeclaration)
+        .flatMap((ctor) => [...ctor.parameters])
+        .filter((parameter) =>
+          ts.getModifiers(parameter)?.some(isParameterPropertyModifier),
+        );
       for (const moment of MOMENTS) {
+        const parameter = parameters.find(
+          (candidate) => nameOf(candidate.name) === moment,
+        );
+        if (parameter !== undefined) {
+          report(
+            parameter,
+            1,
+            `${BASE} declares ${moment} as a constructor parameter property; its moments only delegate to guard`,
+          );
+          continue;
+        }
         const members = declaration.members.filter(
           (member) => memberName(member.name) === moment,
         );

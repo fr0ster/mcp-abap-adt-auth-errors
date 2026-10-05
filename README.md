@@ -737,7 +737,11 @@ reaches the base only if the declaration it extends is that one: a class of
 the same name elsewhere, in a file of the same name too, exempts nothing. The
 base itself is verified (reported as rule 1): each of its four moments must
 be one method whose body is only `return guard(this.#moments.<moment>,
-() => …, () => …)`, with auth-errors' `guard`. A base read from a declaration
+() => …, () => …)`, with auth-errors' `guard`; no constructor parameter
+property may be named after a moment; and nothing may replace a moment —
+`this.<moment> = …` in the base, `AuthProviderBase.prototype.<moment> = …`,
+`Object.assign` / `Object.defineProperty` of a moment onto its `this` or
+prototype, in any checked file. A base read from a declaration
 file has no bodies — there only the four methods are required, and the
 bodies are verified where the base is written.
 
