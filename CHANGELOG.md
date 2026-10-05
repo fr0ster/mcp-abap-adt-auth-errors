@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-10-06
 
 The first release: the runtime half of the authentication error contract,
 whose types `@mcp-abap-adt/interfaces-auth` 6.0.0 declares. Every producer
