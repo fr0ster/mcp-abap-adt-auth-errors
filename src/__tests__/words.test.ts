@@ -1412,15 +1412,54 @@ describe('anything this build does not know renders the unfamiliar words whole',
   });
 });
 
-describe('unfamiliar-error as an operation', () => {
-  it('names an unfamiliar error, not a failed handling step', () => {
-    expect(
-      build('request-failed', {
+describe('F2: unfamiliar-error as an operation', () => {
+  it.each([
+    [
+      'request-failed',
+      {
         operation: 'unfamiliar-error',
         problem: 'refused',
         status: httpStatus(500),
+      },
+    ],
+    [
+      'request-failed',
+      { operation: 'unfamiliar-error', problem: 'no-access-token' },
+    ],
+    [
+      'request-failed',
+      { operation: 'unfamiliar-error', problem: 'incomplete-response' },
+    ],
+    ['tls', { operation: 'unfamiliar-error', code: 'CERT_HAS_EXPIRED' }],
+    ['unknown', { operation: 'unfamiliar-error', status: httpStatus(500) }],
+  ])('%s renders the unfamiliar sentence alone', (kind, facts) => {
+    expect(words(build(kind, facts))).toStrictEqual(UNFAMILIAR);
+  });
+});
+
+describe('F4: counts', () => {
+  it('a counted rule with a count below two uses the generic wording', () => {
+    expect(
+      build('saml-assertion', {
+        rule: 'several-issuers',
+        check: 'issuer',
+        count: count(1),
       }).reason,
-    ).toBe('an unfamiliar error (HTTP 500)');
+    ).toBe(
+      'the SAML assertion was refused (issuer): the assertion carries more than one saml:Issuer; exactly one is allowed',
+    );
+  });
+
+  it('one candidate not shown is singular', () => {
+    expect(
+      build('saml-assertion', {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        moreCandidates: count(1),
+      }).reason,
+    ).toBe(
+      'the SAML assertion was refused (bearerConfirmation): no bearer confirmation qualifies (1 candidate not shown)',
+    );
   });
 });
 

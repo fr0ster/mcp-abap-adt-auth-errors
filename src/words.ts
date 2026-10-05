@@ -18,8 +18,7 @@
  * No word mentions a timeout: there is no built-in login timeout (§6a).
  */
 import {
-  type AssertionCheck,
-  type AssertionRule,
+  type AssertionRuleCheck,
   type AuthProviderErrorFacts,
   type AuthProviderErrorKind,
   BASIC_ENCODINGS,
@@ -42,6 +41,7 @@ import {
   isSncCandidateSource,
   isSncUnusableReason,
 } from './allowlists';
+import { checkFacts } from './factCheck';
 
 /** What a kind's words are: a reason, and a hint when there is one. */
 export type Words = { readonly reason: string; readonly hint?: string };
@@ -151,7 +151,9 @@ const OPERATION_PHRASE = Object.freeze({
   'oidc-token-request': 'the OIDC token request',
   'validating-assertion': 'validating the SAML assertion',
   'client-authentication-strategy': 'the clientAuthentication strategy',
-  'unfamiliar-error': 'an unfamiliar error',
+  // Never rendered as a phrase: `subject` refuses it (the whole words are
+  // the unfamiliar sentence).
+  'unfamiliar-error': UNFAMILIAR_REASON,
   preparing: 'preparing',
   establishing: 'establishing the logon',
   authorizing: 'authorizing the request',
@@ -159,6 +161,9 @@ const OPERATION_PHRASE = Object.freeze({
 
 /** What was being done: `<grant> token request` for a token request. */
 function subject(operation: Operation, grant?: OAuth2GrantType): string {
+  // An unfamiliar error is not something that was being done: its words are
+  // its own sentence, never "<phrase> failed" or "<phrase> returned".
+  if (operation === 'unfamiliar-error') throw new Unfamiliar();
   if (operation === 'token-request' && grant !== undefined) {
     return `${grant} token request`;
   }
@@ -176,8 +181,6 @@ function failed(operation: Operation, grant?: OAuth2GrantType): string {
     case 'authorizing-snc-request':
     case 'explaining-snc-refusal':
       return `the SNC provider failed while ${own(OPERATION_PHRASE, operation)}`;
-    case 'unfamiliar-error':
-      return own(OPERATION_PHRASE, operation);
     default:
       return `${subject(operation, grant)} failed`;
   }
@@ -632,7 +635,7 @@ export const ASSERTION_RULE_CHECK = Object.freeze({
   'only-encrypted-assertion': 'document',
   'no-assertion': 'document',
   'several-assertions': 'document',
-}) satisfies { readonly [R in AssertionRule]: AssertionCheck };
+}) satisfies AssertionRuleCheck;
 
 /** "carries <n> <what>; exactly one is allowed", the count a fact. */
 function carriesSeveral(
@@ -691,7 +694,7 @@ function noBearerQualifies(
   if (parts.length === 0) {
     return hidden === 0
       ? 'no bearer confirmation qualifies'
-      : `no bearer confirmation qualifies (${hidden} candidates not shown)`;
+      : `no bearer confirmation qualifies (${hidden} ${hidden === 1 ? 'candidate' : 'candidates'} not shown)`;
   }
   if (hidden > 0) parts.push(`and ${hidden} more`);
   return `no bearer confirmation qualifies: ${joined(parts, ' | ')}`;
@@ -1157,8 +1160,12 @@ export function render<K extends AuthProviderErrorKind>(
 ): Words {
   if (!isAuthProviderErrorKind(kind)) return { reason: UNFAMILIAR_REASON };
   try {
+    // Every fact read as an own data property and checked against its
+    // allowlist or maker first: nothing unchecked reaches a word.
+    const checked = checkFacts(kind, facts, ASSERTION_RULE_CHECK);
+    if (checked === undefined) return { reason: UNFAMILIAR_REASON };
     const words: (facts: AuthProviderErrorFacts[K]) => Words = WORDS[kind];
-    return words(facts);
+    return words(checked);
   } catch {
     return { reason: UNFAMILIAR_REASON };
   }

@@ -481,9 +481,10 @@ describe('a builder never throws on what a caller hands it', () => {
     expect(isMinted(error)).toBe(true);
   });
 
-  it('reads facts whose every trap throws as empty', () => {
+  it('facts whose every trap throws lack their required facts: the unfamiliar error', () => {
     const error = authError.unknown(hostile());
-    expect(error.facts).toStrictEqual({});
+    expect(error.kind).toBe('unknown');
+    expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
     expect(isMinted(error)).toBe(true);
   });
 
@@ -574,6 +575,322 @@ describe('a builder never throws on what a caller hands it', () => {
     const error = authError.unknown(facts);
     expect(Object.getPrototypeOf(error.facts)).toBe(Object.prototype);
     expect(error.facts).toStrictEqual({ operation: 'refresh' });
+  });
+});
+
+const UNFAMILIAR_REASON =
+  'an authentication error of a kind this version does not know';
+
+/** An object whose `toString` and `Symbol.toPrimitive` record a call. */
+function spy(calls: string[]): object {
+  return {
+    [Symbol.toPrimitive]() {
+      calls.push('toPrimitive');
+      return 'MARKER';
+    },
+    toString() {
+      calls.push('toString');
+      return 'MARKER';
+    },
+  };
+}
+
+describe('F1: every fact value is read own and checked, in builders and render', () => {
+  const render = built.render as (
+    kind: unknown,
+    facts: unknown,
+  ) => {
+    reason: string;
+    hint?: string;
+  };
+
+  /** [label, kind, facts with one bad optional value, the facts kept]. */
+  const OPTIONAL: readonly (readonly [string, string, unknown, unknown])[] = [
+    [
+      'grant with free text',
+      'request-failed',
+      {
+        operation: 'token-request',
+        grant: 'MARKER secret',
+        problem: 'refused',
+      },
+      { operation: 'token-request', problem: 'refused' },
+    ],
+    [
+      'status an object',
+      'unknown',
+      { operation: 'refresh', status: {} },
+      { operation: 'refresh' },
+    ],
+    [
+      'status out of range',
+      'unknown',
+      { operation: 'refresh', status: 700 },
+      { operation: 'refresh' },
+    ],
+    [
+      'status a numeric string',
+      'unknown',
+      { operation: 'refresh', status: '500' },
+      { operation: 'refresh' },
+    ],
+    [
+      'oauthError unregistered',
+      'unknown',
+      { operation: 'refresh', oauthError: 'MARKER' },
+      { operation: 'refresh' },
+    ],
+    [
+      'code not a system code',
+      'unknown',
+      { operation: 'refresh', code: 'MARKER' },
+      { operation: 'refresh' },
+    ],
+    [
+      'code a TLS code in unknown',
+      'unknown',
+      { operation: 'refresh', code: 'CERT_HAS_EXPIRED' },
+      { operation: 'refresh' },
+    ],
+    [
+      'rfcKey unknown',
+      'snc',
+      { problem: 'logon-refused', rfcKey: 'MARKER' },
+      { problem: 'logon-refused' },
+    ],
+    [
+      'statusCode unregistered',
+      'saml-assertion',
+      { rule: 'declined', check: 'status', statusCode: 'MARKER' },
+      { rule: 'declined', check: 'status' },
+    ],
+    [
+      'count of a counted rule below two',
+      'saml-assertion',
+      { rule: 'several-issuers', check: 'issuer', count: 1 },
+      { rule: 'several-issuers', check: 'issuer' },
+    ],
+    [
+      'count a string',
+      'saml-assertion',
+      { rule: 'several-issuers', check: 'issuer', count: '3' },
+      { rule: 'several-issuers', check: 'issuer' },
+    ],
+    [
+      'count on a rule that carries none',
+      'saml-assertion',
+      { rule: 'expired', check: 'notOnOrAfter', count: 3 },
+      { rule: 'expired', check: 'notOnOrAfter' },
+    ],
+    [
+      'ignoredCallbacks negative',
+      'interactive-login',
+      { outcome: 'aborted', ignoredCallbacks: -1 },
+      { outcome: 'aborted' },
+    ],
+    [
+      'moreCandidates a string',
+      'saml-assertion',
+      {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        moreCandidates: '7',
+      },
+      { rule: 'no-bearer-qualifies', check: 'bearerConfirmation' },
+    ],
+    [
+      'candidate count below two',
+      'saml-assertion',
+      {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: [{ reason: 'several-confirmation-data', count: 1 }],
+      },
+      {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: [{ reason: 'several-confirmation-data' }],
+      },
+    ],
+    [
+      'fields a string',
+      'configuration',
+      {
+        case: 'required-fields-missing',
+        fields: ['clientId', 'abc', 'MARKER'],
+      },
+      { case: 'required-fields-missing', fields: ['clientId'] },
+    ],
+    [
+      'libraryArchs elements',
+      'snc',
+      { problem: 'library-init-failed', libraryArchs: ['x64', 'MARKER', 7] },
+      { problem: 'library-init-failed', libraryArchs: ['x64'] },
+    ],
+    [
+      'processArch unknown',
+      'snc',
+      { problem: 'library-not-found', processArch: 'MARKER' },
+      { problem: 'library-not-found' },
+    ],
+    [
+      'searched not true',
+      'snc',
+      { problem: 'library-not-found', searched: 'yes' },
+      { problem: 'library-not-found' },
+    ],
+    [
+      'secureLoginClient not a boolean',
+      'snc',
+      { problem: 'no-credential', secureLoginClient: 'MARKER' },
+      { problem: 'no-credential' },
+    ],
+    [
+      'at unknown on a credential',
+      'credential-refused',
+      { credential: 'token', at: 'MARKER' },
+      { credential: 'token' },
+    ],
+    [
+      'allowed of another case',
+      'configuration',
+      { case: 'snc-qop-invalid', fields: ['qop'], allowed: 'basic-encoding' },
+      { case: 'snc-qop-invalid', fields: ['qop'] },
+    ],
+    [
+      'a key no kind carries',
+      'unknown',
+      { operation: 'refresh', message: 'MARKER' },
+      { operation: 'refresh' },
+    ],
+  ];
+
+  it.each(OPTIONAL)('%s: dropped', (_label, kind, facts, kept) => {
+    const error = authError[kind as AuthProviderErrorKind](facts);
+    expect(error.kind).toBe(kind);
+    expect(error.facts).toStrictEqual(kept);
+    expect(JSON.stringify(error)).not.toContain('MARKER');
+    expect(render(kind, facts)).toStrictEqual(render(kind, kept));
+  });
+
+  /** [label, kind, facts with one bad required value]. */
+  const REQUIRED: readonly (readonly [string, string, unknown])[] = [
+    [
+      'port out of range',
+      'interactive-login',
+      { outcome: 'port-in-use', port: 70000 },
+    ],
+    [
+      'port a string',
+      'interactive-login',
+      { outcome: 'port-in-use', port: '61001' },
+    ],
+    [
+      'status of a status verdict',
+      'system-refused',
+      { verdict: 'redirected', status: {}, at: 'logon' },
+    ],
+    [
+      'rfcKey of an rfc verdict',
+      'system-refused',
+      { verdict: 'rfc-failure', rfcKey: 'MARKER', at: 'logon' },
+    ],
+    [
+      'tls code a system code',
+      'tls',
+      { operation: 'refresh', code: 'ECONNRESET' },
+    ],
+    [
+      'fields not an array',
+      'configuration',
+      { case: 'required-fields-missing', fields: 'abc' },
+    ],
+    [
+      'an SNC candidate source',
+      'snc',
+      {
+        problem: 'library-not-found',
+        candidates: [{ source: 'MARKER', reason: 'missing' }],
+      },
+    ],
+  ];
+
+  it.each(REQUIRED)('%s: the unfamiliar error', (_label, kind, facts) => {
+    const error = authError[kind as AuthProviderErrorKind](facts);
+    expect(error.kind).toBe('unknown');
+    expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
+    expect(error.reason).toBe(UNFAMILIAR_REASON);
+    expect(render(kind, facts)).toStrictEqual({ reason: UNFAMILIAR_REASON });
+  });
+
+  it('never invokes a getter, toString or Symbol.toPrimitive', () => {
+    const calls: string[] = [];
+    const facts = {
+      operation: 'token-request',
+      grant: spy(calls),
+      status: spy(calls),
+      oauthError: spy(calls),
+      code: spy(calls),
+      get problem() {
+        calls.push('getter');
+        return 'refused';
+      },
+    };
+    const error = authError['request-failed'](facts);
+    render('request-failed', facts);
+    expect(calls).toEqual([]);
+    expect(error.reason).toBe(UNFAMILIAR_REASON);
+    const fields = authError.configuration({
+      case: 'required-fields-missing',
+      fields: [spy(calls), 'clientId'],
+    });
+    expect(calls).toEqual([]);
+    expect((fields.facts as { fields: unknown[] }).fields).toEqual([
+      'clientId',
+    ]);
+  });
+});
+
+describe('F3: every bearer candidate not listed is counted', () => {
+  it('counts candidates past the read limit from the array length', () => {
+    const candidates = Array.from({ length: 3000 }, () => ({
+      reason: 'method-not-bearer',
+    }));
+    const error = authError['saml-assertion']({
+      rule: 'no-bearer-qualifies',
+      check: 'bearerConfirmation',
+      candidates,
+      moreCandidates: count(10),
+    });
+    const facts = error.facts as {
+      candidates: unknown[];
+      moreCandidates: number;
+    };
+    expect(facts.candidates).toHaveLength(5);
+    expect(facts.moreCandidates).toBe(3005);
+  });
+
+  it('caps the tally at 1 000 000', () => {
+    const candidates = new Proxy([{ reason: 'method-not-bearer' }], {
+      getOwnPropertyDescriptor(target, key) {
+        return key === 'length'
+          ? {
+              value: 5e9,
+              writable: true,
+              enumerable: false,
+              configurable: false,
+            }
+          : Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    const error = authError['saml-assertion']({
+      rule: 'no-bearer-qualifies',
+      check: 'bearerConfirmation',
+      candidates,
+    });
+    expect(
+      (error.facts as { moreCandidates: number }).moreCandidates,
+    ).toBeLessThanOrEqual(1_000_000);
   });
 });
 

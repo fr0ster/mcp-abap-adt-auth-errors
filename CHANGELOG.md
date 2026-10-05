@@ -35,9 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`saml-assertion`, counting the rest in `moreCandidates`) or 8 (`snc`,
   `candidatePaths` aligned with them), admits each permitted diagnostic and
   drops any other field or refused value, renders `reason` / `hint` and
-  mints the error frozen deeply. It never throws: facts are read through
-  own data properties only, so a getter, a throwing Proxy, a revoked Proxy,
-  a cycle, a hole or an `undefined` element reads as absent.
+  mints the error frozen deeply. It never throws: every fact is read as an
+  own data property (no getter or conversion is ever invoked) and checked
+  against its allowlist guard or branded-integer maker; an invalid optional
+  fact is dropped, an invalid required one makes the call answer the
+  unfamiliar error (`unknown`, operation `unfamiliar-error`). A count of a
+  "carries N" rule must be at least 2; bearer candidates not listed are all
+  counted, from the array's own length.
 - `isMinted(value)` — true only for an error this copy of the package
   minted (a module-private `WeakSet`); a structural copy is not one.
 - `render(kind, facts)` — the default words a builder stores, from `kind`

@@ -94,6 +94,7 @@ src/
 ├── numbers.ts        # branded integer makers (§4.3)
 ├── admission.ts      # diagnostics admission (§5.3)
 ├── mint.ts           # the one assertion, the WeakSet
+├── factCheck.ts      # each kind's facts read own and checked (builders, render)
 ├── builders.ts       # one builder per kind (§5.2)
 ├── words.ts          # WORDS, render (§5.6)
 ├── diagnostics.ts    # renderDiagnostics (§5.6)
