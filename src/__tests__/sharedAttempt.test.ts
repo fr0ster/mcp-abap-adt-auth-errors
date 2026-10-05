@@ -93,6 +93,8 @@ function expectAborted(reason: unknown): void {
   expect(isMinted(error)).toBe(true);
   expect(error.kind).toBe('interactive-login');
   expect(error.facts).toStrictEqual({ outcome: 'aborted' });
+  expect(error.reason).toBe('the authorization was aborted');
+  expect((reason as Failure).message).toBe('the authorization was aborted');
 }
 
 describe('sharedAttempt — waiters', () => {

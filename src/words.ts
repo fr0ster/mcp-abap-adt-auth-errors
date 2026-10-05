@@ -503,6 +503,13 @@ function tlsWords(facts: AuthProviderErrorFacts['tls']): Words {
 const IDENTITY_PROVIDER_HINT =
   'check the identity provider: the user, the client and the scopes it allows';
 
+/** `; <k> incomplete request(s) reached /callback and were ignored`, k > 0. */
+function ignoredClause(ignored: Count | undefined): string {
+  return ignored !== undefined && ignored > 0
+    ? `; ${ignored} incomplete request(s) reached /callback and were ignored`
+    : '';
+}
+
 function interactiveLoginWords(
   facts: AuthProviderErrorFacts['interactive-login'],
 ): Words {
@@ -515,14 +522,13 @@ function interactiveLoginWords(
       const strategy = facts.strategy;
       switch (strategy) {
         case undefined:
-        case 'browser': {
-          const ignored: Count | undefined = facts.ignoredCallbacks;
           return say(
-            ignored !== undefined && ignored > 0
-              ? `the browser login was aborted; ${ignored} incomplete request(s) reached /callback and were ignored`
-              : 'the browser login was aborted',
+            `the authorization was aborted${ignoredClause(facts.ignoredCallbacks)}`,
           );
-        }
+        case 'browser':
+          return say(
+            `the browser login was aborted${ignoredClause(facts.ignoredCallbacks)}`,
+          );
         case 'manual':
           return say('the manual login was aborted');
         default:

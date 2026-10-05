@@ -58,10 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build does not know (`constructor` and `toString` included), or a
   required fact that is missing.
   No word mentions a login timeout.
-  `interactive-login` `aborted` with `strategy: 'browser'` or no strategy
-  reads `the browser login was aborted`, with `; <k> incomplete request(s)
-  reached /callback and were ignored` when `ignoredCallbacks` is above 0;
-  with `strategy: 'manual'` it reads `the manual login was aborted`, never
+  `interactive-login` `aborted` with no strategy reads `the authorization
+  was aborted`, and with `strategy: 'browser'` `the browser login was
+  aborted` — each with `; <k> incomplete request(s) reached /callback and
+  were ignored` when `ignoredCallbacks` is above 0; with `strategy: 'manual'` it reads `the manual login was aborted`, never
   with that clause. `failed` reads `the browser login failed (HTTP <n>[,
   <oauthError>][, <code>])`, or `(unknown error[, <oauthError>][, <code>])`
   without a status — the registered OAuth code where today's words put it.

@@ -576,7 +576,7 @@ const VERBATIM: readonly (readonly [
     'K4',
     'interactive-login',
     { outcome: 'aborted' },
-    'the browser login was aborted',
+    'the authorization was aborted',
     undefined,
   ],
   [
@@ -1073,13 +1073,35 @@ describe('configuration words', () => {
 });
 
 describe('interactive-login words', () => {
-  it('aborted: one sentence, and the tally with ignoredCallbacks', () => {
+  it('aborted, no strategy: the neutral sentence, and the tally with ignoredCallbacks', () => {
     expect(build('interactive-login', { outcome: 'aborted' }).reason).toBe(
-      'the browser login was aborted',
+      'the authorization was aborted',
     );
     expect(
       build('interactive-login', {
         outcome: 'aborted',
+        ignoredCallbacks: count(3),
+      }).reason,
+    ).toBe(
+      'the authorization was aborted; 3 incomplete request(s) reached /callback and were ignored',
+    );
+    expect(
+      build('interactive-login', {
+        outcome: 'aborted',
+        ignoredCallbacks: count(0),
+      }).reason,
+    ).toBe('the authorization was aborted');
+  });
+
+  it('aborted, browser: the browser sentence, and the tally with ignoredCallbacks', () => {
+    expect(
+      build('interactive-login', { outcome: 'aborted', strategy: 'browser' })
+        .reason,
+    ).toBe('the browser login was aborted');
+    expect(
+      build('interactive-login', {
+        outcome: 'aborted',
+        strategy: 'browser',
         ignoredCallbacks: count(3),
       }).reason,
     ).toBe(
@@ -1088,6 +1110,7 @@ describe('interactive-login words', () => {
     expect(
       build('interactive-login', {
         outcome: 'aborted',
+        strategy: 'browser',
         ignoredCallbacks: count(0),
       }).reason,
     ).toBe('the browser login was aborted');
@@ -1115,7 +1138,7 @@ describe('interactive-login words', () => {
         ignoredCallbacks: 3,
       });
       expect(error.reason).toBe(
-        'the browser login was aborted; 3 incomplete request(s) reached /callback and were ignored',
+        'the authorization was aborted; 3 incomplete request(s) reached /callback and were ignored',
       );
     }
   });

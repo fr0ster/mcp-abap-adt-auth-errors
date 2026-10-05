@@ -302,7 +302,7 @@ describe('classify — step 3: structural rebuild', () => {
       'aborted, a strategy out of its set',
       { outcome: 'aborted', strategy: 'device', ignoredCallbacks: 2 },
       { outcome: 'aborted', ignoredCallbacks: 2 },
-      'the browser login was aborted; 2 incomplete request(s) reached /callback and were ignored',
+      'the authorization was aborted; 2 incomplete request(s) reached /callback and were ignored',
     ],
     [
       'failed, a registered oauthError',
