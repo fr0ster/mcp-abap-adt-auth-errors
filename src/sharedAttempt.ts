@@ -322,9 +322,20 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
         // Ignored: the waiter is settled whatever the signal does.
       }
     };
+    let threw = false;
     try {
       signal.addEventListener('abort', onAbort, { once: true });
     } catch {
+      threw = true;
+    }
+    // The waiter left while its registration ran (re-entrantly): its
+    // removal then ran before the registration installed the listener, so
+    // remove it once more, with no further change.
+    if (waiter.done) {
+      waiter.detach();
+      return;
+    }
+    if (threw) {
       abandon(attempt, waiter);
       return;
     }
@@ -478,14 +489,25 @@ export function createParties(): Parties {
     // aborted or unreadable after it — removes the provisional party as an
     // abort (as join refuses such a waiter `aborted`): a moment left with no
     // member is aborted (the registration may have aborted the others).
-    let clean = false;
+    let registered = false;
     try {
       signal.addEventListener('abort', party.onAbort, { once: true });
-      clean = readSignal(signal) === 'live';
+      registered = true;
     } catch {
-      clean = false;
+      registered = false;
     }
-    if (!clean) {
+    // The party left while its registration ran (re-entrantly: a detach, an
+    // abort): its removal ran before the listener was installed, so remove
+    // it once more, with no further membership change.
+    if (party.released) {
+      try {
+        signal.removeEventListener('abort', party.onAbort);
+      } catch {
+        // Ignored: the party is gone whatever the signal does.
+      }
+      return ignore;
+    }
+    if (!registered || readSignal(signal) !== 'live') {
       release(party, true);
       return ignore;
     }

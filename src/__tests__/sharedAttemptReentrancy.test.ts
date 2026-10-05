@@ -67,14 +67,14 @@ function isAborted(reason: unknown): boolean {
 class Foreign {
   readonly controller = new AbortController();
   readonly inner = this.controller.signal;
-  hook: { point: string; run: () => void } | undefined;
+  hook: { point: string; run: (listener?: () => void) => void } | undefined;
   #reads = 0;
 
-  #fire(point: string): void {
+  #fire(point: string, listener?: () => void): void {
     const hook = this.hook;
     if (hook !== undefined && hook.point === point) {
       this.hook = undefined;
-      hook.run();
+      hook.run(listener);
     }
   }
 
@@ -91,18 +91,18 @@ class Foreign {
         listener: () => void,
         options?: AddEventListenerOptions,
       ) {
-        self.#fire('add');
+        self.#fire('add', listener);
         self.inner.addEventListener(type, listener, options);
       },
       removeEventListener(type: string, listener: () => void) {
-        self.#fire('remove');
+        self.#fire('remove', listener);
         self.inner.removeEventListener(type, listener);
       },
     } as unknown as AbortSignal;
   })();
 
   /** Arms a hook; `get` points count reads from now on. */
-  arm(point: string, run: () => void): void {
+  arm(point: string, run: (listener?: () => void) => void): void {
     this.#reads = 0;
     this.hook = { point, run };
   }
@@ -172,6 +172,48 @@ describe('re-entrancy: the reproduced cases', () => {
   });
 });
 
+describe('re-entrancy: the same member, again and again', () => {
+  it('attach whose registration detaches the same party, 100 times: no listener stays', () => {
+    const parties = createParties();
+    const x = new Foreign();
+    for (let i = 0; i < 100; i += 1) {
+      x.arm('add', () => parties.attach(x.signal)());
+      parties.attach(x.signal)();
+    }
+    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('attach whose registration fires its own listener, 100 times: no listener stays', () => {
+    const parties = createParties();
+    const x = new Foreign();
+    for (let i = 0; i < 100; i += 1) {
+      x.arm('add', (listener) => listener?.());
+      parties.attach(x.signal);
+    }
+    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('join whose registration fires its own listener, 100 times: each refused, no listener stays, the slot free', async () => {
+    const slot = sharedAttempt('token-request');
+    const starts = new Starts();
+    const x = new Foreign();
+    const waiters: ReturnType<typeof track>[] = [];
+    for (let i = 0; i < 100; i += 1) {
+      x.arm('add', (listener) => listener?.());
+      waiters.push(track(slot.join(starts.make(), x.signal)));
+    }
+    await flush();
+    expect(waiters.every((t) => isAborted(t.reason()))).toBe(true);
+    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
+    expect(starts.calls).toBe(0);
+    const before = starts.calls;
+    void slot.join(starts.make());
+    expect(starts.calls).toBe(before + 1);
+  });
+});
+
 type Op = 'join' | 'attach' | 'abandon' | 'settle' | 'detach' | 'release';
 type Action =
   | 'join'
@@ -180,7 +222,9 @@ type Action =
   | 'abortParty'
   | 'abortWaiter'
   | 'abortOwn'
-  | 'releaseMoment';
+  | 'releaseMoment'
+  | 'detachSelf'
+  | 'fireOwn';
 
 const POINTS: readonly (readonly [Op, string])[] = [
   ['join', 'get1'],
@@ -202,6 +246,8 @@ const ACTIONS: readonly Action[] = [
   'abortWaiter',
   'abortOwn',
   'releaseMoment',
+  'detachSelf',
+  'fireOwn',
 ];
 
 const MATRIX = POINTS.flatMap(([op, point]) =>
@@ -253,7 +299,7 @@ describe('re-entrancy: the matrix', () => {
     }
     expect(failures).toEqual([]);
     expect(unhandled).toEqual([]);
-    expect(MATRIX.length).toBe(140);
+    expect(MATRIX.length).toBe(180);
   });
 });
 
@@ -315,7 +361,7 @@ async function runCase(
     return !peer;
   };
 
-  const act = (): void => {
+  const act = (listener?: () => void): void => {
     switch (action) {
       case 'join': {
         const before = starts.calls;
@@ -353,6 +399,21 @@ async function runCase(
       case 'releaseMoment':
         model.release();
         moment?.release();
+        break;
+      case 'detachSelf': {
+        // The member whose registration (or removal) runs detaches itself:
+        // attach of the same signal answers its detach.
+        if (op === 'attach' && point !== 'get1') model.detach('X');
+        parties.attach(x.signal)();
+        break;
+      }
+      case 'fireOwn':
+        // The signal calls the listener it is registering (or removing) at
+        // once, before forwarding: the member's own abort, re-entrantly.
+        if (listener === undefined) break;
+        if (op === 'attach' && point === 'add') model.abort('X');
+        if (op === 'join' && point === 'add') liveSlotWaiters.delete('X');
+        listener();
         break;
     }
   };
@@ -397,6 +458,27 @@ async function runCase(
         );
     }
   }
+
+  // X's listeners, before cleanup: one per live registration of X, none
+  // left behind by a member that left while its registration ran.
+  const xParty = ((): boolean => {
+    if (x.inner.aborted) return false;
+    if (op !== 'attach') return false;
+    if (action === 'detachSelf') return point === 'get1';
+    if (action === 'fireOwn') return point !== 'add';
+    return true;
+  })();
+  const xWaiter = ((): boolean => {
+    if (x.inner.aborted) return false;
+    if (op !== 'join') return false;
+    return !(action === 'fireOwn' && point === 'add');
+  })();
+  const expectedListeners = (xParty ? 1 : 0) + (xWaiter ? 1 : 0);
+  const listeners = getEventListeners(x.inner, 'abort').length;
+  if (listeners !== expectedListeners)
+    problems.push(
+      `X holds ${listeners} listener(s), expected ${expectedListeners}`,
+    );
 
   // The moment, before cleanup: aborted exactly when the model says.
   if ((moment?.signal.aborted ?? false) !== model.aborted) {

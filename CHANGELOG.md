@@ -180,7 +180,10 @@ README.md documents the whole surface.
   slot and the moments to abort decided first — so code calling back in
   from them (join, attach, detach, an abort) sees the final state; the
   rejections and aborts follow, a waiter's rejection before its attempt's
-  abort. No timer; what an attempt commits stays with the caller.
+  abort. A member (waiter or party) that leaves while its own registration
+  runs — a re-entrant detach, abort or eager listener call — gets one more
+  `removeEventListener` once the registration returns or throws, with no
+  further membership change, so no listener outlives it. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
