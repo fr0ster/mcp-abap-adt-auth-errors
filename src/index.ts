@@ -52,6 +52,7 @@ export {
   type PlainBuilders,
   type VariantBuilders,
 } from './builders';
+export { type LogFields, logFields, renderDiagnostics } from './diagnostics';
 export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';
 export { blamesCredential, render, type Words } from './words';
