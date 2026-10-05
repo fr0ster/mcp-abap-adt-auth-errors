@@ -62,6 +62,18 @@ README.md documents the whole surface.
   `classify(fallback, 'unfamiliar-error')` answers it: this copy's error as
   it is, another copy's or a forged one rebuilt without diagnostics,
   anything else `unknown` — a fallback's own text never passes unchecked.
+- `renderDiagnostics(error)` — the diagnostics of an error this copy
+  minted, one `field: "value"` line each, JSON-quoted, or `undefined`.
+  Total. `logFields(error)` and its type `LogFields` — what a log line may
+  carry: `{ error: reason, kind, status?, diagnostics? }`, a value this
+  copy did not mint classified first; dropping its `diagnostics` field
+  drops every diagnostic-derived character. Total.
+- Exported types: `AuthErrorBuilders`, `VariantBuilders`, `PlainBuilders`,
+  `DiagnosticsInputOf`, `One` (the builders); `LogFields` (`logFields`);
+  `Words` (`render`); `KindHandlers` (`matchKind`); `AuthProviderFailureLike`
+  (`isAuthProviderFailure`); `RelayedOutcome` (`relayOutcome`);
+  `SharedAttempt`, `AttemptContext`, `AttemptStart` (`sharedAttempt`);
+  `Parties`, `MomentWaiter` (`createParties`).
 - `isMinted(value)` — true only for an error this copy of the package
   minted (a module-private `WeakSet`); a structural copy is not one.
 - `render(kind, facts)` — the default words a builder stores, from `kind`
@@ -112,7 +124,10 @@ README.md documents the whole surface.
   when it is an `OAuth2GrantType`; a throw (from the grant, the body, or a
   thenable the body answers) becomes `{ ok: false, refusal:
   classify(thrown, operation, grant) }`, the catch reading only its two
-  locals. Never rejects.
+  locals. A body that does not throw gets back its answer through
+  `classifyOutcome`: `OK` and this copy's minted refusal as they are,
+  another copy's or a forged refusal rebuilt without diagnostics, anything
+  else `unknown` with the operation and the kept grant. Never rejects.
 - `relayOutcome(call, refused, operation)` and `RelayedOutcome` — a logon
   target's answer, never the target's own object: a throw is
   `classify(thrown, operation)` with `thrown: true`; an answer goes through
@@ -191,10 +206,17 @@ README.md documents the whole surface.
   header value (a template head, a constant, `Basic` joined later, a
   literal credential — not prose) or a base64 of a value named as a client
   secret (a heuristic; a hash or HMAC is not reported) outside
-  `legacyBasic` and `clientSecretBasic`. It exits 2 rather than pass in
-  silence: on a program that does not type-check, a given file that does
-  not exist, nothing to check, or rules 4 / 5 without the brands of
-  interfaces-auth 6.0.0 or later. What it does not see is listed in the
+  `legacyBasic` and `clientSecretBasic`. Rules 1–3 identify the base by
+  declaration: `--base <module>#AuthProviderBase` (a path relative to the
+  root, or a package specifier resolved as the compiler does); a class
+  reaches it only through that declaration — a same-named class elsewhere
+  exempts nothing — and the base's own four moments must each only `return
+  guard(this.#moments.<moment>, () => …, () => …)` (reported as rule 1;
+  required methods only, for a base read from a declaration file). It exits
+  2 rather than pass in silence: on a program that does not type-check, a
+  given file that does not exist, nothing to check, rules 4 / 5 without the
+  brands of interfaces-auth 6.0.0 or later, or rules 1–3 without a `--base`
+  that resolves to an exported class. What it does not see is listed in the
   script's header (Limits). This repository runs rules 4 and 6 in
   `lint:check`, its four assertion sites being `mint` and the three integer
   makers.

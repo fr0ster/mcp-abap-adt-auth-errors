@@ -531,6 +531,12 @@ operation `unfamiliar-error`.
   to be an `Error`) without `error`. Read the error with `readFailure`;
   never print `message` or `error.reason` of a value this copy did not
   construct.
+- **Serialising a failure carries its diagnostics.** `JSON.stringify`,
+  `util.inspect` or a logger serialising an `AuthProviderFailure` includes
+  `error.diagnostics` (admitted values — a library path, say — but more
+  than the words). To log without them, log
+  `logFields(readFailure(thrown, operation))` and leave out its
+  `diagnostics` field.
 - **`structuredClone` loses the failure.** A failure cloned with
   `structuredClone` — sent to a worker, say — comes back a plain `Error`:
   `isAuthProviderFailure` answers false and `readFailure` answers `unknown`.
@@ -587,7 +593,12 @@ Every moment of a provider (`prepare`, `establish`, `authorize`,
   is an `OAuth2GrantType`; a throw — from the grant, the body, or a thenable
   the body answers — becomes `{ ok: false, refusal: classify(thrown,
   operation, grant) }`. The catch reads only its two locals, never a property
-  of the provider. Never rejects.
+  of the provider. A body that does not throw gets back its answer as
+  `classifyOutcome` answers it: `{ ok: true }` is `OK`, this copy's minted
+  refusal passes as itself, another copy's or a forged refusal is rebuilt
+  without diagnostics, and anything else — not an outcome, a refusal that
+  does not rebuild — is the refusal a throw without facts gets: `unknown`
+  with the operation and the kept grant. Never rejects.
 - **`relayOutcome(call, refused, operation)`** — a logon target's answer, and
   never the target's own object: a throw becomes `classify(thrown, operation)`
   with `thrown: true`; an answer goes through `classifyOutcome` with the
@@ -713,8 +724,22 @@ fails until the copy is refreshed — the copy cannot drift.
 
 ```bash
 node tools/check-provider-shape.mjs --rules 4,5,6
-  [--root <dir>] [--project <tsconfig>] [--sites <dir>] [files…]
+  [--base <module>#AuthProviderBase] [--root <dir>] [--project <tsconfig>]
+  [--sites <dir>] [files…]
 ```
+
+**Rules 1–3 need the base, by declaration:** `--base` names the repository's
+`AuthProviderBase` — a path relative to the root
+(`--base ./src/auth/AuthProviderBase#AuthProviderBase` in auth-providers) or
+a package specifier resolved as the compiler resolves it
+(`--base @mcp-abap-adt/auth-providers#AuthProviderBase` elsewhere). A class
+reaches the base only if the declaration it extends is that one: a class of
+the same name elsewhere, in a file of the same name too, exempts nothing. The
+base itself is verified (reported as rule 1): each of its four moments must
+be one method whose body is only `return guard(this.#moments.<moment>,
+() => …, () => …)`, with auth-errors' `guard`. A base read from a declaration
+file has no bodies — there only the four methods are required, and the
+bodies are verified where the base is written.
 
 | Rule | Refuses, in `src/` outside tests |
 |---|---|
@@ -735,8 +760,9 @@ Each finding is one line on stdout,
 `<file>:<line>:<column>: rule <n>: <what>`. **Exit codes:** `0` nothing found;
 `1` findings; `2` it cannot check, reported on stderr — a usage error, a file
 given that does not exist, nothing to check, a program that does not
-type-check, or rules 4 / 5 asked for while the brands of interfaces-auth 6.0.0
-or later are not found. It never passes in silence.
+type-check, rules 4 / 5 asked for while the brands of interfaces-auth 6.0.0
+or later are not found, or rules 1–3 asked for without a `--base` that
+resolves to an exported class. It never passes in silence.
 
 **Limits.** It decides on syntax and types, without data flow, so it does not
 see, among others: a provider built by a mixin returning an anonymous class;
