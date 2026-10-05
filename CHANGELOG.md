@@ -190,7 +190,12 @@ README.md documents the whole surface.
   failure and an aborted attempt's or moment's `signal.reason` are built
   without stack frames (which would hold the dispatching signal). A kept
   handle — a `MomentWaiter`, a `detach`, an `AttemptContext`, a waiter's
-  promise — lets the signal be collected. No timer; what an attempt commits stays with the caller.
+  promise — lets the signal be collected. Every closure handed out (a
+  `detach`, `MomentWaiter.release`, `AttemptContext.exclusive`) holds its
+  captures in a cell cleared at its first use and when what it refers to
+  ends by itself (a party released, a moment ended, an attempt settled or
+  aborted), so a kept handle keeps neither the party set nor the slot — nor
+  through them any other member's signal. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with

@@ -48,6 +48,12 @@
  * Its listener is idempotent (a second call changes nothing), and a throwing
  * `removeEventListener` is ignored: no signal can harm another waiter.
  *
+ * **A kept handle keeps nothing.** Every closure handed out — a `detach`,
+ * `MomentWaiter.release`, `AttemptContext.exclusive` — reaches its target
+ * through a cell cleared at its first use and when the target ends by
+ * itself, and finished members drop the consumer's signals; errors built
+ * during an abort's dispatch carry no stack frames.
+ *
  * **Foreign code runs on a consistent state.** A signal's getter,
  * `addEventListener` and `removeEventListener` are consumer code that may
  * call back in (join, attach, detach, abort another signal). Each runs only
@@ -154,6 +160,38 @@ function bound<A, B>(fn: (a: A, b: B) => void, a: A, b: B): () => void {
   return () => fn(a, b);
 }
 
+/**
+ * What a handle this module hands out holds: its captures, in one mutable
+ * cell, cleared at the first use and when the thing it refers to ends by
+ * itself — so a kept handle keeps nothing of the module's state.
+ */
+interface Cell {
+  run: (() => void) | undefined;
+}
+
+/** A handle over `cell`: runs its captures once, then holds nothing. */
+function handleOf(cell: Cell): () => void {
+  return () => {
+    const run = cell.run;
+    cell.run = undefined;
+    run?.();
+  };
+}
+
+/** The attempt's `exclusive`, through a cell cleared when the attempt ends. */
+interface ExclusiveCell {
+  exclusive: AttemptContext['exclusive'] | undefined;
+}
+
+function exclusiveVia(cell: ExclusiveCell): AttemptContext['exclusive'] {
+  return <R>(work: () => Promise<R>): Promise<R> => {
+    const exclusive = cell.exclusive;
+    return exclusive === undefined
+      ? Promise.reject(abortedFailure())
+      : exclusive(work);
+  };
+}
+
 /** A signal's listener removal, built apart for the same reason. */
 function remover(signal: AbortSignal, listener: () => void): () => void {
   return () => {
@@ -197,6 +235,8 @@ interface Attempt<T> {
   tail: Promise<void>;
   /** Left the slot: aborted or settled. */
   ended: boolean;
+  /** What its context's `exclusive` reaches; cleared when it ends. */
+  readonly cell: ExclusiveCell;
 }
 
 /**
@@ -281,6 +321,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   /** The attempt ends; it leaves the slot if the slot still holds it. */
   function leave(attempt: Attempt<T>): void {
     attempt.ended = true;
+    attempt.cell.exclusive = undefined;
     if (active === attempt) {
       active = undefined;
       previousDrain = attempt.drain;
@@ -363,9 +404,10 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   }
 
   function begin(attempt: Attempt<T>, start: AttemptStart<T>): void {
+    if (!attempt.ended) attempt.cell.exclusive = exclusiveOf(attempt);
     const context: AttemptContext = Object.freeze({
       signal: attempt.controller.signal,
-      exclusive: exclusiveOf(attempt),
+      exclusive: exclusiveVia(attempt.cell),
     });
     run(() => start(context)).then(
       (value) => settle(attempt, (waiter) => waiter.resolve(value)),
@@ -423,6 +465,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
       drain: previousDrain,
       tail: previousDrain,
       ended: false,
+      cell: { exclusive: undefined },
     };
     active = attempt;
     const waiter: Waiter<T> = {
@@ -483,6 +526,8 @@ interface Party {
   signal: AbortSignal | undefined;
   onAbort: () => void;
   released: boolean;
+  /** What every `detach` returned for it reaches; cleared on release. */
+  readonly cell: Cell;
 }
 
 interface Moment {
@@ -490,24 +535,8 @@ interface Moment {
   /** Its parties not yet aborted nor detached. */
   readonly members: Party[];
   released: boolean;
-}
-
-/**
- * A moment handle's `release`: the moment and the party set's `end` are
- * held until the first call, then dropped, so a kept handle keeps neither.
- */
-function releaser(moment: Moment, end: (moment: Moment) => void): () => void {
-  // Both dropped at the first call: `end` closes over the whole party set.
-  let held: { moment: Moment; end: (moment: Moment) => void } | undefined = {
-    moment,
-    end,
-  };
-  return () => {
-    const current = held;
-    held = undefined;
-    if (current !== undefined && !current.moment.released)
-      current.end(current.moment);
-  };
+  /** What its handle's `release` reaches; cleared when the moment ends. */
+  readonly cell: Cell;
 }
 
 /** Removes `item` from `list`, if there. */
@@ -529,11 +558,16 @@ export function createParties(): Parties {
   const parties: Party[] = [];
   const moments: Moment[] = [];
 
+  function endIfLive(moment: Moment): void {
+    if (!moment.released) endMoment(moment);
+  }
+
   function endMoment(moment: Moment): void {
     moment.released = true;
     remove(moments, moment);
-    // An ended moment keeps no party (a kept handle must not keep them).
+    // An ended moment keeps no party, and its handle nothing of the set.
     moment.members.length = 0;
+    moment.cell.run = undefined;
   }
 
   /**
@@ -556,6 +590,7 @@ export function createParties(): Parties {
     }
     const signal = party.signal;
     party.signal = undefined;
+    party.cell.run = undefined;
     if (signal !== undefined) remover(signal, party.onAbort)();
     party.onAbort = ignore;
     for (const moment of emptied) moment.controller.abort(abortReason());
@@ -570,9 +605,15 @@ export function createParties(): Parties {
       if (candidate.signal === signal) existing = candidate;
     }
     // An explicit detach of the same party: not a cancellation.
-    if (existing !== undefined) return bound(release, existing, false);
-    const party: Party = { signal, onAbort: ignore, released: false };
+    if (existing !== undefined) return handleOf(existing.cell);
+    const party: Party = {
+      signal,
+      onAbort: ignore,
+      released: false,
+      cell: { run: undefined },
+    };
     party.onAbort = bound(release, party, true);
+    party.cell.run = bound(release, party, false);
     const listener = party.onAbort;
     parties.push(party);
     for (const moment of moments) moment.members.push(party);
@@ -599,7 +640,7 @@ export function createParties(): Parties {
       return ignore;
     }
     // The one removal that is not a cancellation: an explicit detach.
-    return bound(release, party, false);
+    return handleOf(party.cell);
   }
 
   function waiterSignal(): MomentWaiter | undefined {
@@ -608,11 +649,13 @@ export function createParties(): Parties {
       controller: new AbortController(),
       members: parties.slice(),
       released: false,
+      cell: { run: undefined },
     };
     moments.push(moment);
+    moment.cell.run = bound(endIfLive, moment, undefined);
     return Object.freeze({
       signal: moment.controller.signal,
-      release: releaser(moment, endMoment),
+      release: handleOf(moment.cell),
     });
   }
 

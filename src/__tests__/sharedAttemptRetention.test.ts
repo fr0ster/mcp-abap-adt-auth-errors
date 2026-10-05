@@ -2,11 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 /**
- * What a finished moment or attempt keeps reachable (spec §6b): a handle the
- * consumer keeps — a released `MomentWaiter`, a `detach`, an
- * `AttemptContext`, a waiter's promise — must not keep a party's or a
- * waiter's signal alive. Each scenario runs in a child process with
- * `--expose-gc` and reports whether the signal was collected.
+ * What a finished handle keeps reachable (spec §6b): a handle the consumer
+ * keeps — a used or stale `detach`, a released or self-ended
+ * `MomentWaiter`, an `AttemptContext`, a waiter's promise — must keep no
+ * consumer signal alive: neither the finished member's nor, through the
+ * module's state, an unrelated live member's once the `Parties` object or
+ * the slot is dropped. Each scenario runs in a child process with
+ * `--expose-gc`, keeps only the finished handles and drops everything else,
+ * and reports which signals were collected.
  */
 const entry = resolve(__dirname, '../../dist/index.js');
 
@@ -14,98 +17,140 @@ const SCENARIOS = String.raw`
 const { createParties, sharedAttempt } = require(process.argv[1]);
 const name = process.argv[2];
 const keep = [];
-async function collect(ref) {
-  for (let i = 0; i < 20; i += 1) {
+async function collect(refs) {
+  for (let i = 0; i < 30; i += 1) {
     await new Promise((r) => setImmediate(r));
     global.gc();
-    if (ref.deref() === undefined) return true;
+    if (refs.every((ref) => ref.deref() === undefined)) break;
   }
-  return false;
+  return refs.map((ref) => ref.deref() === undefined);
 }
+const never = () => new Promise(() => {});
 const scenarios = {
-  // A released moment and a used detach, both kept.
-  async released() {
-    const parties = createParties();
-    let c = new AbortController();
-    const ref = new WeakRef(c.signal);
-    const detach = parties.attach(c.signal);
+  // A used detach kept; another party attached and left live.
+  async detachKept() {
+    let parties = createParties();
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
+    const detach = parties.attach(a.signal);
+    detach();
+    parties.attach(b.signal);
+    keep.push(detach);
+    parties = a = b = undefined;
+    return refs;
+  },
+  // A stale detach (its party aborted) kept; another party live.
+  async staleDetach() {
+    let parties = createParties();
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
+    const detach = parties.attach(a.signal);
+    a.abort();
+    parties.attach(b.signal);
+    keep.push(detach);
+    parties = a = b = undefined;
+    return refs;
+  },
+  // A released moment and a used detach kept; another party live.
+  async releasedMoment() {
+    let parties = createParties();
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
+    const detach = parties.attach(a.signal);
     const handle = parties.waiterSignal();
     handle.release();
     detach();
+    parties.attach(b.signal);
     keep.push(handle, detach);
-    c = undefined;
-    return ref;
+    parties = a = b = undefined;
+    return refs;
   },
-  // A released moment whose party was never detached: the party set and
-  // the controller dropped, only the handle kept.
+  // A released moment whose party was never detached; another live.
   async releasedLive() {
     let parties = createParties();
-    let c = new AbortController();
-    const ref = new WeakRef(c.signal);
-    parties.attach(c.signal);
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
+    parties.attach(a.signal);
     const handle = parties.waiterSignal();
     handle.release();
+    parties.attach(b.signal);
     keep.push(handle);
-    parties = undefined;
-    c = undefined;
-    return ref;
+    parties = a = b = undefined;
+    return refs;
   },
-  // A moment ended by its party's abort, the handle and detach kept.
-  async aborted() {
-    const parties = createParties();
-    let c = new AbortController();
-    const ref = new WeakRef(c.signal);
-    const detach = parties.attach(c.signal);
+  // A moment ended by its party's abort, never released; another live.
+  async abortedMoment() {
+    let parties = createParties();
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
+    const detach = parties.attach(a.signal);
     const handle = parties.waiterSignal();
-    c.abort();
+    a.abort();
+    parties.attach(b.signal);
     keep.push(handle, detach);
-    c = undefined;
-    return ref;
+    parties = a = b = undefined;
+    return refs;
   },
-  // A moment ended by another party's abort while this one was detached.
+  // A moment whose member detached, ended by the other's abort.
   async detachedMember() {
-    const parties = createParties();
+    let parties = createParties();
+    let a = new AbortController();
+    let b = new AbortController();
     let c = new AbortController();
-    const other = new AbortController();
-    const ref = new WeakRef(c.signal);
-    const detach = parties.attach(c.signal);
-    parties.attach(other.signal);
+    const refs = [
+      new WeakRef(a.signal),
+      new WeakRef(b.signal),
+      new WeakRef(c.signal),
+    ];
+    const detach = parties.attach(a.signal);
+    parties.attach(b.signal);
     const handle = parties.waiterSignal();
     detach();
-    keep.push(handle, detach, other);
-    c = undefined;
-    return ref;
+    b.abort();
+    parties.attach(c.signal);
+    keep.push(handle, detach);
+    parties = a = b = c = undefined;
+    return refs;
   },
-  // A settled attempt: its context and the waiter's promise kept.
+  // A settled attempt's context and promise kept; another waiter live.
   async settled() {
-    const slot = sharedAttempt('token-request');
-    let c = new AbortController();
-    const ref = new WeakRef(c.signal);
+    let slot = sharedAttempt('token-request');
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
     let context;
     const promise = slot.join((ctx) => {
       context = ctx;
       return Promise.resolve('token');
-    }, c.signal);
+    }, a.signal);
     await promise;
-    keep.push(context, promise, slot);
-    c = undefined;
-    return ref;
+    slot.join(never, b.signal).catch(() => {});
+    keep.push(context, promise);
+    slot = a = b = undefined;
+    return refs;
   },
-  // An aborted attempt: its context and the waiter's promise kept.
+  // An aborted attempt's context and promise kept; another waiter live.
   async abandoned() {
-    const slot = sharedAttempt('token-request');
-    let c = new AbortController();
-    const ref = new WeakRef(c.signal);
+    let slot = sharedAttempt('token-request');
+    let a = new AbortController();
+    let b = new AbortController();
+    const refs = [new WeakRef(a.signal), new WeakRef(b.signal)];
     let context;
     const promise = slot.join((ctx) => {
       context = ctx;
-      return new Promise(() => {});
-    }, c.signal);
+      return never();
+    }, a.signal);
     promise.catch(() => {});
-    c.abort();
-    keep.push(context, promise, slot);
-    c = undefined;
-    return ref;
+    a.abort();
+    slot.join(never, b.signal).catch(() => {});
+    keep.push(context, promise);
+    slot = a = b = undefined;
+    return refs;
   },
 };
 scenarios[name]().then(collect).then((collected) => {
@@ -113,26 +158,31 @@ scenarios[name]().then(collect).then((collected) => {
 });
 `;
 
-function run(name: string): { collected: boolean; kept: number } {
+function run(name: string): { collected: boolean[]; kept: number } {
   const out = execFileSync(
     process.execPath,
     ['--expose-gc', '-e', SCENARIOS, entry, name],
     { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } },
   );
-  return JSON.parse(out) as { collected: boolean; kept: number };
+  return JSON.parse(out) as { collected: boolean[]; kept: number };
 }
 
-describe('what a finished moment or attempt keeps reachable', () => {
+describe('what a finished handle keeps reachable', () => {
   it.each([
-    'released',
+    'detachKept',
+    'staleDetach',
+    'releasedMoment',
     'releasedLive',
-    'aborted',
+    'abortedMoment',
     'detachedMember',
     'settled',
     'abandoned',
-  ])('%s: the signal is collectible while the handles are kept', (name) => {
-    const result = run(name);
-    expect(result.kept).toBeGreaterThan(0);
-    expect(result.collected).toBe(true);
-  });
+  ])(
+    '%s: every signal is collectible while the finished handles are kept',
+    (name) => {
+      const result = run(name);
+      expect(result.kept).toBeGreaterThan(0);
+      expect(result.collected).toEqual(result.collected.map(() => true));
+    },
+  );
 });
