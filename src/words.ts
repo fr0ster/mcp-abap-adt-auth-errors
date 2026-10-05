@@ -36,6 +36,7 @@ import {
   type SystemCode,
   type TlsFailureCode,
 } from '@mcp-abap-adt/interfaces-auth';
+import { readOwn } from './admission';
 import {
   isAuthProviderErrorKind,
   isSncCandidateSource,
@@ -1223,13 +1224,22 @@ function blameOf<K extends AuthProviderErrorKind>(
  * and `renewal-unchanged` always; `snc` for `no-credential`, and for
  * `logon-refused` with `RFC_LOGON_FAILURE`; `connection` for
  * `refused-after-renewal`; nothing else. Total: a value that is not an
- * error, or whose reads throw, does not blame it.
+ * error, whose facts fail their check, or whose reads throw, does not blame
+ * it.
  */
 export function blamesCredential(error: IAuthProviderError): boolean {
   try {
-    // Each read once: a getter could answer differently a second time.
-    const { kind, facts } = error;
+    // Read as own data properties, once each, and the facts checked by the
+    // same per-kind validator the builders use: the answer is the one the
+    // error a builder would mint from them gives. No getter is invoked.
+    const kind = readOwn(error, 'kind');
     if (!isAuthProviderErrorKind(kind)) return false;
+    const facts = checkFacts(
+      kind,
+      readOwn(error, 'facts'),
+      ASSERTION_RULE_CHECK,
+    );
+    if (facts === undefined) return false;
     return blameOf(kind, facts);
   } catch {
     return false;

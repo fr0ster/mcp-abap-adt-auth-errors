@@ -88,8 +88,11 @@ const READ_MAX = 1024;
 /** A tally of the caller's elements stops here (the `Count` range). */
 const TALLY_MAX = 1_000_000;
 
-/** Every grant type, keyed: exhaustive by the mapped type. */
-const GRANT_TYPES = Object.freeze({
+/**
+ * Every grant type, keyed: exhaustive by the mapped type; its key set equals
+ * `OAuth2GrantType` exactly (`__typechecks__/factCheck.ts`). Frozen.
+ */
+export const GRANT_TYPES = Object.freeze({
   [AUTH_TYPE_AUTHORIZATION_CODE]: true,
   [AUTH_TYPE_AUTHORIZATION_CODE_PKCE]: true,
   [AUTH_TYPE_PASSWORD]: true,
@@ -103,8 +106,11 @@ function isGrantType(value: unknown): value is OAuth2GrantType {
   return typeof value === 'string' && hasOwn(GRANT_TYPES, value);
 }
 
-/** The rules that say "carries N": they may carry `count`. */
-const COUNTED_RULES = Object.freeze({
+/**
+ * The rules that say "carries N": they may carry `count`. Its key set equals
+ * `CountedAssertionRule` exactly (`__typechecks__/factCheck.ts`). Frozen.
+ */
+export const COUNTED_RULES = Object.freeze({
   'several-references': true,
   'several-direct-assertions': true,
   'several-status': true,

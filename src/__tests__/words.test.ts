@@ -1628,6 +1628,71 @@ describe('blamesCredential (spec §3.1)', () => {
     },
   );
 
+  it('reads own, once, through the facts check: no getter is invoked', () => {
+    const calls: string[] = [];
+    const facts = {
+      get credential() {
+        calls.push('credential');
+        return 'token';
+      },
+    };
+    const error = {
+      get kind() {
+        calls.push('kind');
+        return 'credential-refused';
+      },
+      facts,
+    };
+    expect(blamesCredential(error)).toBe(false);
+    expect(blamesCredential({ kind: 'credential-refused', facts })).toBe(false);
+    expect(
+      blamesCredential({
+        kind: 'snc',
+        facts: {
+          problem: 'logon-refused',
+          get rfcKey() {
+            calls.push('rfcKey');
+            return 'RFC_LOGON_FAILURE';
+          },
+        },
+      }),
+    ).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ['facts null', { kind: 'credential-refused', facts: null }],
+    [
+      'a bad credential',
+      { kind: 'credential-refused', facts: { credential: 'MARKER' } },
+    ],
+    [
+      'a bad rfcKey',
+      { kind: 'snc', facts: { problem: 'logon-refused', rfcKey: 'MARKER' } },
+    ],
+    [
+      'a bad connection problem',
+      { kind: 'connection', facts: { problem: 'MARKER' } },
+    ],
+  ])('is false for %s', (_label, value) => {
+    expect(blamesCredential(value)).toBe(false);
+  });
+
+  it('answers as for a minted error, given the same facts as a plain object', () => {
+    expect(
+      blamesCredential({
+        kind: 'credential-refused',
+        facts: { credential: 'token' },
+      }),
+    ).toBe(true);
+    expect(
+      blamesCredential({
+        kind: 'snc',
+        facts: { problem: 'logon-refused', rfcKey: 'RFC_LOGON_FAILURE' },
+      }),
+    ).toBe(true);
+  });
+
   it('is false, and does not throw, for a value whose reads throw', () => {
     const hostile = new Proxy(
       {},
