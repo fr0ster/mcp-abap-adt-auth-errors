@@ -1,0 +1,508 @@
+import {
+  AUTH_PROVIDER_ERROR_KINDS,
+  type AuthProviderErrorKind,
+  type IAuthProviderError,
+} from '@mcp-abap-adt/interfaces-auth';
+import { loadBuilt } from './builtPackage';
+
+/**
+ * The builders (spec §5.2): one per kind, the only exported way to obtain an
+ * error. Each normalises the facts, admits the diagnostics its variant
+ * permits, renders the words and mints a deeply frozen error.
+ */
+type Builder = (facts: unknown, diagnostics?: unknown) => IAuthProviderError;
+
+const built = loadBuilt();
+const authError = built.authError as Record<AuthProviderErrorKind, Builder>;
+const isMinted = built.isMinted as (value: unknown) => boolean;
+const httpStatus = built.httpStatus as (value: unknown) => number;
+const count = built.count as (value: unknown) => number;
+const port = built.port as (value: unknown) => number;
+
+/** Every key of `value`, own and at any depth, holding `undefined`. */
+function undefinedKeys(value: unknown, path = ''): string[] {
+  if (value === null || typeof value !== 'object') return [];
+  const found: string[] = [];
+  for (const key of Object.keys(value)) {
+    const inner = (value as Record<string, unknown>)[key];
+    if (inner === undefined) found.push(`${path}${key}`);
+    found.push(...undefinedKeys(inner, `${path}${key}.`));
+  }
+  return found;
+}
+
+/** Every object and array reachable from `value` is frozen. */
+function deeplyFrozen(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return true;
+  if (!Object.isFrozen(value)) return false;
+  return Object.values(value).every(deeplyFrozen);
+}
+
+/** One builder call per kind: plain kinds and the three with a variant. */
+const ONE_PER_KIND: Record<string, () => IAuthProviderError> = {
+  configuration: () =>
+    authError.configuration({
+      case: 'required-fields-missing',
+      fields: ['clientId'],
+    }),
+  'client-certificate': () =>
+    authError['client-certificate']({ problem: 'expired' }),
+  'client-authentication': () =>
+    authError['client-authentication']({ problem: 'result-unsendable' }),
+  'request-failed': () =>
+    authError['request-failed']({
+      operation: 'client-credentials',
+      problem: 'refused',
+      status: httpStatus(401),
+    }),
+  tls: () =>
+    authError.tls({ operation: 'code-exchange', code: 'CERT_HAS_EXPIRED' }),
+  'interactive-login': () =>
+    authError['interactive-login']({ outcome: 'busy' }),
+  'saml-assertion': () =>
+    authError['saml-assertion']({ rule: 'expired', check: 'notOnOrAfter' }),
+  snc: () => authError.snc({ problem: 'locator-returned-no-path' }),
+  'credential-refused': () =>
+    authError['credential-refused']({ credential: 'token', at: 'request' }),
+  'system-refused': () =>
+    authError['system-refused']({ verdict: 'unknown', at: 'logon' }),
+  'renewal-unchanged': () =>
+    authError['renewal-unchanged']({ source: 'token-source' }),
+  'token-binding': () =>
+    authError['token-binding']({ problem: 'bound-to-unpinned' }),
+  'not-prepared': () => authError['not-prepared']({ provider: 'snc' }),
+  'logon-target': () =>
+    authError['logon-target']({ wire: 'rfc', refused: 'tls-material' }),
+  connection: () => authError.connection({ problem: 'no-credential' }),
+  unknown: () => authError.unknown({ operation: 'refresh' }),
+};
+
+describe('authError', () => {
+  it('has one builder per kind, and nothing else', () => {
+    expect(Object.keys(authError).sort()).toEqual(
+      [...AUTH_PROVIDER_ERROR_KINDS].sort(),
+    );
+    for (const kind of AUTH_PROVIDER_ERROR_KINDS) {
+      expect(typeof authError[kind]).toBe('function');
+    }
+    expect(Object.keys(ONE_PER_KIND).sort()).toEqual(
+      [...AUTH_PROVIDER_ERROR_KINDS].sort(),
+    );
+  });
+
+  it('is frozen: no builder can be replaced', () => {
+    expect(Object.isFrozen(authError)).toBe(true);
+    expect(() => {
+      authError.unknown = () => ({}) as IAuthProviderError;
+    }).toThrow(TypeError);
+  });
+
+  describe.each(AUTH_PROVIDER_ERROR_KINDS)('kind %s', (kind) => {
+    const make = (): IAuthProviderError => {
+      const builder = ONE_PER_KIND[kind];
+      if (builder === undefined) throw new Error(`no case for ${kind}`);
+      return builder();
+    };
+
+    it('mints an error of that kind, with words', () => {
+      const error = make();
+      expect(error.kind).toBe(kind);
+      expect(isMinted(error)).toBe(true);
+      expect(typeof error.reason).toBe('string');
+      expect(error.reason.length).toBeGreaterThan(0);
+    });
+
+    it('is frozen deeply', () => {
+      expect(deeplyFrozen(make())).toBe(true);
+    });
+
+    it('carries no undefined-valued key', () => {
+      expect(undefinedKeys(make())).toEqual([]);
+    });
+
+    it('mints a new object on each call', () => {
+      expect(make()).not.toBe(make());
+      expect(make()).toStrictEqual(make());
+    });
+  });
+
+  it('sets variant from the facts for the three kinds that carry one', () => {
+    const saml = authError['saml-assertion']({
+      rule: 'duplicate-id',
+      check: 'duplicateId',
+    });
+    expect(saml.variant).toBe('duplicate-id');
+    const snc = authError.snc({ problem: 'logon-refused' });
+    expect(snc.variant).toBe('logon-refused');
+    const config = authError.configuration({
+      case: 'snc-qop-invalid',
+      fields: ['qop'],
+      allowed: 'snc-qop',
+    });
+    expect(config.variant).toBe('snc-qop-invalid');
+  });
+
+  it('gives a plain kind no variant key', () => {
+    const error = authError['client-certificate']({ problem: 'incomplete' });
+    expect(Object.keys(error)).not.toContain('variant');
+    expect(Object.keys(error)).not.toContain('diagnostics');
+  });
+
+  it('omits an absent fact, and a fact given as undefined', () => {
+    const error = authError['request-failed']({
+      operation: 'token-request',
+      grant: undefined,
+      problem: 'no-response',
+      status: undefined,
+      oauthError: undefined,
+      code: 'ECONNREFUSED',
+    });
+    expect(error.facts).toStrictEqual({
+      operation: 'token-request',
+      problem: 'no-response',
+      code: 'ECONNREFUSED',
+    });
+  });
+
+  it('omits hint when the words have none', () => {
+    const error = authError['logon-target']({
+      wire: 'http',
+      refused: 'logon-parameters',
+    });
+    expect(Object.keys(error)).not.toContain('hint');
+  });
+
+  it('keeps the facts it was given, copied', () => {
+    const facts = { problem: 'expired' };
+    const error = authError['client-certificate'](facts);
+    expect(error.facts).toStrictEqual({ problem: 'expired' });
+    expect(error.facts).not.toBe(facts);
+    expect(Object.isFrozen(facts)).toBe(false);
+  });
+
+  describe('configuration fields', () => {
+    it('deduplicates in the order given', () => {
+      const error = authError.configuration({
+        case: 'required-fields-missing',
+        fields: ['uaaUrl', 'clientId', 'uaaUrl', 'clientSecret', 'clientId'],
+      });
+      expect(error.facts).toStrictEqual({
+        case: 'required-fields-missing',
+        fields: ['uaaUrl', 'clientId', 'clientSecret'],
+      });
+    });
+
+    it('caps at eight, after deduplicating', () => {
+      const names = [
+        'acsUrl',
+        'acsUrl',
+        'audience',
+        'clientId',
+        'clientSecret',
+        'encoding',
+        'idpEntityId',
+        'issuerUrl',
+        'partnerName',
+        'qop',
+        'scope',
+      ];
+      const error = authError.configuration({
+        case: 'required-fields-missing',
+        fields: names,
+      });
+      const facts = error.facts as { fields: readonly string[] };
+      expect(facts.fields).toEqual([
+        'acsUrl',
+        'audience',
+        'clientId',
+        'clientSecret',
+        'encoding',
+        'idpEntityId',
+        'issuerUrl',
+        'partnerName',
+      ]);
+    });
+
+    it('does not share the array it was given', () => {
+      const fields = ['clientId'];
+      const error = authError.configuration({
+        case: 'required-fields-missing',
+        fields,
+      });
+      fields.push('clientSecret');
+      expect((error.facts as { fields: string[] }).fields).toEqual([
+        'clientId',
+      ]);
+    });
+  });
+
+  describe('candidates', () => {
+    const bearer = (n: number) =>
+      Array.from({ length: n }, () => ({ reason: 'method-not-bearer' }));
+    const snc = (n: number) =>
+      Array.from({ length: n }, () => ({
+        source: 'SNC_LIB',
+        reason: 'missing',
+      }));
+
+    it('keeps at most five bearer candidates, counting the rest', () => {
+      const error = authError['saml-assertion']({
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: bearer(7),
+      });
+      const facts = error.facts as {
+        candidates: readonly unknown[];
+        moreCandidates?: number;
+      };
+      expect(facts.candidates).toHaveLength(5);
+      expect(facts.moreCandidates).toBe(2);
+    });
+
+    it('adds the cut candidates to a moreCandidates given', () => {
+      const error = authError['saml-assertion']({
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: bearer(6),
+        moreCandidates: count(3),
+      });
+      expect((error.facts as { moreCandidates?: number }).moreCandidates).toBe(
+        4,
+      );
+    });
+
+    it('keeps five bearer candidates as they are', () => {
+      const error = authError['saml-assertion']({
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: bearer(5),
+      });
+      expect(Object.keys(error.facts)).not.toContain('moreCandidates');
+      expect(
+        (error.facts as { candidates: readonly unknown[] }).candidates,
+      ).toHaveLength(5);
+    });
+
+    it('keeps at most eight SNC candidates', () => {
+      const error = authError.snc({
+        problem: 'library-not-found',
+        searched: true,
+        candidates: snc(11),
+      });
+      expect(
+        (error.facts as { candidates: readonly unknown[] }).candidates,
+      ).toHaveLength(8);
+    });
+
+    it('aligns candidatePaths with the capped candidates', () => {
+      const paths = Array.from({ length: 11 }, (_, i) => `/opt/lib${i}.so`);
+      const error = authError.snc(
+        { problem: 'library-not-found', searched: true, candidates: snc(11) },
+        { candidatePaths: paths },
+      );
+      expect(error.diagnostics).toStrictEqual({
+        candidatePaths: paths.slice(0, 8),
+      });
+    });
+
+    it('copies and freezes each candidate', () => {
+      const archs = ['x64'];
+      const candidate = {
+        source: 'registry',
+        reason: 'wrong architecture',
+        archs,
+      };
+      const error = authError.snc({
+        problem: 'library-not-found',
+        candidates: [candidate],
+      });
+      archs.push('arm64');
+      const [kept] = (
+        error.facts as { candidates: readonly { archs: string[] }[] }
+      ).candidates;
+      expect(kept).not.toBe(candidate);
+      expect(kept?.archs).toEqual(['x64']);
+      expect(Object.isFrozen(kept)).toBe(true);
+      expect(Object.isFrozen(kept?.archs)).toBe(true);
+    });
+  });
+
+  describe('diagnostics', () => {
+    it('keeps a permitted, admitted diagnostic', () => {
+      const error = authError['saml-assertion'](
+        { rule: 'untrusted-issuer', check: 'issuer' },
+        { issuer: 'https://idp.example/' },
+      );
+      expect(error.diagnostics).toStrictEqual({
+        issuer: 'https://idp.example/',
+      });
+      expect(isMinted(error)).toBe(true);
+    });
+
+    it('drops a field the variant does not permit (a JavaScript caller)', () => {
+      const error = authError['saml-assertion'](
+        { rule: 'duplicate-id', check: 'duplicateId' },
+        { issuer: 'https://idp.example/', id: '_a1' },
+      );
+      expect(error.diagnostics).toStrictEqual({ id: '_a1' });
+    });
+
+    it('drops every field of a variant that permits none', () => {
+      const error = authError.snc(
+        { problem: 'logon-refused' },
+        { library: '/opt/libsapcrypto.so' },
+      );
+      expect(Object.keys(error)).not.toContain('diagnostics');
+      expect(isMinted(error)).toBe(true);
+    });
+
+    it('drops a diagnostic of a plain kind (a JavaScript caller)', () => {
+      const error = authError['client-certificate'](
+        { problem: 'expired' },
+        { library: '/opt/libsapcrypto.so' },
+      );
+      expect(Object.keys(error)).not.toContain('diagnostics');
+    });
+
+    it('drops a refused value and still mints the error', () => {
+      const error = authError['saml-assertion'](
+        { rule: 'untrusted-issuer', check: 'issuer' },
+        { issuer: 'https://idp.example/\nforged: line' },
+      );
+      expect(Object.keys(error)).not.toContain('diagnostics');
+      expect(isMinted(error)).toBe(true);
+      expect(error.kind).toBe('saml-assertion');
+    });
+
+    it('keeps the admitted ones of several and drops the refused', () => {
+      const error = authError.configuration(
+        {
+          case: 'redirect-mismatch',
+          fields: ['authorizationUrl'],
+        },
+        {
+          configuredUri: 'https://user:pw@idp.example/cb',
+          strategyUri: 'http://localhost:61001/callback?code=secret',
+        },
+      );
+      expect(error.diagnostics).toStrictEqual({
+        strategyUri: 'http://localhost:61001/callback',
+      });
+    });
+
+    it('survives a diagnostics argument that throws on every read', () => {
+      const hostile = new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('secret');
+          },
+          getOwnPropertyDescriptor() {
+            throw new Error('secret');
+          },
+        },
+      );
+      const error = authError.snc({ problem: 'no-credential' }, hostile);
+      expect(Object.keys(error)).not.toContain('diagnostics');
+      expect(isMinted(error)).toBe(true);
+    });
+
+    it('freezes the diagnostics', () => {
+      const error = authError.snc(
+        { problem: 'library-not-found', candidates: [] },
+        { candidatePaths: [] },
+      );
+      expect(deeplyFrozen(error)).toBe(true);
+    });
+  });
+
+  describe('RF3: a minted error cannot be changed', () => {
+    it('refuses an assignment to reason', () => {
+      const error = authError['client-certificate']({ problem: 'expired' });
+      expect(() => {
+        (error as { reason: string }).reason = 'forged';
+      }).toThrow(TypeError);
+      expect(error.reason).toBe('the client certificate has expired');
+    });
+
+    it('refuses a change to a nested facts array', () => {
+      const error = authError.configuration({
+        case: 'required-fields-missing',
+        fields: ['clientId'],
+      });
+      const fields = (error.facts as { fields: string[] }).fields;
+      expect(() => {
+        fields.push('clientSecret');
+      }).toThrow(TypeError);
+      expect(() => {
+        fields[0] = 'password';
+      }).toThrow(TypeError);
+      expect(fields).toEqual(['clientId']);
+    });
+
+    it('refuses a new key on the error and on its facts', () => {
+      const error = authError.unknown({ operation: 'refresh' });
+      expect(() => {
+        (error as unknown as Record<string, unknown>).message = 'secret';
+      }).toThrow(TypeError);
+      expect(() => {
+        (error.facts as Record<string, unknown>).status = 500;
+      }).toThrow(TypeError);
+    });
+  });
+});
+
+describe('isMinted', () => {
+  it('is true for an error a builder minted', () => {
+    expect(isMinted(authError.unknown({ operation: 'refresh' }))).toBe(true);
+  });
+
+  it('is false for a structural copy of a minted error', () => {
+    const error = authError.unknown({ operation: 'refresh' });
+    expect(isMinted({ ...error })).toBe(false);
+    expect(isMinted(JSON.parse(JSON.stringify(error)))).toBe(false);
+  });
+
+  it.each([
+    null,
+    undefined,
+    0,
+    'the client certificate has expired',
+    Symbol('x'),
+    () => undefined,
+    {},
+    [],
+  ])('is false for %p', (value) => {
+    expect(isMinted(value)).toBe(false);
+  });
+
+  it('is false for the facts or the diagnostics of a minted error', () => {
+    const error = authError.snc(
+      { problem: 'no-credential' },
+      { library: '/opt/libsapcrypto.so' },
+    );
+    expect(isMinted(error.facts)).toBe(false);
+    expect(isMinted(error.diagnostics)).toBe(false);
+  });
+});
+
+describe('the branded makers in facts', () => {
+  it('a port and a count reach the facts as numbers', () => {
+    const inUse = authError['interactive-login']({
+      outcome: 'port-in-use',
+      port: port(61001),
+    });
+    expect(inUse.facts).toStrictEqual({
+      outcome: 'port-in-use',
+      port: 61001,
+    });
+    const aborted = authError['interactive-login']({
+      outcome: 'aborted',
+      ignoredCallbacks: count(2),
+    });
+    expect(aborted.facts).toStrictEqual({
+      outcome: 'aborted',
+      ignoredCallbacks: 2,
+    });
+  });
+});

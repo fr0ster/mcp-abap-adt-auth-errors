@@ -44,4 +44,14 @@ export {
   isTlsFailureCode,
   isTokenBindingProblem,
 } from './allowlists';
+export {
+  type AuthErrorBuilders,
+  authError,
+  type DiagnosticsInputOf,
+  type One,
+  type PlainBuilders,
+  type VariantBuilders,
+} from './builders';
+export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';
+export { blamesCredential, render, type Words } from './words';

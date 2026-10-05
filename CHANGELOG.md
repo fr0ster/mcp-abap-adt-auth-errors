@@ -25,3 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module-private, copied from the arrays at load, and read through a
   `Set.prototype.has` captured at load, so patching it later changes no
   answer.
+- `authError` — one builder per kind, the only way to obtain an
+  `IAuthProviderError`. The builders of `saml-assertion`, `snc` and
+  `configuration` are generic over the variant, inferred from the facts
+  literal (a discriminant typed as a whole union does not compile), take the
+  diagnostics that variant permits and answer that variant's error type;
+  every other kind takes facts only. A builder omits absent facts, copies
+  every array, deduplicates `fields` and caps it at 8, caps `candidates` at 5
+  (`saml-assertion`, counting the rest in `moreCandidates`) or 8 (`snc`,
+  `candidatePaths` aligned with them), admits each permitted diagnostic and
+  drops any other field or refused value, renders `reason` / `hint` and
+  mints the error frozen deeply.
+- `isMinted(value)` — true only for an error this copy of the package
+  minted (a module-private `WeakSet`); a structural copy is not one.
+- `render(kind, facts)` — the default words a builder stores, from `kind`
+  and `facts` only, never a diagnostic: today's strings exactly where the
+  error contract marks a row verbatim; an unknown kind or discriminant
+  answers "an authentication error of a kind this version does not know".
+  No word mentions a login timeout.
+- `blamesCredential(error)` — whether an error blames the credential:
+  `credential-refused` and `renewal-unchanged`; `snc` `no-credential`, and
+  `logon-refused` with `RFC_LOGON_FAILURE`; `connection`
+  `refused-after-renewal`. Total.
