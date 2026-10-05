@@ -455,12 +455,12 @@ export function createParties(): Parties {
       release(party, false);
       return ignore;
     }
-    // Aborted during its registration (or unreadable now): never added. An
-    // abort leaves its provisional moments as any abort does — one left with
-    // no member is aborted (the registration may have aborted the others).
-    const state = readSignal(signal);
-    if (state !== 'live') {
-      release(party, state === 'aborted');
+    // Aborted or unreadable after its registration: never added, and removed
+    // as an abort (as join refuses such a waiter `aborted`) — a provisional
+    // moment left with no member is aborted (the registration may have
+    // aborted the others).
+    if (readSignal(signal) !== 'live') {
+      release(party, true);
       return ignore;
     }
     return () => release(party, false);

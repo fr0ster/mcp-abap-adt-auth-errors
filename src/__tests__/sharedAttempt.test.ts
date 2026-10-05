@@ -1204,3 +1204,34 @@ describe('a registration that aborts another party, then itself', () => {
     expect(fresh.start).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a registration that aborts another party, then turns unreadable', () => {
+  it('attach: removed as an abort — the moment left with no live party is aborted', () => {
+    const parties = createParties();
+    const existing = new AbortController();
+    parties.attach(existing.signal);
+    const moment = momentOf(parties);
+    let unreadable = false;
+    const listeners: (() => void)[] = [];
+    const signal = {
+      get aborted(): boolean {
+        if (unreadable) throw new Error('secret');
+        return false;
+      },
+      addEventListener(_: string, listener: () => void) {
+        existing.abort();
+        unreadable = true;
+        listeners.push(listener);
+      },
+      removeEventListener(_: string, listener: () => void) {
+        const index = listeners.indexOf(listener);
+        if (index >= 0) listeners.splice(index, 1);
+      },
+    } as unknown as AbortSignal;
+    parties.attach(signal);
+    expect(moment.signal.aborted).toBe(true);
+    expect(listeners).toHaveLength(0);
+    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+});
