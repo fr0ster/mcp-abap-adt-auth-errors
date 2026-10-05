@@ -32,7 +32,9 @@
  *      IAuthProvider) without reaching AuthProviderBase;
  *   2  a class reaching AuthProviderBase that declares, or assigns to `this`,
  *      a member named prepare, establish, authorize or rejected (a computed
- *      name folded from its literal type); `Object.assign` or
+ *      name folded from its literal type); an assignment of one to `this` or
+ *      to `X.prototype` of such a class, through parentheses and assertions
+ *      (`(this as any)[NAME] = …`); `Object.assign` or
  *      `Object.defineProperty` writing one onto `this` of such a class or
  *      onto its `prototype`;
  *   3  an object literal that satisfies IAuthProvider;
@@ -74,7 +76,9 @@
  * second type system, and none is a pattern the repositories write):
  *   - rule 1: a provider built by a mixin returning an anonymous class;
  *   - rule 2: `Object.defineProperties`, an `Object.assign` / `defineProperty`
- *     reached through an alias, a member name not folded to a literal;
+ *     reached through an alias, a write through an alias of `this` or of the
+ *     prototype (`const p = X.prototype; p.prepare = …`), a member name or
+ *     key not folded to a literal (a `string` variable);
  *   - rule 3: an object built by `Object.create` or `Object.assign` of partial
  *     literals and returned as IAuthProvider;
  *   - rule 4: an unconstrained generic cast helper
@@ -757,35 +761,59 @@ function createRules(program, contractFile, options, sites) {
           }
         }
       }
-      const visit = (child) => {
-        if (ts.isClassLike(child) && child !== node) return;
-        if (
-          ts.isBinaryExpression(child) &&
-          child.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-          child.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-        ) {
-          const target = skipParentheses(child.left);
-          if (
-            (ts.isPropertyAccessExpression(target) ||
-              ts.isElementAccessExpression(target)) &&
-            target.expression.kind === ts.SyntaxKind.ThisKeyword
-          ) {
-            const name = ts.isPropertyAccessExpression(target)
-              ? target.name.text
-              : keyOf(target.argumentExpression);
-            if (name !== undefined && MOMENTS.has(name)) {
-              report(
-                child,
-                2,
-                `a class reaching ${BASE} assigns this.${name}; ${BASE} owns the four methods`,
-              );
-            }
-          }
-        }
-        ts.forEachChild(child, visit);
-      };
-      ts.forEachChild(node, visit);
     }
+  }
+
+  /** `node` without parentheses, `as`, `<T>`, `!` or `satisfies` around it. */
+  function unwrap(node) {
+    let current = node;
+    while (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isSatisfiesExpression(current)
+    ) {
+      current = current.expression;
+    }
+    return current;
+  }
+
+  /**
+   * Rule 2 through an assignment: `this.<moment> = …` in a class reaching
+   * the base, or `X.prototype.<moment> = …` of one — `this` or the target
+   * unwrapped of parentheses and assertions, a computed key folded from its
+   * literal type (`(this as any)[NAME]`, `X.prototype[NAME]`).
+   */
+  function checkMomentAssignment(node) {
+    if (!options.rules.has(2)) return;
+    const kind = node.operatorToken.kind;
+    if (
+      kind < ts.SyntaxKind.FirstAssignment ||
+      kind > ts.SyntaxKind.LastAssignment
+    )
+      return;
+    const target = unwrap(node.left);
+    if (
+      !ts.isPropertyAccessExpression(target) &&
+      !ts.isElementAccessExpression(target)
+    )
+      return;
+    const name = ts.isPropertyAccessExpression(target)
+      ? target.name.text
+      : keyOf(target.argumentExpression);
+    if (name === undefined || !MOMENTS.has(name)) return;
+    const owner = unwrap(target.expression);
+    if (!targetsProvider(owner)) return;
+    const written =
+      owner.kind === ts.SyntaxKind.ThisKeyword
+        ? `this.${name}`
+        : `${owner.getText()}.${name}`;
+    report(
+      node,
+      2,
+      `a class reaching ${BASE} assigns ${written}; ${BASE} owns the four methods`,
+    );
   }
 
   /**
@@ -798,8 +826,7 @@ function createRules(program, contractFile, options, sites) {
     const method = globalObjectMethod(node);
     if (method !== 'assign' && method !== 'defineProperty') return;
     const target = node.arguments[0];
-    if (target === undefined || !targetsProvider(skipParentheses(target)))
-      return;
+    if (target === undefined || !targetsProvider(unwrap(target))) return;
     const names =
       method === 'defineProperty'
         ? [keyOf(node.arguments[1])]
@@ -833,7 +860,7 @@ function createRules(program, contractFile, options, sites) {
       ts.isPropertyAccessExpression(target) &&
       target.name.text === 'prototype'
     ) {
-      const symbol = checker.getSymbolAtLocation(target.expression);
+      const symbol = checker.getSymbolAtLocation(unwrap(target.expression));
       const resolved =
         symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias
           ? checker.getAliasedSymbol(symbol)
@@ -1308,6 +1335,7 @@ function createRules(program, contractFile, options, sites) {
       checkAssertion(node);
     else if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node))
       checkOverload(node);
+    else if (ts.isBinaryExpression(node)) checkMomentAssignment(node);
     else if (ts.isSpreadAssignment(node) || ts.isJsxSpreadAttribute(node))
       checkSpread(node);
     else if (ts.isCallExpression(node)) {

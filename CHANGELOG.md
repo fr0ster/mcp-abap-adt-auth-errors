@@ -157,7 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `src/` outside tests: (1) a class implementing `IAuthProvider` — by
   `implements` (beside the base: drop the clause), or structurally without
   reaching `AuthProviderBase`, class expressions included; (2) a class
-  reaching `AuthProviderBase` that declares or assigns `prepare`,
+  reaching `AuthProviderBase` that declares or assigns (on `this` or its
+  `prototype`, through assertions too) `prepare`,
   `establish`, `authorize` or `rejected` — a computed name from a constant,
   `Object.assign` / `Object.defineProperty` onto `this` or its `prototype`
   included; (3) an object literal satisfying `IAuthProvider`; (4) a type

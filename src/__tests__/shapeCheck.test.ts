@@ -71,7 +71,7 @@ function fixtureFiles(dir: string): string[] {
 const BREAKING: Readonly<Record<string, readonly [number, number]>> = {
   'src/rule1.ts': [1, 2],
   'src/rule1-structural.ts': [1, 2],
-  'src/rule2.ts': [2, 7],
+  'src/rule2.ts': [2, 9],
   'src/rule3.ts': [3, 1],
   'src/rule4-branded.ts': [4, 1],
   'src/rule4-site.ts': [4, 1],

@@ -39,3 +39,15 @@ export class AssignedProvider extends FixedProvider {
 }
 
 Object.assign(NamedProvider.prototype, { authorize: async () => OK });
+
+NamedProvider.prototype.rejected = async () => OK;
+
+const REJECTED = 'rejected';
+
+export class CastProvider extends FixedProvider {
+  constructor() {
+    super();
+    // biome-ignore lint/suspicious/noExplicitAny: the bypass under test
+    (this as any)[REJECTED] = async () => OK;
+  }
+}
