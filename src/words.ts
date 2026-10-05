@@ -18,6 +18,7 @@
  * No word mentions a timeout: there is no built-in login timeout (§6a).
  */
 import {
+  type AssertionCheck,
   type AssertionRule,
   type AuthProviderErrorFacts,
   type AuthProviderErrorKind,
@@ -29,13 +30,18 @@ import {
   type OAuth2GrantType,
   type OAuthErrorCode,
   type Operation,
+  type RejectionMoment,
   SNC_QOP_VALUES,
   type SncArch,
   type SncCandidate,
   type SystemCode,
   type TlsFailureCode,
 } from '@mcp-abap-adt/interfaces-auth';
-import { isAuthProviderErrorKind } from './allowlists';
+import {
+  isAuthProviderErrorKind,
+  isSncCandidateSource,
+  isSncUnusableReason,
+} from './allowlists';
 
 /** What a kind's words are: a reason, and a hint when there is one. */
 export type Words = { readonly reason: string; readonly hint?: string };
@@ -57,12 +63,42 @@ const UNFAMILIAR_REASON =
   'an authentication error of a kind this version does not know';
 
 /**
+ * Thrown inside the renderers when the facts hold something this build does
+ * not know — a discriminant, a table key, a missing required fact — and
+ * caught by `render`, which then answers the unfamiliar words for the whole
+ * error. Module-private: nothing outside this module ever sees it.
+ */
+class Unfamiliar extends Error {}
+
+/**
  * The end of every discriminant `switch`: compiles only when every member was
  * handled. At run time (a value this build does not know, from a caller that
- * bypassed the types) it answers the unfamiliar words instead of throwing.
+ * bypassed the types) the whole rendering answers the unfamiliar words —
+ * never a sentence with a piece of them spliced in.
  */
-export function unreachable(_value: never): Words {
-  return { reason: UNFAMILIAR_REASON };
+export function unreachable(_value: never): never {
+  throw new Unfamiliar();
+}
+
+const hasOwn = Object.hasOwn;
+
+/**
+ * The entry of `table` under `key`, read as an own property only — so
+ * `constructor`, `toString` or `__proto__` never reach `Object.prototype` —
+ * else the whole rendering is unfamiliar.
+ */
+function own<V>(table: { readonly [key: string]: V }, key: unknown): V {
+  if (typeof key === 'string' && hasOwn(table, key)) {
+    const value = table[key];
+    if (value !== undefined) return value;
+  }
+  throw new Unfamiliar();
+}
+
+/** A fact the words need: absent, the whole rendering is unfamiliar. */
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Unfamiliar();
+  return value;
 }
 
 /** `values` joined by `separator`, read by index (never the array's own methods). */
@@ -115,7 +151,7 @@ const OPERATION_PHRASE = Object.freeze({
   'oidc-token-request': 'the OIDC token request',
   'validating-assertion': 'validating the SAML assertion',
   'client-authentication-strategy': 'the clientAuthentication strategy',
-  'unfamiliar-error': 'handling an unfamiliar error',
+  'unfamiliar-error': 'an unfamiliar error',
   preparing: 'preparing',
   establishing: 'establishing the logon',
   authorizing: 'authorizing the request',
@@ -126,7 +162,7 @@ function subject(operation: Operation, grant?: OAuth2GrantType): string {
   if (operation === 'token-request' && grant !== undefined) {
     return `${grant} token request`;
   }
-  return OPERATION_PHRASE[operation];
+  return own(OPERATION_PHRASE, operation);
 }
 
 /**
@@ -139,7 +175,9 @@ function failed(operation: Operation, grant?: OAuth2GrantType): string {
     case 'handing-over-snc-parameters':
     case 'authorizing-snc-request':
     case 'explaining-snc-refusal':
-      return `the SNC provider failed while ${OPERATION_PHRASE[operation]}`;
+      return `the SNC provider failed while ${own(OPERATION_PHRASE, operation)}`;
+    case 'unfamiliar-error':
+      return own(OPERATION_PHRASE, operation);
     default:
       return `${subject(operation, grant)} failed`;
   }
@@ -279,7 +317,7 @@ function configurationWords(
     case 'saml-acs-mismatch':
       return say(
         'SAML acsUrl and the address the authorization strategy used do not match',
-        'they must match; the two addresses are in the diagnostics',
+        'they must match',
       );
     case 'saml-in-response-to-undeclared':
       return say(
@@ -303,8 +341,13 @@ function configurationWords(
       );
     case 'oidc-endpoint-missing': {
       const fields = joined(facts.fields, ', ');
+      const several = facts.fields.length > 1;
       return say(
-        `OIDC ${fields === '' ? 'endpoint' : fields} is required (configure it, or use discovery)`,
+        fields === ''
+          ? 'OIDC endpoint is required (configure it, or use discovery)'
+          : several
+            ? `OIDC ${fields} are required (configure them, or use discovery)`
+            : `OIDC ${fields} is required (configure it, or use discovery)`,
         CHECK_CONFIGURATION,
       );
     }
@@ -444,7 +487,7 @@ function requestFailedWords(
 }
 
 function tlsWords(facts: AuthProviderErrorFacts['tls']): Words {
-  const words: TlsWords = TLS_WORDS[facts.code];
+  const words: TlsWords = own(TLS_WORDS, facts.code);
   return say(
     `${failed(facts.operation, facts.grant)}: ${words.says} (${facts.code})`,
     words.hint,
@@ -462,7 +505,7 @@ function interactiveLoginWords(
   switch (facts.outcome) {
     case 'port-in-use':
       return say(
-        `Port ${facts.port} is already in use. Please specify a different port or free the port.`,
+        `Port ${required(facts.port)} is already in use. Please specify a different port or free the port.`,
       );
     case 'aborted': {
       const ignored: Count | undefined = facts.ignoredCallbacks;
@@ -589,7 +632,7 @@ export const ASSERTION_RULE_CHECK = Object.freeze({
   'only-encrypted-assertion': 'document',
   'no-assertion': 'document',
   'several-assertions': 'document',
-}) satisfies { readonly [R in AssertionRule]: string };
+}) satisfies { readonly [R in AssertionRule]: AssertionCheck };
 
 /** "carries <n> <what>; exactly one is allowed", the count a fact. */
 function carriesSeveral(
@@ -626,7 +669,7 @@ function candidateWords(candidate: BearerCandidate): string {
     case 'not-before-not-arrived':
       return 'NotBefore has not arrived';
     default:
-      return unreachable(candidate).reason;
+      return unreachable(candidate);
   }
 }
 
@@ -644,10 +687,14 @@ function noBearerQualifies(
       }
     }
   }
-  if (more !== undefined && more > 0) parts.push(`and ${more} more`);
-  return parts.length === 0
-    ? 'no bearer confirmation qualifies'
-    : `no bearer confirmation qualifies: ${joined(parts, ' | ')}`;
+  const hidden = more !== undefined && more > 0 ? more : 0;
+  if (parts.length === 0) {
+    return hidden === 0
+      ? 'no bearer confirmation qualifies'
+      : `no bearer confirmation qualifies (${hidden} candidates not shown)`;
+  }
+  if (hidden > 0) parts.push(`and ${hidden} more`);
+  return `no bearer confirmation qualifies: ${joined(parts, ' | ')}`;
 }
 
 /**
@@ -782,7 +829,7 @@ function ruleWords(facts: AuthProviderErrorFacts['saml-assertion']): string {
         ? 'SAML Response carries more than one Assertion; a bearer grant takes one'
         : `SAML Response carries ${facts.count} Assertions; a bearer grant takes one`;
     default:
-      return unreachable(facts).reason;
+      return unreachable(facts);
   }
 }
 
@@ -790,9 +837,11 @@ function ruleWords(facts: AuthProviderErrorFacts['saml-assertion']): string {
 function samlAssertionWords(
   facts: AuthProviderErrorFacts['saml-assertion'],
 ): Words {
-  return say(
-    `the SAML assertion was refused (${facts.check}): ${ruleWords(facts)}`,
-  );
+  // The check is the rule's own; facts naming another one are not this
+  // build's to word.
+  const check = own(ASSERTION_RULE_CHECK, facts.rule);
+  if (facts.check !== check) throw new Unfamiliar();
+  return say(`the SAML assertion was refused (${check}): ${ruleWords(facts)}`);
 }
 
 // --------------------------------------------------------------------- SNC
@@ -810,6 +859,12 @@ function candidateList(candidates: readonly SncCandidate[]): string {
   for (let index = 0; index < candidates.length; index += 1) {
     const candidate = candidates[index];
     if (candidate !== undefined) {
+      if (
+        !isSncCandidateSource(candidate.source) ||
+        !isSncUnusableReason(candidate.reason)
+      ) {
+        throw new Unfamiliar();
+      }
       parts.push(`${candidate.source} (${candidate.reason})`);
     }
   }
@@ -893,36 +948,48 @@ function credentialRefusedWords(
   }
 }
 
+/** `call` for a request, `logon` for a logon (B5); anything else is unfamiliar. */
+function rfcMoment(at: RejectionMoment): 'call' | 'logon' {
+  switch (at) {
+    case 'request':
+      return 'call';
+    case 'logon':
+      return 'logon';
+    default:
+      return unreachable(at);
+  }
+}
+
 function systemRefusedWords(
   facts: AuthProviderErrorFacts['system-refused'],
 ): Words {
   switch (facts.verdict) {
     case 'not-authorized':
       return say(
-        `the credential was accepted, but the user is not authorized (${facts.status})`,
+        `the credential was accepted, but the user is not authorized (${required(facts.status)})`,
         "check the user's authorizations in the system",
       );
     case 'redirected':
       return say(
-        `the system redirected instead of accepting the credential (${facts.status})`,
+        `the system redirected instead of accepting the credential (${required(facts.status)})`,
         'the service may require another logon procedure (single sign-on, an identity provider)',
       );
     case 'system-failed':
       return say(
-        `the system failed (${facts.status}), not the credential`,
+        `the system failed (${required(facts.status)}), not the credential`,
         'try again later',
       );
     case 'other-status':
       return say(
-        `the system answered ${facts.status}, which is not a credential refusal`,
+        `the system answered ${required(facts.status)}, which is not a credential refusal`,
       );
     case 'rfc-failure':
       return say(
-        `the RFC ${facts.at === 'request' ? 'call' : 'logon'} failed (${facts.rfcKey}), not as a credential refusal`,
+        `the RFC ${rfcMoment(facts.at)} failed (${required(facts.rfcKey)}), not as a credential refusal`,
       );
     case 'unknown':
       return say(
-        facts.at === 'request'
+        rfcMoment(facts.at) === 'call'
           ? 'the request was refused (unknown error)'
           : 'the logon failed (unknown error)',
       );
@@ -997,7 +1064,7 @@ function refusedThing(facts: AuthProviderErrorFacts['logon-target']): string {
     case 'logon-parameters':
       return 'the logon parameters';
     default:
-      return unreachable(facts.refused).reason;
+      return unreachable(facts.refused);
   }
 }
 

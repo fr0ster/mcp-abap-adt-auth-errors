@@ -343,19 +343,24 @@ const VERBATIM: readonly (readonly [
   [
     'A14 no reason',
     'request-failed',
-    { operation: 'client-credentials', problem: 'refused' },
-    'the client credentials request failed (the token endpoint gave no reason)',
+    {
+      operation: 'token-request',
+      grant: 'client_credentials',
+      problem: 'refused',
+    },
+    'client_credentials token request failed (the token endpoint gave no reason)',
     undefined,
   ],
   [
     'D2 code only',
     'request-failed',
     {
-      operation: 'passcode-exchange',
+      operation: 'token-request',
+      grant: 'password',
       problem: 'no-response',
       code: 'ECONNREFUSED',
     },
-    'the passcode exchange failed (ECONNREFUSED)',
+    'password token request failed (ECONNREFUSED)',
     undefined,
   ],
   [
@@ -864,7 +869,7 @@ const CONFIGURATION: readonly (readonly [
     'saml-acs-mismatch',
     ['acsUrl'],
     'SAML acsUrl and the address the authorization strategy used do not match',
-    'they must match; the two addresses are in the diagnostics',
+    'they must match',
   ],
   [
     'saml-in-response-to-undeclared',
@@ -1001,7 +1006,7 @@ describe('configuration words', () => {
         fields: ['authorizationEndpoint', 'tokenEndpoint'],
       }).reason,
     ).toBe(
-      'OIDC authorizationEndpoint, tokenEndpoint is required (configure it, or use discovery)',
+      'OIDC authorizationEndpoint, tokenEndpoint are required (configure them, or use discovery)',
     );
   });
 });
@@ -1278,6 +1283,158 @@ describe('no rendered word contains a diagnostic value', () => {
     expect(JSON.stringify(error.diagnostics)).toContain(MARKER);
     expect(error.reason).not.toContain(MARKER);
     expect(error.hint ?? '').not.toContain(MARKER);
+  });
+});
+
+const UNFAMILIAR = {
+  reason: 'an authentication error of a kind this version does not know',
+};
+
+describe('anything this build does not know renders the unfamiliar words whole', () => {
+  const CASES: readonly (readonly [string, string, unknown])[] = [
+    ['operation constructor', 'unknown', { operation: 'constructor' }],
+    ['operation toString', 'unknown', { operation: 'toString' }],
+    ['operation hasOwnProperty', 'unknown', { operation: 'hasOwnProperty' }],
+    ['operation __proto__', 'unknown', { operation: '__proto__' }],
+    ['an unknown operation', 'unknown', { operation: 'future-operation' }],
+    [
+      'an unknown operation, returned',
+      'request-failed',
+      { operation: 'future-operation', problem: 'no-access-token' },
+    ],
+    [
+      'an unknown operation, failed',
+      'request-failed',
+      { operation: 'toString', problem: 'refused' },
+    ],
+    [
+      'tls code constructor',
+      'tls',
+      { operation: 'refresh', code: 'constructor' },
+    ],
+    ['tls code __proto__', 'tls', { operation: 'refresh', code: '__proto__' }],
+    [
+      'an unknown rule',
+      'saml-assertion',
+      { rule: 'future-rule', check: 'document' },
+    ],
+    [
+      'a rule with another check',
+      'saml-assertion',
+      { rule: 'expired', check: 'issuer' },
+    ],
+    [
+      'a rule named constructor',
+      'saml-assertion',
+      { rule: 'constructor', check: 'document' },
+    ],
+    [
+      'an unknown bearer candidate reason',
+      'saml-assertion',
+      {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        candidates: [
+          { reason: 'method-not-bearer' },
+          { reason: 'future-reason' },
+        ],
+      },
+    ],
+    [
+      'an unknown SNC candidate reason',
+      'snc',
+      {
+        problem: 'library-not-found',
+        candidates: [{ source: 'SNC_LIB', reason: 'constructor' }],
+      },
+    ],
+    [
+      'an unknown logon-target refusal',
+      'logon-target',
+      { wire: 'unknown', refused: 'future-thing' },
+    ],
+    [
+      'an unknown logon-target refusal on rfc',
+      'logon-target',
+      { wire: 'rfc', refused: 'toString' },
+    ],
+    [
+      'an unknown disposed strategy',
+      'interactive-login',
+      { outcome: 'disposed', strategy: 'future' },
+    ],
+    [
+      'port-in-use without a port',
+      'interactive-login',
+      { outcome: 'port-in-use' },
+    ],
+    [
+      'a status verdict without a status',
+      'system-refused',
+      { verdict: 'system-failed', at: 'request' },
+    ],
+    [
+      'an rfc verdict without a key',
+      'system-refused',
+      { verdict: 'rfc-failure', at: 'logon' },
+    ],
+    [
+      'a verdict at an unknown moment',
+      'system-refused',
+      { verdict: 'unknown', at: 'future' },
+    ],
+    ...[
+      'configuration',
+      'client-certificate',
+      'client-authentication',
+      'request-failed',
+      'tls',
+      'interactive-login',
+      'saml-assertion',
+      'snc',
+      'credential-refused',
+      'system-refused',
+      'renewal-unchanged',
+      'token-binding',
+      'not-prepared',
+      'logon-target',
+      'connection',
+      'unknown',
+    ].map((kind) => [`${kind} with empty facts`, kind, {}] as const),
+  ];
+
+  it.each(CASES)('%s, through render', (_label, kind, facts) => {
+    expect(render(kind, facts)).toStrictEqual(UNFAMILIAR);
+  });
+
+  it.each(CASES)('%s, through the builder', (_label, kind, facts) => {
+    expect(words(build(kind, facts))).toStrictEqual(UNFAMILIAR);
+  });
+});
+
+describe('unfamiliar-error as an operation', () => {
+  it('names an unfamiliar error, not a failed handling step', () => {
+    expect(
+      build('request-failed', {
+        operation: 'unfamiliar-error',
+        problem: 'refused',
+        status: httpStatus(500),
+      }).reason,
+    ).toBe('an unfamiliar error (HTTP 500)');
+  });
+});
+
+describe('no-bearer-qualifies with no candidate listed', () => {
+  it('says how many were not shown, with no dangling "and"', () => {
+    expect(
+      build('saml-assertion', {
+        rule: 'no-bearer-qualifies',
+        check: 'bearerConfirmation',
+        moreCandidates: count(4),
+      }).reason,
+    ).toBe(
+      'the SAML assertion was refused (bearerConfirmation): no bearer confirmation qualifies (4 candidates not shown)',
+    );
   });
 });
 

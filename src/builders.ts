@@ -40,6 +40,7 @@ import {
   admitConfigDiagnostics,
   admitSamlDiagnostics,
   admitSncDiagnostics,
+  readOwn,
 } from './admission';
 import { type ErrorDraft, mint } from './mint';
 import { count } from './numbers';
@@ -86,10 +87,10 @@ export type PlainBuilders = {
 /** `authError`: one builder per kind. */
 export type AuthErrorBuilders = Readonly<VariantBuilders> & PlainBuilders;
 
-const keysOf = Object.keys;
+const ownKeys = Reflect.ownKeys;
 const hasOwn = Object.hasOwn;
 const isArray = Array.isArray;
-const getProperty = Reflect.get;
+const isInteger = Number.isInteger;
 
 /** `configuration` `fields`: at most eight, deduplicated, in the order given. */
 const FIELDS_MAX = 8;
@@ -97,6 +98,10 @@ const FIELDS_MAX = 8;
 const BEARER_CANDIDATES_MAX = 5;
 /** `snc` `candidates` (`library-not-found`): at most eight. */
 const SNC_CANDIDATES_MAX = 8;
+/** At most this many elements of any array a caller hands over are read. */
+const READ_MAX = 1024;
+/** Nested data deeper than this is read as absent. */
+const DEPTH_MAX = 8;
 
 /** How one top-level array of a kind's facts is normalised. */
 interface ArrayRule {
@@ -109,66 +114,124 @@ const NO_ARRAY_RULES: ArrayRules = Object.freeze({});
 const CONFIGURATION_ARRAYS: ArrayRules = Object.freeze({
   fields: Object.freeze({ max: FIELDS_MAX, deduplicate: true }),
 });
+/** Every bearer candidate read is kept here; `buildSaml` cuts and counts. */
 const SAML_ARRAYS: ArrayRules = Object.freeze({
-  candidates: Object.freeze({ max: BEARER_CANDIDATES_MAX, deduplicate: false }),
+  candidates: Object.freeze({ max: READ_MAX, deduplicate: false }),
 });
 const SNC_ARRAYS: ArrayRules = Object.freeze({
   candidates: Object.freeze({ max: SNC_CANDIDATES_MAX, deduplicate: false }),
 });
 
-/**
- * A copy of plain data: an array element by element, an object key by key
- * with every `undefined`-valued key omitted, anything else as it is. Nothing
- * the caller holds is shared with the error.
- */
-function copyData(value: unknown): unknown {
-  if (isArray(value)) {
-    const copy: unknown[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      copy.push(copyData(value[index]));
-    }
-    return copy;
+/** Whether `value` is an array; a revoked Proxy (which throws) is not. */
+function isArrayGuarded(value: unknown): value is readonly unknown[] {
+  try {
+    return isArray(value);
+  } catch {
+    return false;
   }
-  if (value !== null && typeof value === 'object') {
-    const copy: Record<string, unknown> = {};
-    for (const key of keysOf(value)) {
-      const inner: unknown = getProperty(value, key);
-      if (inner !== undefined) copy[key] = copyData(inner);
-    }
-    return copy;
-  }
-  return value;
 }
 
-/** An array of the facts, copied, deduplicated when the rule says so, capped. */
+/** The own string keys of `value` (never `__proto__`); `undefined` when listing throws. */
+function stringKeys(value: object): string[] | undefined {
+  const keys: string[] = [];
+  try {
+    for (const key of ownKeys(value)) {
+      if (typeof key === 'string' && key !== '__proto__') keys.push(key);
+    }
+  } catch {
+    return undefined;
+  }
+  return keys;
+}
+
+/** How many elements of an array are read: its own `length`, at most READ_MAX. */
+function readableLength(value: object): number {
+  const length = readOwn(value, 'length');
+  return typeof length === 'number' && isInteger(length) && length > 0
+    ? Math.min(length, READ_MAX)
+    : 0;
+}
+
+/**
+ * A copy of plain data, read only through `readOwn`: a getter, a Proxy trap
+ * that throws, a revoked Proxy, a cycle or nesting past DEPTH_MAX read as
+ * absent, never as a throw. Strings, numbers and booleans are kept; any other
+ * primitive or a function is absent. An array keeps its elements in order,
+ * holes and absent elements dropped; an object keeps every key whose value is
+ * not absent; an object whose keys cannot be listed (a revoked Proxy, an
+ * `ownKeys` trap that throws) is absent. Nothing the caller holds is shared with the error.
+ */
+function copyData(value: unknown, ancestors: object[]): unknown {
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (value === null || typeof value !== 'object') return undefined;
+  if (ancestors.length >= DEPTH_MAX || ancestors.includes(value)) {
+    return undefined;
+  }
+  ancestors.push(value);
+  try {
+    if (isArrayGuarded(value)) {
+      const copy: unknown[] = [];
+      const length = readableLength(value);
+      for (let index = 0; index < length; index += 1) {
+        const element = copyData(readOwn(value, `${index}`), ancestors);
+        if (element !== undefined) copy.push(element);
+      }
+      return copy;
+    }
+    const keys = stringKeys(value);
+    if (keys === undefined) return undefined;
+    const copy: Record<string, unknown> = {};
+    for (const key of keys) {
+      const inner = copyData(readOwn(value, key), ancestors);
+      if (inner !== undefined) copy[key] = inner;
+    }
+    return copy;
+  } finally {
+    ancestors.pop();
+  }
+}
+
+/**
+ * An array of the facts, copied as `copyData` copies, holes and absent
+ * elements dropped, deduplicated when the rule says so, capped.
+ */
 function copyArray(values: readonly unknown[], rule: ArrayRule): unknown[] {
   const copy: unknown[] = [];
-  for (let index = 0; index < values.length; index += 1) {
-    if (copy.length >= rule.max) break;
-    const value = values[index];
+  const length = readableLength(values);
+  for (let index = 0; index < length && copy.length < rule.max; index += 1) {
+    const value = copyData(readOwn(values, `${index}`), [values]);
+    if (value === undefined) continue;
     if (rule.deduplicate && copy.includes(value)) continue;
-    copy.push(copyData(value));
+    copy.push(value);
   }
   return copy;
 }
 
 /**
- * The facts as the error keeps them: every key whose value is not
- * `undefined`, copied; each array a rule names, capped (and deduplicated).
- * The facts' type is unchanged — a cap or a dropped duplicate leaves a value
- * of the same type.
+ * The facts as the error keeps them: every own data key whose value is not
+ * absent, copied (`copyData`); each array a rule names, capped (and
+ * deduplicated). Never throws. The facts' type is unchanged — a cap or a
+ * dropped duplicate leaves a value of the same type; values themselves are
+ * the types' to check (classification re-checks foreign ones).
  */
 function normalise<T extends object>(facts: T, rules: ArrayRules): T;
 function normalise(facts: object, rules: ArrayRules): object {
   const kept: Record<string, unknown> = {};
-  for (const key of keysOf(facts)) {
-    const value: unknown = getProperty(facts, key);
-    if (value === undefined) continue;
+  if (facts === null || typeof facts !== 'object') return kept;
+  for (const key of stringKeys(facts) ?? []) {
+    const value = readOwn(facts, key);
     const rule = hasOwn(rules, key) ? rules[key] : undefined;
-    kept[key] =
-      rule !== undefined && isArray(value)
+    const copy =
+      rule !== undefined && isArrayGuarded(value)
         ? copyArray(value, rule)
-        : copyData(value);
+        : copyData(value, [facts]);
+    if (copy !== undefined) kept[key] = copy;
   }
   return kept;
 }
@@ -202,15 +265,20 @@ function buildSaml(
   let kept = normalise(facts, SAML_ARRAYS);
   // Candidates past the fifth are not lost: they are counted.
   if (
-    facts.rule === 'no-bearer-qualifies' &&
-    kept.rule === 'no-bearer-qualifies'
+    kept.rule === 'no-bearer-qualifies' &&
+    kept.candidates !== undefined &&
+    kept.candidates.length > BEARER_CANDIDATES_MAX
   ) {
-    const given = facts.candidates?.length ?? 0;
-    const cut = given - BEARER_CANDIDATES_MAX;
-    if (cut > 0) {
-      const more = count((kept.moreCandidates ?? 0) + cut);
-      if (more !== undefined) kept = { ...kept, moreCandidates: more };
-    }
+    const more = count(
+      (kept.moreCandidates ?? 0) +
+        kept.candidates.length -
+        BEARER_CANDIDATES_MAX,
+    );
+    kept = {
+      ...kept,
+      candidates: kept.candidates.slice(0, BEARER_CANDIDATES_MAX),
+      ...(more === undefined ? {} : { moreCandidates: more }),
+    };
   }
   return mint(
     draft(

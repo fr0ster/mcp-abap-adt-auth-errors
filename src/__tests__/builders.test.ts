@@ -452,6 +452,131 @@ describe('authError', () => {
   });
 });
 
+describe('a builder never throws on what a caller hands it', () => {
+  const hostile = () =>
+    new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('secret');
+        },
+        getOwnPropertyDescriptor() {
+          throw new Error('secret');
+        },
+        ownKeys() {
+          throw new Error('secret');
+        },
+      },
+    );
+
+  it('reads a getter as absent', () => {
+    const facts = {
+      operation: 'refresh',
+      get code() {
+        throw new Error('secret');
+      },
+    };
+    const error = authError.unknown(facts);
+    expect(error.facts).toStrictEqual({ operation: 'refresh' });
+    expect(isMinted(error)).toBe(true);
+  });
+
+  it('reads facts whose every trap throws as empty', () => {
+    const error = authError.unknown(hostile());
+    expect(error.facts).toStrictEqual({});
+    expect(isMinted(error)).toBe(true);
+  });
+
+  it('reads a revoked Proxy as absent', () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    const error = authError.snc({
+      problem: 'library-not-found',
+      candidates: proxy,
+    });
+    expect(error.facts).toStrictEqual({ problem: 'library-not-found' });
+  });
+
+  it('reads a hostile array element as absent', () => {
+    const error = authError.configuration({
+      case: 'required-fields-missing',
+      fields: ['clientId', hostile(), 'uaaUrl'],
+    });
+    expect((error.facts as { fields: unknown[] }).fields).toEqual([
+      'clientId',
+      'uaaUrl',
+    ]);
+  });
+
+  it('reads a cycle as absent', () => {
+    const candidate: Record<string, unknown> = {
+      source: 'SNC_LIB',
+      reason: 'missing',
+    };
+    candidate.self = candidate;
+    const error = authError.snc({
+      problem: 'library-not-found',
+      candidates: [candidate],
+    });
+    expect((error.facts as { candidates: unknown[] }).candidates).toStrictEqual(
+      [{ source: 'SNC_LIB', reason: 'missing' }],
+    );
+    expect(Object.isFrozen(error)).toBe(true);
+  });
+
+  it('drops holes and undefined elements from fields and candidates', () => {
+    // biome-ignore lint/suspicious/noSparseArray: the hole is the case
+    const fields = ['clientId', , undefined, 'uaaUrl'];
+    const config = authError.configuration({
+      case: 'required-fields-missing',
+      fields,
+    });
+    expect((config.facts as { fields: unknown[] }).fields).toEqual([
+      'clientId',
+      'uaaUrl',
+    ]);
+    const saml = authError['saml-assertion']({
+      rule: 'no-bearer-qualifies',
+      check: 'bearerConfirmation',
+      // biome-ignore lint/suspicious/noSparseArray: the hole is the case
+      candidates: [, undefined, { reason: 'method-not-bearer' }],
+    });
+    expect((saml.facts as { candidates: unknown[] }).candidates).toStrictEqual([
+      { reason: 'method-not-bearer' },
+    ]);
+  });
+
+  it('reads an array claiming a huge length only so far', () => {
+    const fields = new Proxy(['clientId'], {
+      get(target, key) {
+        return key === 'length' ? 1e9 : Reflect.get(target, key);
+      },
+      getOwnPropertyDescriptor(target, key) {
+        return key === 'length'
+          ? {
+              value: 1e9,
+              writable: true,
+              enumerable: false,
+              configurable: false,
+            }
+          : Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    const error = authError.configuration({
+      case: 'required-fields-missing',
+      fields,
+    });
+    expect((error.facts as { fields: unknown[] }).fields).toEqual(['clientId']);
+  });
+
+  it('a __proto__ key never reaches the prototype of the facts', () => {
+    const facts = JSON.parse('{"operation":"refresh","__proto__":{"x":1}}');
+    const error = authError.unknown(facts);
+    expect(Object.getPrototypeOf(error.facts)).toBe(Object.prototype);
+    expect(error.facts).toStrictEqual({ operation: 'refresh' });
+  });
+});
+
 describe('isMinted', () => {
   it('is true for an error a builder minted', () => {
     expect(isMinted(authError.unknown({ operation: 'refresh' }))).toBe(true);

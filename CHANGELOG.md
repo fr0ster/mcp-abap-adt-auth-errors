@@ -35,13 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`saml-assertion`, counting the rest in `moreCandidates`) or 8 (`snc`,
   `candidatePaths` aligned with them), admits each permitted diagnostic and
   drops any other field or refused value, renders `reason` / `hint` and
-  mints the error frozen deeply.
+  mints the error frozen deeply. It never throws: facts are read through
+  own data properties only, so a getter, a throwing Proxy, a revoked Proxy,
+  a cycle, a hole or an `undefined` element reads as absent.
 - `isMinted(value)` — true only for an error this copy of the package
   minted (a module-private `WeakSet`); a structural copy is not one.
 - `render(kind, facts)` — the default words a builder stores, from `kind`
   and `facts` only, never a diagnostic: today's strings exactly where the
   error contract marks a row verbatim; an unknown kind or discriminant
-  answers "an authentication error of a kind this version does not know".
+  answers "an authentication error of a kind this version does not know"
+  as a whole — so does an operation, TLS code, rule or candidate reason this
+  build does not know (`constructor` and `toString` included), or a
+  required fact that is missing.
   No word mentions a login timeout.
 - `blamesCredential(error)` — whether an error blames the credential:
   `credential-refused` and `renewal-unchanged`; `snc` `no-credential`, and
