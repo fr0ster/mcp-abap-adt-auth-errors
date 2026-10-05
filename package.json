@@ -1,0 +1,74 @@
+{
+  "name": "@mcp-abap-adt/auth-errors",
+  "version": "1.0.0",
+  "description": "The runtime half of the MCP ABAP ADT authentication error contract: builders, renderers, allowlist guards and classification for IAuthProviderError",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./tools/check-provider-shape.mjs": "./tools/check-provider-shape.mjs"
+  },
+  "files": [
+    "dist",
+    "tools/check-provider-shape.mjs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "COPYING"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "abap",
+    "sap",
+    "adt",
+    "authentication",
+    "errors",
+    "mcp",
+    "abap-adt"
+  ],
+  "author": "Oleksii Kyslytsia <oleksij.kyslytsja@gmail.com>",
+  "license": "LGPL-3.0-only",
+  "homepage": "https://github.com/fr0ster/mcp-abap-adt-auth-errors#readme",
+  "bugs": {
+    "url": "https://github.com/fr0ster/mcp-abap-adt-auth-errors/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fr0ster/mcp-abap-adt-auth-errors.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
+    "lint": "npx biome check --write src scripts tools/check-provider-shape.mjs",
+    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
+    "format": "npx biome format --write src",
+    "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
+    "build:fast": "npx tsc -p tsconfig.build.json",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:check": "npx tsc --noEmit",
+    "docs:kinds": "node scripts/generate-kinds-table.mjs --write",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": "^22 || ^24 || ^26"
+  },
+  "dependencies": {
+    "@mcp-abap-adt/interfaces-auth": "^6.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.7",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.0",
+    "jest": "^30.3.0",
+    "jest-util": "^30.5.1",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.2"
+  }
+}

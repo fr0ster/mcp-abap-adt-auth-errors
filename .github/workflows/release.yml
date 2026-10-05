@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.1.0, v1.2.3, etc.
+
+permissions:
+  contents: write  # Required for creating releases
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Check the tag names the package version
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match package.json version $PACKAGE_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Type-check
+        run: npm run test:check
+
+      - name: Lint
+        run: npm run lint:check
+
+      - name: Test
+        run: npm test
+
+      - name: Create package
+        run: npm pack
+
+      - name: Get package filename
+        id: package
+        run: |
+          PACKAGE_FILE=$(ls mcp-abap-adt-auth-errors-*.tgz)
+          echo "filename=$PACKAGE_FILE" >> $GITHUB_OUTPUT
+          echo "Package created: $PACKAGE_FILE"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.package.outputs.filename }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body: |
+            ## Installation
+
+            A library: add it to a project from the npm registry:
+
+            ```bash
+            npm install @mcp-abap-adt/auth-errors
+            ```
+
+            The `.tgz` attached here is the same package, as packed.
+
+            ## What's Changed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
