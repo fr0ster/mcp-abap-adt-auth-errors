@@ -49,7 +49,8 @@
  * `removeEventListener` is ignored: no signal can harm another waiter.
  *
  * **A kept handle keeps nothing.** Every closure handed out — a `detach`,
- * `MomentWaiter.release`, `AttemptContext.exclusive` — reaches its target
+ * `MomentWaiter.release`, `AttemptContext.exclusive`, and the listener
+ * registered on a consumer's signal — reaches its target
  * through a cell cleared at its first use and when the target ends by
  * itself, and finished members drop the consumer's signals; errors built
  * during an abort's dispatch carry no stack frames.
@@ -223,6 +224,11 @@ interface Waiter<T> {
   reject: (failure: AuthProviderFailure) => void;
   /** Removes the listener from the waiter's signal, if it has one. */
   detach: () => void;
+  /**
+   * What the listener on its signal reaches; cleared when the waiter ends,
+   * before its foreign removal runs: a listener a signal keeps is inert.
+   */
+  readonly listener: Cell;
 }
 
 interface Attempt<T> {
@@ -338,7 +344,10 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     if (attempt.ended) return;
     leave(attempt);
     const waiters = attempt.waiters.splice(0);
-    for (const waiter of waiters) waiter.done = true;
+    for (const waiter of waiters) {
+      waiter.done = true;
+      waiter.listener.run = undefined;
+    }
     for (const waiter of waiters) detachOnce(waiter);
     for (const waiter of waiters) answer(waiter);
   }
@@ -352,6 +361,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   function abandon(attempt: Attempt<T>, waiter: Waiter<T>): void {
     if (waiter.done) return;
     waiter.done = true;
+    waiter.listener.run = undefined;
     const index = attempt.waiters.indexOf(waiter);
     if (index >= 0) attempt.waiters.splice(index, 1);
     const last = !attempt.ended && attempt.waiters.length === 0;
@@ -426,9 +436,11 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     waiter: Waiter<T>,
     signal: AbortSignal,
   ): void {
-    // No closure is built in this scope (see `bound`): the listener holds
-    // the attempt and the waiter, the removal the signal and the listener.
-    const onAbort = bound(abandon, attempt, waiter);
+    // No closure is built in this scope (see `bound`): the listener holds a
+    // cell (the attempt and the waiter, until the waiter ends), the removal
+    // the signal and the listener.
+    waiter.listener.run = bound(abandon, attempt, waiter);
+    const onAbort = handleOf(waiter.listener);
     const removal = remover(signal, onAbort);
     // The cleanup is in place before the foreign registration runs.
     waiter.detach = removal;
@@ -473,6 +485,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
       resolve: ignore,
       reject: ignore,
       detach: ignore,
+      listener: { run: undefined },
     };
     const promise = new Promise<T>((resolve, reject) => {
       waiter.resolve = resolve;
@@ -528,6 +541,11 @@ interface Party {
   released: boolean;
   /** What every `detach` returned for it reaches; cleared on release. */
   readonly cell: Cell;
+  /**
+   * What the listener on its signal reaches; cleared on release, before the
+   * foreign removal runs: a listener a signal keeps is inert.
+   */
+  readonly listener: Cell;
 }
 
 interface Moment {
@@ -591,6 +609,7 @@ export function createParties(): Parties {
     const signal = party.signal;
     party.signal = undefined;
     party.cell.run = undefined;
+    party.listener.run = undefined;
     if (signal !== undefined) remover(signal, party.onAbort)();
     party.onAbort = ignore;
     for (const moment of emptied) moment.controller.abort(abortReason());
@@ -611,8 +630,10 @@ export function createParties(): Parties {
       onAbort: ignore,
       released: false,
       cell: { run: undefined },
+      listener: { run: undefined },
     };
-    party.onAbort = bound(release, party, true);
+    party.listener.run = bound(release, party, true);
+    party.onAbort = handleOf(party.listener);
     party.cell.run = bound(release, party, false);
     const listener = party.onAbort;
     parties.push(party);

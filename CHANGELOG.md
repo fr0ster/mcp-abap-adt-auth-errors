@@ -195,7 +195,11 @@ README.md documents the whole surface.
   captures in a cell cleared at its first use and when what it refers to
   ends by itself (a party released, a moment ended, an attempt settled or
   aborted), so a kept handle keeps neither the party set nor the slot — nor
-  through them any other member's signal. No timer; what an attempt commits stays with the caller.
+  through them any other member's signal. The listener registered on a
+  consumer's signal reaches its waiter or party the same way, its cell
+  cleared when the member ends and before the foreign removal runs: a
+  signal that keeps the listener (its `removeEventListener` throwing) keeps
+  an inert function. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with

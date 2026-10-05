@@ -152,7 +152,93 @@ const scenarios = {
     slot = a = b = undefined;
     return refs;
   },
+  // A foreign signal that keeps its listener and throws on removal: the
+  // listener stays reachable, so it must hold nothing once its waiter ended.
+  async keptListenerJoinAborted() {
+    let slot = sharedAttempt('token-request');
+    let b = new AbortController();
+    const refs = [new WeakRef(b.signal)];
+    const foreign = keptListenerSignal();
+    keep.push(foreign);
+    slot.join(never, foreign).catch(() => {});
+    slot.join(never, b.signal).catch(() => {});
+    foreign.listeners[0]();
+    let c = new AbortController();
+    refs.push(new WeakRef(c.signal));
+    slot.join(never, c.signal).catch(() => {});
+    slot = b = c = undefined;
+    return refs;
+  },
+  async keptListenerJoinSettled() {
+    let slot = sharedAttempt('token-request');
+    const foreign = keptListenerSignal();
+    keep.push(foreign);
+    await slot.join(() => Promise.resolve('token'), foreign);
+    let b = new AbortController();
+    const refs = [new WeakRef(b.signal)];
+    slot.join(never, b.signal).catch(() => {});
+    slot = b = undefined;
+    return refs;
+  },
+  // Refused after its registration (aborted on the second read), so the
+  // waiter ends without its listener being called.
+  async keptListenerJoinRefused() {
+    let slot = sharedAttempt('token-request');
+    let b = new AbortController();
+    const refs = [new WeakRef(b.signal)];
+    slot.join(never, b.signal).catch(() => {});
+    const foreign = keptListenerSignal(2);
+    keep.push(foreign);
+    slot.join(never, foreign).catch(() => {});
+    let c = new AbortController();
+    refs.push(new WeakRef(c.signal));
+    slot.join(never, c.signal).catch(() => {});
+    slot = b = c = undefined;
+    return refs;
+  },
+  async keptListenerAttach() {
+    let parties = createParties();
+    const foreign = keptListenerSignal();
+    keep.push(foreign);
+    const detach = parties.attach(foreign);
+    detach();
+    let b = new AbortController();
+    const refs = [new WeakRef(b.signal)];
+    parties.attach(b.signal);
+    parties.waiterSignal();
+    parties = b = undefined;
+    return refs;
+  },
+  async keptListenerAttachAborted() {
+    let parties = createParties();
+    const foreign = keptListenerSignal();
+    keep.push(foreign);
+    parties.attach(foreign);
+    foreign.listeners[0]();
+    let b = new AbortController();
+    const refs = [new WeakRef(b.signal)];
+    parties.attach(b.signal);
+    parties = b = undefined;
+    return refs;
+  },
 };
+function keptListenerSignal(abortedFromRead) {
+  const listeners = [];
+  let reads = 0;
+  return {
+    listeners,
+    get aborted() {
+      reads += 1;
+      return abortedFromRead !== undefined && reads >= abortedFromRead;
+    },
+    addEventListener(_type, listener) {
+      listeners.push(listener);
+    },
+    removeEventListener() {
+      throw new Error('kept');
+    },
+  };
+}
 scenarios[name]().then(collect).then((collected) => {
   process.stdout.write(JSON.stringify({ collected, kept: keep.length }));
 });
@@ -177,6 +263,11 @@ describe('what a finished handle keeps reachable', () => {
     'detachedMember',
     'settled',
     'abandoned',
+    'keptListenerJoinAborted',
+    'keptListenerJoinSettled',
+    'keptListenerJoinRefused',
+    'keptListenerAttach',
+    'keptListenerAttachAborted',
   ])(
     '%s: every signal is collectible while the finished handles are kept',
     (name) => {
