@@ -138,3 +138,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guarded: one that is not an object, whose `aborted` throws or is not a
   boolean, or whose `addEventListener` throws refuses only its own waiter
   (`aborted`). No timer; what an attempt commits stays with the caller.
+  Calls of `exclusive` within one attempt run one at a time, in call order.
+  `T` must not be thenable.
+- `createParties()` — a provider's attached parties (spec §6b), with
+  `Parties` and `MomentWaiter`: `attach(signal)` returns a `detach`; the
+  same signal is one party; a party is released on its signal's abort (its
+  listener removed) or on `detach`; an already-aborted or unusable signal is
+  not added. `waiterSignal()` answers `undefined` with no live party (the
+  moment's login never aborts), else `{ signal, release }`: a signal aborted
+  when every party live at the moment's start, and every party attached
+  while it runs, has aborted; a party detached meanwhile leaves the moment
+  without aborting it. `release()` ends the moment's membership; nothing
+  accumulates.

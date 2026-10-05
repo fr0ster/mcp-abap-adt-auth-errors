@@ -559,6 +559,99 @@ describe('sharedAttempt — drain handoff', () => {
   });
 });
 
+describe('sharedAttempt — exclusive within one attempt', () => {
+  it('two overlapping exclusive calls run one at a time, in call order', async () => {
+    const slot = sharedAttempt<string>('browser-login');
+    let running = 0;
+    let most = 0;
+    const order: string[] = [];
+    const gates = [deferred<void>(), deferred<void>()];
+    const work = (name: string, gate: Deferred<void>) => async () => {
+      running += 1;
+      most = Math.max(most, running);
+      order.push(`start ${name}`);
+      await gate.promise;
+      order.push(`end ${name}`);
+      running -= 1;
+      return name;
+    };
+    const [firstGate, secondGate] = gates as [Deferred<void>, Deferred<void>];
+    const result = slot.join(async (attempt) => {
+      const first = attempt.exclusive(work('first', firstGate));
+      const second = attempt.exclusive(work('second', secondGate));
+      return (await Promise.all([first, second])).join('+');
+    });
+    await flush();
+    expect(order).toStrictEqual(['start first']);
+    secondGate.resolve();
+    await flush();
+    expect(order).toStrictEqual(['start first']);
+    firstGate.resolve();
+    await expect(result).resolves.toBe('first+second');
+    expect(order).toStrictEqual([
+      'start first',
+      'end first',
+      'start second',
+      'end second',
+    ]);
+    expect(most).toBe(1);
+  });
+
+  it('a second exclusive call waits for the first even when the first work rejects', async () => {
+    const slot = sharedAttempt<string>('browser-login');
+    const firstGate = deferred<string>();
+    const second = jest.fn(() => Promise.resolve('second'));
+    const result = slot.join(async (attempt) => {
+      const first = attempt.exclusive(() => firstGate.promise);
+      const next = attempt.exclusive(second);
+      await first.catch(() => undefined);
+      return next;
+    });
+    await flush();
+    expect(second).not.toHaveBeenCalled();
+    firstGate.reject(new Error('closed badly'));
+    await expect(result).resolves.toBe('second');
+  });
+
+  it('an abort landing in any microtask gap after the drain settles keeps the work from starting', async () => {
+    const startedAfterAbort: number[] = [];
+    for (let depth = 0; depth < 15; depth += 1) {
+      const slot = sharedAttempt<string>('browser-login');
+      const oldWork = deferred<string>();
+      const oldController = new AbortController();
+      void slot
+        .join(
+          (attempt) => attempt.exclusive(() => oldWork.promise),
+          oldController.signal,
+        )
+        .catch(() => undefined);
+      await flush();
+      oldController.abort();
+
+      const controller = new AbortController();
+      let began = false;
+      void slot
+        .join(
+          (attempt) =>
+            attempt.exclusive(async () => {
+              if (attempt.signal.aborted) began = true;
+              return 'fresh';
+            }),
+          controller.signal,
+        )
+        .catch(() => undefined);
+      await flush();
+      oldWork.resolve('late');
+      let gap = Promise.resolve();
+      for (let i = 0; i < depth; i += 1) gap = gap.then(() => undefined);
+      void gap.then(() => controller.abort());
+      await flush();
+      if (began) startedAfterAbort.push(depth);
+    }
+    expect(startedAfterAbort).toStrictEqual([]);
+  });
+});
+
 describe('sharedAttempt — a hostile signal', () => {
   it('a signal whose aborted getter throws refuses only its own waiter', async () => {
     const slot = sharedAttempt<string>('token-request');
@@ -687,5 +780,249 @@ describe('sharedAttempt — the module', () => {
     for (const value of Object.values(slot)) {
       expect(value instanceof Set || value instanceof Map).toBe(false);
     }
+  });
+});
+
+interface MomentWaiter {
+  readonly signal: AbortSignal;
+  release(): void;
+}
+interface Parties {
+  attach(signal: AbortSignal): () => void;
+  waiterSignal(): MomentWaiter | undefined;
+}
+const createParties = built.createParties as () => Parties;
+
+/** The moment's waiter signal, which must exist. */
+function momentOf(parties: Parties): MomentWaiter {
+  const moment = parties.waiterSignal();
+  if (moment === undefined) throw new Error('expected a waiter signal');
+  return moment;
+}
+
+describe('createParties — attached parties', () => {
+  it('no party attached: a moment has no waiter signal, so its login never aborts', async () => {
+    const parties = createParties();
+    expect(parties.waiterSignal()).toBeUndefined();
+    const slot = sharedAttempt<string>('token-request');
+    const held = heldStart<string>();
+    const waiter = track(slot.join(held.start, parties.waiterSignal()?.signal));
+    held.result.resolve('token');
+    await flush();
+    expect(waiter.value()).toBe('token');
+  });
+
+  it('two parties, one aborts: the moment continues; both abort: it is aborted', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    parties.attach(a.signal);
+    parties.attach(b.signal);
+    const moment = momentOf(parties);
+    a.abort();
+    expect(moment.signal.aborted).toBe(false);
+    b.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('a login a moment starts is released as aborted when every party aborts', async () => {
+    const parties = createParties();
+    const a = new AbortController();
+    parties.attach(a.signal);
+    const moment = momentOf(parties);
+    const slot = sharedAttempt<string>('token-request');
+    const held = heldStart<string>();
+    const waiter = track(slot.join(held.start, moment.signal));
+    a.abort();
+    await flush();
+    expectAborted(waiter.reason());
+    expect(held.context().signal.aborted).toBe(true);
+  });
+
+  it('a party attached while a moment runs joins it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const late = new AbortController();
+    parties.attach(a.signal);
+    const moment = momentOf(parties);
+    parties.attach(late.signal);
+    a.abort();
+    expect(moment.signal.aborted).toBe(false);
+    late.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('a released moment is reached by no later abort or attachment', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    parties.attach(a.signal);
+    const moment = momentOf(parties);
+    moment.release();
+    moment.release();
+    a.abort();
+    expect(moment.signal.aborted).toBe(false);
+  });
+
+  it('after every party is released, a later moment has no waiter signal', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    const detachA = parties.attach(a.signal);
+    parties.attach(b.signal);
+    detachA();
+    b.abort();
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('the same signal attached twice is one party', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    const first = parties.attach(a.signal);
+    parties.attach(a.signal);
+    expect(getEventListeners(a.signal, 'abort')).toHaveLength(1);
+    parties.attach(b.signal);
+    const moment = momentOf(parties);
+    b.abort();
+    // `a` counted once: it still holds the moment.
+    expect(moment.signal.aborted).toBe(false);
+    a.abort();
+    expect(moment.signal.aborted).toBe(true);
+    first();
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('detach removes the party and its listener; a later moment no longer waits on it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    const detachA = parties.attach(a.signal);
+    parties.attach(b.signal);
+    detachA();
+    detachA();
+    expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
+    const moment = momentOf(parties);
+    b.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('a party detached during a moment leaves it without aborting it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    const detachA = parties.attach(a.signal);
+    parties.attach(b.signal);
+    const moment = momentOf(parties);
+    detachA();
+    expect(moment.signal.aborted).toBe(false);
+    b.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('the only party detached during a moment leaves it unaborted; a party attached later bounds it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const detachA = parties.attach(a.signal);
+    const moment = momentOf(parties);
+    detachA();
+    expect(moment.signal.aborted).toBe(false);
+    const late = new AbortController();
+    parties.attach(late.signal);
+    expect(moment.signal.aborted).toBe(false);
+    late.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('an aborted party is released: its listener removed, a later moment does not wait on it', () => {
+    const parties = createParties();
+    const a = new AbortController();
+    const b = new AbortController();
+    parties.attach(a.signal);
+    parties.attach(b.signal);
+    a.abort();
+    expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
+    const moment = momentOf(parties);
+    b.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('an already-aborted signal is not added', () => {
+    const parties = createParties();
+    const detach = parties.attach(AbortSignal.abort());
+    expect(parties.waiterSignal()).toBeUndefined();
+    detach();
+  });
+
+  it('a hostile signal is refused like a waiter’s, and harms no other party', () => {
+    const parties = createParties();
+    const throwingGetter = Object.defineProperty({}, 'aborted', {
+      get() {
+        throw new Error('secret');
+      },
+    }) as AbortSignal;
+    const throwingAdd = {
+      aborted: false,
+      addEventListener() {
+        throw new Error('secret');
+      },
+      removeEventListener() {
+        throw new Error('secret');
+      },
+    } as unknown as AbortSignal;
+    for (const signal of [
+      throwingGetter,
+      throwingAdd,
+      'abort' as unknown as AbortSignal,
+      { aborted: 1 } as unknown as AbortSignal,
+    ]) {
+      expect(() => parties.attach(signal)).not.toThrow();
+    }
+    expect(parties.waiterSignal()).toBeUndefined();
+
+    let fire: (() => void) | undefined;
+    const repeating = {
+      aborted: false,
+      addEventListener(_: string, listener: () => void) {
+        fire = listener;
+      },
+      removeEventListener() {
+        throw new Error('secret');
+      },
+    } as unknown as AbortSignal;
+    const good = new AbortController();
+    parties.attach(good.signal);
+    parties.attach(repeating);
+    const moment = momentOf(parties);
+    fire?.();
+    fire?.();
+    expect(moment.signal.aborted).toBe(false);
+    good.abort();
+    expect(moment.signal.aborted).toBe(true);
+  });
+
+  it('listener counts return to zero', () => {
+    const parties = createParties();
+    const signals = [1, 2, 3].map(() => new AbortController());
+    const detaches = signals.map((c) => parties.attach(c.signal));
+    for (let i = 0; i < 5; i += 1) momentOf(parties).release();
+    const [first, second] = signals as [AbortController, AbortController];
+    first.abort();
+    second.abort();
+    detaches[2]?.();
+    for (const c of signals) {
+      expect(getEventListeners(c.signal, 'abort')).toHaveLength(0);
+    }
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('the parties object is frozen and holds no Set or Map', () => {
+    const parties = createParties();
+    expect(Object.isFrozen(parties)).toBe(true);
+    for (const value of Object.values(parties)) {
+      expect(value instanceof Set || value instanceof Map).toBe(false);
+    }
+    const a = new AbortController();
+    parties.attach(a.signal);
+    expect(Object.isFrozen(momentOf(parties))).toBe(true);
   });
 });

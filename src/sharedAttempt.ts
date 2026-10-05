@@ -25,7 +25,15 @@
  * attempt's own signal: when every waiter of the new attempt aborts, the
  * wait ends `aborted` and the work never starts. Work run outside
  * `exclusive` (a refresh) waits for nothing. A drain never rejects and has
- * no bound: no timer anywhere.
+ * no bound: no timer anywhere. Calls of `exclusive` within one attempt run
+ * one at a time, in call order: each reserves its place when called. While
+ * a drain hangs, an attempt aborted in its `exclusive` wait leaves only an
+ * emptied record and the drain's reaction to it behind (a few hundred
+ * bytes), released when the drain settles.
+ *
+ * **Attached parties** (`createParties`): the waiter of a login a moment
+ * starts, which has no per-call signal — the provider's attached parties,
+ * as one signal per moment.
  *
  * What an attempt commits stays with the caller: `start`'s value is handed
  * to the waiters, never applied here.
@@ -61,7 +69,12 @@ export interface AttemptContext {
 /** What `join` is given to start an attempt. */
 export type AttemptStart<T> = (attempt: AttemptContext) => Promise<T>;
 
-/** One slot of shared attempts (spec §6b). */
+/**
+ * One slot of shared attempts (spec §6b). `T` must not be thenable: a
+ * waiter is resolved with `start`'s value, and resolving re-reads its
+ * `then`, which would hand a waiter whatever that `then` passes, outside
+ * `classify`. `start` is the caller's own code, which answers plain values.
+ */
 export interface SharedAttempt<T> {
   /**
    * Joins the active attempt, or starts one with `start` when the slot is
@@ -107,10 +120,57 @@ interface Attempt<T> {
   readonly controller: AbortController;
   /** The live waiters, in join order; one without a signal never leaves. */
   readonly waiters: Waiter<T>[];
-  /** The inherited drain, then each exclusive work's settling. */
+  /** The inherited drain, then each started exclusive work's settling. */
   drain: Promise<void>;
+  /** The gate of the latest `exclusive` call: the next one waits for it. */
+  tail: Promise<void>;
   /** Left the slot: aborted or settled. */
   ended: boolean;
+}
+
+/**
+ * One wait of `exclusive` on a drain. The drain's reaction holds only this
+ * record, and an abort empties it: an attempt aborted while a drain hangs
+ * keeps nothing of itself alive but the emptied record.
+ */
+interface DrainWait {
+  resolve: (() => void) | undefined;
+  signal: AbortSignal | undefined;
+  onAbort: (() => void) | undefined;
+}
+
+/** The drain settled: the wait, if still there, resolves. */
+function drained(wait: DrainWait): void {
+  const { resolve, signal, onAbort } = wait;
+  wait.resolve = wait.signal = wait.onAbort = undefined;
+  if (signal !== undefined && onAbort !== undefined) {
+    signal.removeEventListener('abort', onAbort);
+  }
+  resolve?.();
+}
+
+/** The drain's reaction for one wait: a closure over the record only. */
+function drainedBy(wait: DrainWait): () => void {
+  return () => drained(wait);
+}
+
+/** `prior` settled, raced only against `signal` (the attempt's own). */
+function waitFor(prior: Promise<void>, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortedFailure());
+      return;
+    }
+    const wait: DrainWait = { resolve, signal, onAbort: undefined };
+    const onAbort = (): void => {
+      wait.resolve = wait.signal = wait.onAbort = undefined;
+      reject(abortedFailure());
+    };
+    wait.onAbort = onAbort;
+    signal.addEventListener('abort', onAbort, { once: true });
+    // Built outside this scope, so the reaction's closure holds `wait` alone.
+    void prior.then(drainedBy(wait));
+  });
 }
 
 /**
@@ -174,27 +234,33 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   function exclusiveOf(attempt: Attempt<T>): AttemptContext['exclusive'] {
     const signal = attempt.controller.signal;
     return <R>(work: () => Promise<R>): Promise<R> => {
-      const before = attempt.drain;
-      const ready = new Promise<void>((resolve, reject) => {
-        if (attempt.ended) {
-          reject(abortedFailure());
-          return;
-        }
-        const onAbort = (): void => reject(abortedFailure());
-        signal.addEventListener('abort', onAbort, { once: true });
-        void before.then(() => {
-          signal.removeEventListener('abort', onAbort);
-          resolve();
-        });
+      if (attempt.ended) return Promise.reject(abortedFailure());
+      // Reserved at the call: a later call waits for this one's gate, which
+      // opens when this work settles, or at once when it never starts.
+      const prior = attempt.tail;
+      let open: () => void = ignore;
+      attempt.tail = new Promise<void>((resolve) => {
+        open = resolve;
       });
-      return ready.then(() => {
-        if (attempt.ended) throw abortedFailure();
-        const running = run(work);
-        attempt.drain = Promise.all([attempt.drain, quietly(running)]).then(
-          ignore,
-        );
-        return running;
-      });
+      const opened = open;
+      return waitFor(prior, signal).then(
+        () => {
+          // The drain settled, but the attempt may have ended in between.
+          if (attempt.ended) {
+            opened();
+            throw abortedFailure();
+          }
+          const running = run(work);
+          const finished = quietly(running);
+          attempt.drain = Promise.all([attempt.drain, finished]).then(ignore);
+          void finished.then(opened);
+          return running;
+        },
+        (failure: unknown) => {
+          opened();
+          throw failure;
+        },
+      );
     };
   }
 
@@ -246,6 +312,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
       controller: new AbortController(),
       waiters: [],
       drain: previousDrain,
+      tail: previousDrain,
       ended: false,
     };
     active = attempt;
@@ -267,4 +334,130 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   }
 
   return Object.freeze({ join });
+}
+
+/** One moment's waiter signal, and the way to let it go. */
+export interface MomentWaiter {
+  /**
+   * Aborts when every party live at the moment's start, and every party
+   * attached while it runs, has aborted.
+   */
+  readonly signal: AbortSignal;
+  /**
+   * Ends the moment's membership: no later attachment joins it, no party's
+   * abort reaches it. Call it when the attempt it waited on has settled.
+   * Idempotent.
+   */
+  release(): void;
+}
+
+/** A provider's attached parties (spec §6b, "Which signals are waiters"). */
+export interface Parties {
+  /**
+   * Attaches a party. The same signal attached again is the same party. An
+   * attachment is released when its signal aborts (its listener removed) or
+   * when any `detach` returned for it is called. A signal already aborted,
+   * or one that cannot be read or listened to (as `join` judges a waiter's),
+   * is not added; its `detach` does nothing.
+   */
+  attach(signal: AbortSignal): () => void;
+  /**
+   * The waiter signal for a login a moment starts: `undefined` when no party
+   * is live (the moment's waiter never aborts), else a `MomentWaiter`.
+   */
+  waiterSignal(): MomentWaiter | undefined;
+}
+
+interface Party {
+  readonly signal: AbortSignal;
+  readonly onAbort: () => void;
+  released: boolean;
+}
+
+interface Moment {
+  readonly controller: AbortController;
+  /** Its parties not yet aborted nor detached. */
+  readonly members: Party[];
+  released: boolean;
+}
+
+/** Removes `item` from `list`, if there. */
+function remove<V>(list: V[], item: V): boolean {
+  const index = list.indexOf(item);
+  if (index < 0) return false;
+  list.splice(index, 1);
+  return true;
+}
+
+/**
+ * A set of attached parties (spec §6b). Each party holds one listener, on
+ * its own signal; a moment holds none — the set tells it. A moment is
+ * aborted when an abort leaves it with no member; a member detached without
+ * aborting leaves it, but does not abort it. Nothing accumulates: a party
+ * leaves on abort or detach, a moment on abort or release.
+ */
+export function createParties(): Parties {
+  const parties: Party[] = [];
+  const moments: Moment[] = [];
+
+  function endMoment(moment: Moment): void {
+    moment.released = true;
+    remove(moments, moment);
+  }
+
+  function release(party: Party, aborted: boolean): void {
+    if (party.released) return;
+    party.released = true;
+    remove(parties, party);
+    try {
+      party.signal.removeEventListener('abort', party.onAbort);
+    } catch {
+      // Ignored: the party is gone whatever the signal does.
+    }
+    for (const moment of moments.slice()) {
+      if (!remove(moment.members, party)) continue;
+      if (aborted && moment.members.length === 0) {
+        endMoment(moment);
+        moment.controller.abort();
+      }
+    }
+  }
+
+  function attach(signal: AbortSignal): () => void {
+    if (readSignal(signal) !== 'live') return ignore;
+    const existing = parties.find((party) => party.signal === signal);
+    if (existing !== undefined) return () => release(existing, false);
+    const party: Party = {
+      signal,
+      onAbort: () => release(party, true),
+      released: false,
+    };
+    parties.push(party);
+    for (const moment of moments) moment.members.push(party);
+    try {
+      signal.addEventListener('abort', party.onAbort, { once: true });
+    } catch {
+      release(party, false);
+      return ignore;
+    }
+    return () => release(party, false);
+  }
+
+  function waiterSignal(): MomentWaiter | undefined {
+    if (parties.length === 0) return undefined;
+    const moment: Moment = {
+      controller: new AbortController(),
+      members: parties.slice(),
+      released: false,
+    };
+    moments.push(moment);
+    return Object.freeze({
+      signal: moment.controller.signal,
+      release: () => {
+        if (!moment.released) endMoment(moment);
+      },
+    });
+  }
+
+  return Object.freeze({ attach, waiterSignal });
 }

@@ -61,6 +61,9 @@ export { count, httpStatus, port } from './numbers';
 export {
   type AttemptContext,
   type AttemptStart,
+  createParties,
+  type MomentWaiter,
+  type Parties,
   type SharedAttempt,
   sharedAttempt,
 } from './sharedAttempt';
