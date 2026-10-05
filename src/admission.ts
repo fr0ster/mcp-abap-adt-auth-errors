@@ -2,17 +2,23 @@
  * Diagnostics admission (spec §5.3) — the second boundary of goal
  * invariant 4. Each check takes `unknown`, never throws, and answers the
  * admitted value or `undefined` ("drop"): a value that fails is dropped, not
- * repaired, except where the spec cuts (`DocumentValue`, `XmlId`) or keeps a
- * part (`ConfigUri`). An admitted value is safe to print as it is: the
- * characters that could forge a log line are refused, not escaped.
+ * repaired — every check refuses on the value as given, before anything is
+ * parsed or cut. Only an admitted value is shortened: cut at 64 code points
+ * (`DocumentValue`, `XmlId`) or reduced to `origin + pathname` (`ConfigUri`).
+ * An admitted value is safe to print as it is: the code points that could
+ * forge a log line, hide text or reorder it are refused, not escaped.
  *
  * Which field a variant may carry comes from the diagnostics maps of
  * `@mcp-abap-adt/interfaces-auth` — `SAML_RULE_DIAGNOSTIC`,
  * `SNC_PROBLEM_DIAGNOSTICS`, `CONFIG_CASE_DIAGNOSTICS` — the same maps the
  * types read, so the runtime table and the types have one source.
  *
- * Built-ins this module calls on its input are captured at load, so a later
- * patch of `String.prototype` or `Reflect` changes no answer.
+ * The built-in functions this module calls directly are captured at load
+ * (`charCodeAt`, `slice`, `RegExp.prototype.test`, `Reflect`, `Object`,
+ * `Array.isArray`, the `URL` class). That is not a defence against code in
+ * the same process: `RegExp.prototype.test` looks up `exec` when it runs, and
+ * the `URL` accessors (`protocol`, `origin`, …) are read live. Code that
+ * patches built-ins in this process is out of scope, as the README states.
  */
 import {
   CONFIG_CASE_DIAGNOSTICS,
@@ -26,6 +32,7 @@ import {
   type SamlDiagnosticField,
   type SamlDiagnosticValues,
   SNC_PROBLEM_DIAGNOSTICS,
+  type SncDiagnosticField,
   type SncDiagnosticValues,
   type XmlId,
   type XmlName,
@@ -36,6 +43,8 @@ const charCodeAt: (text: string, index: number) => number =
   Function.prototype.call.bind(String.prototype.charCodeAt);
 const sliceText: (text: string, start: number, end: number) => string =
   Function.prototype.call.bind(String.prototype.slice);
+const regExpTest: (pattern: RegExp, text: string) => boolean =
+  Function.prototype.call.bind(RegExp.prototype.test);
 const getOwnDescriptor = Reflect.getOwnPropertyDescriptor;
 const hasOwn = Object.hasOwn;
 const isArray = Array.isArray;
@@ -82,37 +91,33 @@ export function readOwn(holder: unknown, key: string): unknown {
 }
 
 /**
- * An invisible format character: U+200B–U+200F (ZWSP, ZWNJ, ZWJ, LRM, RLM),
- * U+061C (ALM), U+FEFF (BOM), U+2060–U+2064 (word joiner, invisible
- * operators), U+180E (Mongolian vowel separator). Each can hide or reorder
- * what a printed value shows.
+ * The General_Categories refused whole: Cc (C0, DEL, C1), Cf (format: the
+ * bidirectional controls, zero-width characters, the BOM, the Unicode tag
+ * characters U+E0000–U+E007F that smuggle hidden text, …), Cs (a lone
+ * surrogate: in `u` mode a lone surrogate is its own code point), Zl, Zp,
+ * and Co (private use). Built once, at load; no `g` or `y` flag, so it keeps
+ * no `lastIndex` between calls.
  */
-function isInvisibleFormat(codePoint: number): boolean {
-  return (
-    (codePoint >= 0x200b && codePoint <= 0x200f) ||
-    codePoint === 0x061c ||
-    codePoint === 0xfeff ||
-    (codePoint >= 0x2060 && codePoint <= 0x2064) ||
-    codePoint === 0x180e
-  );
-}
+const REFUSED_CATEGORIES = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Co}]/u;
 
 /**
- * A code point neither `LocalPath` nor `DocumentValue` admits: a C0 control,
- * DEL, a C1 control, U+2028 / U+2029, a bidirectional control (U+202A–U+202E,
- * U+2066–U+2069), an invisible format character, or a surrogate (only a
- * lone one reaches here).
+ * Refused code points outside those categories, each listed: the
+ * noncharacters (U+FDD0–U+FDEF and U+xFFFE / U+xFFFF of every plane), the
+ * variation selectors (U+FE00–U+FE0F, U+E0100–U+E01EF), the combining
+ * grapheme joiner U+034F, and the Hangul fillers U+115F, U+1160, U+3164,
+ * U+FFA0 — invisible, or changing what is shown without being seen.
  */
-function isRefusedCodePoint(codePoint: number): boolean {
+function isRefusedOutsideCategories(codePoint: number): boolean {
   return (
-    codePoint <= 0x1f ||
-    (codePoint >= 0x7f && codePoint <= 0x9f) ||
-    codePoint === 0x2028 ||
-    codePoint === 0x2029 ||
-    (codePoint >= 0x202a && codePoint <= 0x202e) ||
-    (codePoint >= 0x2066 && codePoint <= 0x2069) ||
-    isInvisibleFormat(codePoint) ||
-    (codePoint >= 0xd800 && codePoint <= 0xdfff)
+    (codePoint >= 0xfdd0 && codePoint <= 0xfdef) ||
+    (codePoint & 0xfffe) === 0xfffe ||
+    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
+    (codePoint >= 0xe0100 && codePoint <= 0xe01ef) ||
+    codePoint === 0x034f ||
+    codePoint === 0x115f ||
+    codePoint === 0x1160 ||
+    codePoint === 0x3164 ||
+    codePoint === 0xffa0
   );
 }
 
@@ -129,10 +134,12 @@ interface Scanned {
 }
 
 /**
- * Scans `text` code point by code point — a surrogate pair is one, a lone
- * surrogate is refused — and answers `undefined` when any is refused, or,
- * with `ascii`, when any is outside printable ASCII. The scan ends once the
- * count passes `stopAfter` (the caller drops the value then anyway).
+ * Answers `undefined` when `text` holds a refused code point anywhere — one
+ * of `REFUSED_CATEGORIES`, tested over the whole value first, or one
+ * `isRefusedOutsideCategories` names — or, with `ascii`, any code point
+ * outside printable ASCII. Otherwise counts code points (a surrogate pair is
+ * one) and finds the cut. The count stops once past `stopAfter` (the caller
+ * drops the value then anyway); the category test has covered the rest.
  */
 function scan(
   text: string,
@@ -140,6 +147,7 @@ function scan(
   ascii: boolean,
   stopAfter: number,
 ): Scanned | undefined {
+  if (regExpTest(REFUSED_CATEGORIES, text)) return undefined;
   const length = text.length;
   let codePoints = 0;
   let cutAt = length;
@@ -155,7 +163,7 @@ function scan(
         width = 2;
       }
     }
-    if (isRefusedCodePoint(codePoint)) return undefined;
+    if (isRefusedOutsideCategories(codePoint)) return undefined;
     if (ascii && !isPrintableAscii(codePoint)) return undefined;
     codePoints += 1;
     index += width;
@@ -282,12 +290,18 @@ export function admitDocumentTime(value: unknown): DocumentTime | undefined {
 }
 
 /**
- * `ConfigUri`: parses with `new URL`, protocol `http:` or `https:`, no
- * username or password; admitted as `origin + pathname` only (no query, no
- * fragment), at most 512 characters — longer is dropped, never truncated.
+ * `ConfigUri`: no refused code point in the value as given — checked before
+ * parsing, since the URL parser would strip a tab or newline and
+ * percent-encode the rest, repairing what must be dropped — then parses with
+ * `new URL`, protocol `http:` or `https:`, no username or password; admitted
+ * as `origin + pathname` only (no query, no fragment), at most 512
+ * characters — longer is dropped, never truncated.
  */
 export function admitConfigUri(value: unknown): ConfigUri | undefined {
   if (typeof value !== 'string') return undefined;
+  if (scan(value, 0, false, Number.POSITIVE_INFINITY) === undefined) {
+    return undefined;
+  }
   try {
     const url = new UrlClass(value);
     const protocol = url.protocol;
@@ -327,6 +341,23 @@ const CONFIG_FIELD_ADMISSION = {
   readonly [F in ConfigDiagnosticField]: (
     value: unknown,
   ) => ConfigDiagnosticValues[F] | undefined;
+};
+
+/**
+ * One check per `snc` field. Annotated with a mapped type over
+ * `SncDiagnosticField` rather than `satisfies` — it fails to compile in the
+ * same way when a field has no entry — so that `admitSncField` can index it
+ * with a generic field and keep each field's own value type.
+ */
+const SNC_FIELD_ADMISSION: {
+  readonly [F in SncDiagnosticField]: (
+    value: unknown,
+    candidateCount: unknown,
+  ) => SncDiagnosticValues[F] | undefined;
+} = {
+  library: (value) => admitLocalPath(value),
+  candidatePaths: (value, candidateCount) =>
+    admitCandidatePaths(value, candidateCount),
 };
 
 /** Admitted `saml-assertion` diagnostics: at most the rule's one field. */
@@ -390,6 +421,26 @@ function admitCandidatePaths(
   return freeze(paths);
 }
 
+type MutableSncDiagnostics = {
+  -readonly [F in SncDiagnosticField]?: SncDiagnosticValues[F];
+};
+
+/** Admits `field` from `input` into `admitted` through the table; `true` when kept. */
+function admitSncField<F extends SncDiagnosticField>(
+  admitted: MutableSncDiagnostics,
+  field: F,
+  input: unknown,
+  candidateCount: unknown,
+): boolean {
+  const value = SNC_FIELD_ADMISSION[field](
+    readOwn(input, field),
+    candidateCount,
+  );
+  if (value === undefined) return false;
+  admitted[field] = value;
+  return true;
+}
+
 /**
  * The `snc` diagnostics problem `problem` permits
  * (`SNC_PROBLEM_DIAGNOSTICS`), read from `input` and admitted;
@@ -403,24 +454,15 @@ export function admitSncDiagnostics(
 ): AdmittedSncDiagnostics | undefined {
   if (!isSncProblem(problem)) return undefined;
   const fields = SNC_PROBLEM_DIAGNOSTICS[problem];
-  const admitted: {
-    -readonly [F in keyof SncDiagnosticValues]?: SncDiagnosticValues[F];
-  } = {};
+  const admitted: MutableSncDiagnostics = {};
   let any = false;
   for (let index = 0; index < fields.length; index += 1) {
     const field = fields[index];
-    if (field === 'library') {
-      const library = admitLocalPath(readOwn(input, field));
-      if (library !== undefined) {
-        admitted.library = library;
-        any = true;
-      }
-    } else if (field === 'candidatePaths') {
-      const paths = admitCandidatePaths(readOwn(input, field), candidateCount);
-      if (paths !== undefined) {
-        admitted.candidatePaths = paths;
-        any = true;
-      }
+    if (
+      field !== undefined &&
+      admitSncField(admitted, field, input, candidateCount)
+    ) {
+      any = true;
     }
   }
   return any ? freeze(admitted) : undefined;
