@@ -53,7 +53,7 @@ function stringLines(holder: unknown, fields: readonly string[]): string[] {
 /**
  * `candidates: SOURCE "path" (reason); …`: each candidate of the checked
  * facts with its path from `candidatePaths`, index for index. A path that is
- * `null`, absent or not a string reads `(missing)`.
+ * `null`, absent or not a string reads `(no path)`.
  */
 function candidatesLine(
   facts: AuthProviderErrorFacts['snc'],
@@ -68,7 +68,7 @@ function candidatesLine(
     const candidate = candidates[index];
     if (candidate === undefined) continue;
     const path = readOwn(paths, `${index}`);
-    const shown = typeof path === 'string' ? quote(path) : '(missing)';
+    const shown = typeof path === 'string' ? quote(path) : '(no path)';
     parts.push(`${candidate.source} ${shown} (${candidate.reason})`);
   }
   return parts.length === 0 ? undefined : `candidates: ${parts.join('; ')}`;

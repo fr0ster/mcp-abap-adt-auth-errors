@@ -55,11 +55,11 @@ describe('renderDiagnostics', () => {
     );
   });
 
-  it('renders the candidates with source, path and reason, (missing) for null', () => {
+  it('renders the candidates with source, path and reason, (no path) for null', () => {
     expect(renderDiagnostics(sncNotFound())).toBe(
       'candidates: SNC_LIB_64 "/opt/sec/lib\\"x.so" (missing); ' +
         'registry "C:\\\\sec\\\\sapcrypto.dll" (wrong architecture); ' +
-        'SNC_LIB (missing) (not a library)',
+        'SNC_LIB (no path) (not a library)',
     );
   });
 
