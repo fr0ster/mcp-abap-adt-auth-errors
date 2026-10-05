@@ -150,3 +150,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while it runs, has aborted; a party detached meanwhile leaves the moment
   without aborting it. `release()` ends the moment's membership; nothing
   accumulates.
+- `tools/check-provider-shape.mjs` — the shape check of the error contract
+  (spec §8.2), published as a plain file for connection, auth-providers and
+  the broker to copy byte for byte; it needs only `typescript`. Run as
+  `node tools/check-provider-shape.mjs --rules <n,…>`, it refuses, in
+  `src/` outside tests: (1) a class implementing `IAuthProvider` — by
+  `implements`, or structurally without reaching `AuthProviderBase`; (2) a
+  class reaching `AuthProviderBase` that declares or assigns `prepare`,
+  `establish`, `authorize` or `rejected`; (3) an object literal satisfying
+  `IAuthProvider`; (4) a type assertion to a type carrying a brand of
+  `interfaces-auth` (an error, a refusal, an outcome, a failure, a branded
+  integer) outside the sites of `tools/assertion-sites.json`, and an
+  overload returning an error, refusal, outcome or failure outside this
+  package's `builders.ts` and `mint.ts`; (5) a spread or `Object.assign` of
+  an error; (6) a builder call with diagnostics outside the sites of
+  `tools/diagnostic-sites.json`; (7) a `guard` call whose grant is not a
+  function expression or whose arguments read `this` other than
+  `this.#moments`; (8) in `src/auth` and `src/providers`, a `Basic `
+  authorization value or a base64 of a client secret outside `legacyBasic`
+  and `clientSecretBasic`. It refuses to decide on a program that does not
+  type-check (exit 2). This repository runs rules 4 and 6 in `lint:check`,
+  its four assertion sites being `mint` and the three integer makers.

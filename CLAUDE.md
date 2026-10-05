@@ -77,7 +77,7 @@ no `"link": true` and every package resolves from `registry.npmjs.org`.
 npm run build        # clean + Biome errors + tsc -p tsconfig.build.json
 npm run build:fast   # tsc -p tsconfig.build.json
 npm run test:check   # tsc --noEmit over sources, tests and __typechecks__
-npm run lint:check   # Biome, --error-on-warnings
+npm run lint:check   # Biome, --error-on-warnings, then the shape check (rules 4, 6)
 npm run lint         # Biome with --write
 npm test             # Jest (needs a build: tests load dist/ as a consumer would)
 ```
@@ -105,6 +105,11 @@ src/
 ├── sharedAttempt.ts  # the waiter rules of a shared attempt (§6b)
 ├── __tests__/        # Jest; built-package tests require dist/ by path
 └── __typechecks__/   # compiled by test:check only, never built or run
+tools/
+├── check-provider-shape.mjs  # the shape check (§8.2), published; other repos copy it byte for byte
+├── assertion-sites.json      # rule 4's sites: mint and the three integer makers
+├── diagnostic-sites.json     # rule 6's sites: none
+└── __fixtures__/             # one file per rule breaking it, the obeying ones; shapeCheck.test.ts
 ```
 
 ## Testing
