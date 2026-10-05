@@ -134,7 +134,10 @@ export function classify(
  * answers the frozen `OK`; `{ ok: false, refusal }` whose refusal (read
  * once) this copy minted answers a fresh outcome with that object as it is,
  * one that rebuilds structurally a fresh outcome with the rebuild (no
- * diagnostics); anything else `{ ok: false, refusal: fallback }`. Total.
+ * diagnostics); anything else `{ ok: false, refusal }` with the fallback
+ * as `classify(fallback, 'unfamiliar-error')` answers it — this copy's
+ * error as it is, another copy's or a forged one rebuilt without
+ * diagnostics, anything else `unknown`. Total.
  */
 export function classifyOutcome(
   value: unknown,
@@ -152,5 +155,8 @@ export function classifyOutcome(
   } catch {
     // Falls through to the fallback.
   }
-  return freeze({ ok: false, refusal: fallback });
+  return freeze({
+    ok: false,
+    refusal: classify(fallback, 'unfamiliar-error'),
+  });
 }

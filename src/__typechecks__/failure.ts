@@ -67,13 +67,26 @@ export type IsAuthProviderFailureGuards = Expect<
   >
 >;
 
-// After the guard the value is an Error named AuthProviderFailure, nothing
-// more: its words are not trusted, so `error` is not offered.
+// The narrowed type is a name only, not an `Error`: a JSON copy of a
+// failure — a plain object — passes the guard at run time, and is it.
+export type LikeIsANameOnly = Expect<
+  Equal<AuthProviderFailureLike, { readonly name: 'AuthProviderFailure' }>
+>;
+const jsonCopy: { readonly name: 'AuthProviderFailure'; error: unknown } = {
+  name: 'AuthProviderFailure',
+  error: {},
+};
+export const plainIsLike: AuthProviderFailureLike = jsonCopy;
+
+// After the guard the value is named AuthProviderFailure, nothing more: its
+// words are not trusted, so neither `error` nor `message` is offered.
 declare const caught: unknown;
 if (isAuthProviderFailure(caught)) {
   const name: 'AuthProviderFailure' = caught.name;
   // @ts-expect-error a guarded value offers no `error`: read it with readFailure
   caught.error.reason;
+  // @ts-expect-error a guarded value is not known to be an Error
+  caught.message;
   const read: IAuthProviderError = readFailure(caught, 'refresh');
   void name;
   void read;

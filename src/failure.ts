@@ -34,13 +34,14 @@ function messageOf(error: IAuthProviderError): string {
 }
 
 /**
- * What a value that passed `isAuthProviderFailure` is known to be: an
- * `Error` named `AuthProviderFailure` — of this copy, another copy, or any
- * object shaped like one. Its words are not known to be this copy's: read
- * the error with `readFailure(value, operation)`, never `value.message` or
+ * What a value that passed `isAuthProviderFailure` is known to be: a value
+ * named `AuthProviderFailure` — a failure of this copy or another, or any
+ * object shaped like one, a plain JSON copy included (so not known to be an
+ * `Error`). Its words are not known to be this copy's: read the error with
+ * `readFailure(value, operation)`, never `value.message` or
  * `value.error.reason`.
  */
-export type AuthProviderFailureLike = Error & {
+export type AuthProviderFailureLike = {
   readonly name: 'AuthProviderFailure';
 };
 

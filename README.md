@@ -9,8 +9,10 @@ no logic. This package holds the code: every producer — the providers of
 the broker — obtains its errors here, and every reader classifies what it
 caught here.
 
-No error built here carries a secret or foreign text: no `message`, `cause`,
-`stack`, `name`, body or string form of a thrown value is ever read.
+No error built here carries a secret or foreign text: `classify` and the
+builders never read a thrown value's `message`, `cause`, `stack`, `name`,
+body or string form. `isAuthProviderFailure` reads an own data `name` and an
+own data `error` of the value, and nothing else.
 
 - [Install](#install)
 - [What an error is](#what-an-error-is)
@@ -24,6 +26,7 @@ No error built here carries a secret or foreign text: no `message`, `cause`,
 - [Allowlist guards and branded integers](#allowlist-guards-and-branded-integers)
 - [The brand and its limit](#the-brand-and-its-limit)
 - [The shape check](#the-shape-check)
+- [Exported types](#exported-types)
 - [Versioning](#versioning)
 
 ## Install
@@ -73,7 +76,7 @@ other fact key is `?: never`, so the fact types are closed):
 | `request-failed` | `operation` (`OPERATIONS`), `grant?` (an `OAuth2GrantType`), `problem` (`REQUEST_PROBLEMS`), `status?` (`HttpStatus`), `oauthError?` (`OAUTH_ERROR_CODES`), `code?` (`SYSTEM_CODES`) |
 | `tls` | `operation`, `grant?`, `code` (`TLS_FAILURE_CODES`) |
 | `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `browser-launch-failed` `code?`; `failed` `status?`, `oauthError?`, `code?` |
-| `saml-assertion` | `rule` (`ASSERTION_RULES`, 56), `check` (the rule's `AssertionCheck`), and by rule: a "several …" rule `count?` (at least 2); `declined` `statusCode?` (`SAML_STATUS_CODES`); `no-bearer-qualifies` `candidates?` (each a `BEARER_CANDIDATE_REASONS` reason, at most 5), `moreCandidates?` |
+| `saml-assertion` | `rule` (`ASSERTION_RULES`, 56), `check` (the rule's `AssertionCheck`), and by rule: a "several …" rule `count?` (at least 2); `declined` `statusCode?` (`SAML_STATUS_CODES`); `no-bearer-qualifies` `candidates?` (each a `BEARER_CANDIDATE_REASONS` reason, with `count?` — at least 2 — only for `several-confirmation-data`; at most 5), `moreCandidates?` |
 | `snc` | `problem` (`SNC_PROBLEMS`), and by problem: `no-credential` `secureLoginClient?`, `libraryArchs?`; `library-init-failed` `libraryArchs?`; `logon-refused` `rfcKey?` (`RFC_KEYS`); `library-not-found` `searched?`, `candidates?` (`source`, `reason`, `archs?`; at most 8), `processArch?` |
 | `credential-refused` | `credential` (`CREDENTIAL_KINDS`), `at?` (`logon` / `request`) |
 | `system-refused` | `verdict` (`SYSTEM_REFUSED_VERDICTS`), `at`; a status verdict `status`; `rfc-failure` `rfcKey` |
@@ -493,15 +496,19 @@ a revoked Proxy, throwing getters, `null`, a symbol. In order:
    `kind` is known and whose `facts` all pass: rebuilt, re-rendered, without
    diagnostics; its `reason`, `hint` and `diagnostics` are never read;
 4. a TLS failure `code`: `tls`;
-5. an integer status, a registered OAuth `error` or an allowlisted system
-   `code`: `unknown` with those facts;
+5. an integer status (`status`, else `response.status`), a registered OAuth
+   error code (`oauthError`, else `response.data.error`; a top-level `error`
+   is the carrier of step 2, never this) or an allowlisted system `code`:
+   `unknown` with those facts;
 6. anything else: `unknown` with the operation.
 
 `readFailure(thrown, operation)` is `classify` for a caught value.
 `classifyOutcome(value, fallback)` re-checks an `AuthOutcome` a collaborator
 answered: `{ ok: true }` is `OK`, a refusal this copy minted passes as it is,
-one that rebuilds is rebuilt, anything else is `{ ok: false, refusal:
-fallback }`.
+one that rebuilds is rebuilt, anything else is `{ ok: false, refusal }`
+with the fallback as `classify(fallback, 'unfamiliar-error')` answers it: a
+fallback this copy minted as it is, another copy's or a forged one rebuilt
+without diagnostics, anything else `unknown`.
 
 **Never `instanceof`.** Two copies of this package in one process — two
 installs, a bundler's duplicate — have two `AuthProviderFailure` classes, and
@@ -519,8 +526,9 @@ operation `unfamiliar-error`.
 
 - **`isAuthProviderFailure(value)` narrows to a name only.** It answers true
   for a failure of this copy or another — and for a forged object shaped like
-  one — so it narrows to `AuthProviderFailureLike`, an `Error` named
-  `AuthProviderFailure` without `error`. Read the error with `readFailure`;
+  one, a plain JSON copy included — so it narrows to
+  `AuthProviderFailureLike`, a value named `AuthProviderFailure` (not known
+  to be an `Error`) without `error`. Read the error with `readFailure`;
   never print `message` or `error.reason` of a value this copy did not
   construct.
 - **`structuredClone` loses the failure.** A failure cloned with
@@ -633,10 +641,11 @@ Rules for the caller:
 
 ## Allowlist guards and branded integers
 
-One membership guard per allowlist array of interfaces-auth — `isSystemCode`,
-`isTlsFailureCode`, `isOAuthErrorCode`, `isRfcKey`, `isConfigField`,
-`isOperation`, `isAssertionRule`, … (34) — each narrowing `unknown` to the
-array's union.
+One membership guard per allowlist array of the error contract in
+interfaces-auth — `isSystemCode`, `isTlsFailureCode`, `isOAuthErrorCode`,
+`isRfcKey`, `isConfigField`, `isOperation`, `isAssertionRule`, … (34) — each
+narrowing `unknown` to the array's union. `REFRESH_TOKEN_DISPOSITIONS` (the
+token store's, not the error contract's) has none.
 
 The sets behind them cannot be widened. They are module-private, copied from
 the frozen arrays at load, and read through a `Set.prototype.has` captured at
@@ -740,6 +749,17 @@ secret under a name the heuristic does not know. The full list is in the
 script's header.
 
 This repository runs rules 4 and 6.
+
+## Exported types
+
+Beside the values above, the entry exports these types:
+`AuthErrorBuilders`, `PlainBuilders`, `VariantBuilders`,
+`DiagnosticsInputOf`, `One` (the builders); `LogFields` (`logFields`);
+`Words` (`render`); `KindHandlers` (`matchKind`); `AuthProviderFailureLike`
+(`isAuthProviderFailure`); `RelayedOutcome` (`relayOutcome`);
+`SharedAttempt`, `AttemptContext`, `AttemptStart` (`sharedAttempt`);
+`Parties`, `MomentWaiter` (`createParties`). The error types themselves come
+from interfaces-auth.
 
 ## Versioning
 

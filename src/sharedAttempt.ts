@@ -250,10 +250,19 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
             opened();
             throw abortedFailure();
           }
+          // Reserved before the work runs: work that synchronously ends its
+          // attempt (its last waiter's abort) hands on a drain holding it.
+          let finish: () => void = ignore;
+          const completion = new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          attempt.drain = Promise.all([attempt.drain, completion]).then(ignore);
+          const finished = finish;
           const running = run(work);
-          const finished = quietly(running);
-          attempt.drain = Promise.all([attempt.drain, finished]).then(ignore);
-          void finished.then(opened);
+          void quietly(running).then(() => {
+            finished();
+            opened();
+          });
           return running;
         },
         (failure: unknown) => {

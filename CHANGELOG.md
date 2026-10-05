@@ -31,10 +31,11 @@ README.md documents the whole surface.
 - `httpStatus()`, `count()`, `port()` — the branded-integer makers: a finite
   integer inside 100–599, 0–1 000 000, 0–65 535, read without coercion,
   comes back as `HttpStatus`, `Count`, `Port`; anything else is `undefined`.
-- One membership guard per allowlist array of `interfaces-auth` 6.0.0
-  (`isSystemCode`, `isTlsFailureCode`, `isOAuthErrorCode`, `isRfcKey`,
-  `isConfigField`, `isAssertionRule`, `isOperation`, … — 34 in all), each
-  narrowing `unknown` to the array's union. The sets behind them are
+- One membership guard per allowlist array of the error contract in
+  `interfaces-auth` 6.0.0 (`isSystemCode`, `isTlsFailureCode`,
+  `isOAuthErrorCode`, `isRfcKey`, `isConfigField`, `isAssertionRule`,
+  `isOperation`, … — 34 in all; `REFRESH_TOKEN_DISPOSITIONS`, the token
+  store's, has none), each narrowing `unknown` to the array's union. The sets behind them are
   module-private, copied from the arrays at load, and read through a
   `Set.prototype.has` captured at load, so patching it later changes no
   answer.
@@ -55,6 +56,12 @@ README.md documents the whole surface.
   unfamiliar error (`unknown`, operation `unfamiliar-error`). A count of a
   "carries N" rule must be at least 2; bearer candidates not listed are all
   counted, from the array's own length.
+- `classify(thrown, operation, grant?)` and `classifyOutcome(value,
+  fallback)` — classification (spec §5.4). `classifyOutcome` answers `OK`,
+  this copy's refusal as it is, a rebuilt one, or else the fallback as
+  `classify(fallback, 'unfamiliar-error')` answers it: this copy's error as
+  it is, another copy's or a forged one rebuilt without diagnostics,
+  anything else `unknown` — a fallback's own text never passes unchecked.
 - `isMinted(value)` — true only for an error this copy of the package
   minted (a module-private `WeakSet`); a structural copy is not one.
 - `render(kind, facts)` — the default words a builder stores, from `kind`
@@ -95,8 +102,9 @@ README.md documents the whole surface.
   another: an own data `name` of `AuthProviderFailure` and an own data
   `error` this copy minted or that rebuilds structurally. No `instanceof`,
   no getter, never `message`. Total. A forged object passes too, so it
-  narrows to `AuthProviderFailureLike` (an `Error` named
-  `AuthProviderFailure`, without `error`): read the error with
+  narrows to `AuthProviderFailureLike` (a value named
+  `AuthProviderFailure` — not known to be an `Error`, since a JSON copy
+  passes — without `error`): read the error with
   `readFailure(value, operation)`, never print `message` or `error.reason`
   of a value this copy did not construct.
 - `guard(operation, body, grant?)` — the boundary of one provider moment:
@@ -139,7 +147,9 @@ README.md documents the whole surface.
   attempt's signal aborts, so a join arriving meanwhile starts afresh. A
   settled attempt leaves the slot; a throw or rejection of `start` reaches
   the waiters only as `classify(thrown, operation)`. Every attempt carries a
-  drain — its `exclusive` work, settled either way, plus the drain it
+  drain — its `exclusive` work (reserved in the drain before the work runs,
+  so work that synchronously ends its attempt is still in the drain it
+  hands on), settled either way, plus the drain it
   inherited — which the slot hands to the next attempt; `exclusive` awaits
   it, raced only against the attempt's signal. A waiter's signal is read
   guarded: one that is not an object, whose `aborted` throws or is not a
@@ -209,7 +219,6 @@ README.md documents the whole surface.
   `readFailure`, the builders and `render`, and appears in no word, log
   field or diagnostic. No export is a `Set`, `Map`, `WeakSet` or `WeakMap`,
   nested one level, and an array one level down is frozen.
-
 - An `exports` map: the entry (`types`, `require`, `default` →
   `dist/`), `./package.json` and `./tools/check-provider-shape.mjs`. A deep
   path by name (`@mcp-abap-adt/auth-errors/dist/allowlists`) is
@@ -222,7 +231,6 @@ README.md documents the whole surface.
 - Out of the threat model: code in the same process that requires `dist/`
   by absolute path or redefines an export of a module. The `exports` map is
   hygiene, not a security boundary.
-
 - `structuredClone` of an `AuthProviderFailure` comes back a plain `Error`:
   `isAuthProviderFailure` answers false and `readFailure` answers
   `unknown`. A JSON round-trip keeps the kind and facts.

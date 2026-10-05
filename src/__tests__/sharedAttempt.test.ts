@@ -615,6 +615,42 @@ describe('sharedAttempt — exclusive within one attempt', () => {
     await expect(result).resolves.toBe('second');
   });
 
+  it('work that synchronously aborts its last waiter and re-joins is already in the drain', async () => {
+    const slot = sharedAttempt<string>('browser-login');
+    let running = 0;
+    let most = 0;
+    const firstGate = deferred<string>();
+    const controller = new AbortController();
+    let replacement: Promise<string> | undefined;
+    const secondWork = jest.fn(async () => {
+      running += 1;
+      most = Math.max(most, running);
+      running -= 1;
+      return 'second';
+    });
+    void slot
+      .join(
+        (attempt) =>
+          attempt.exclusive(() => {
+            running += 1;
+            most = Math.max(most, running);
+            controller.abort();
+            replacement = slot.join((next) => next.exclusive(secondWork));
+            return firstGate.promise.finally(() => {
+              running -= 1;
+            });
+          }),
+        controller.signal,
+      )
+      .catch(() => undefined);
+    await flush();
+    expect(replacement).toBeDefined();
+    expect(secondWork).not.toHaveBeenCalled();
+    firstGate.resolve('first');
+    await expect(replacement).resolves.toBe('second');
+    expect(most).toBe(1);
+  });
+
   it('an abort landing in any microtask gap after the drain settles keeps the work from starting', async () => {
     const startedAfterAbort: number[] = [];
     for (let depth = 0; depth < 15; depth += 1) {

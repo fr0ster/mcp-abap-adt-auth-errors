@@ -867,6 +867,66 @@ describe('classifyOutcome', () => {
     expect(outcome.ok === false && outcome.refusal).toBe(fallback);
   });
 
+  describe('the fallback itself is classified', () => {
+    let second: SecondCopy;
+    beforeAll(() => {
+      second = loadSecondCopy();
+    });
+    afterAll(() => second.remove());
+    const sncFacts = { problem: 'no-credential', secureLoginClient: false };
+
+    it('a forged fallback is rebuilt: its reason and diagnostics are dropped', () => {
+      const forged = {
+        kind: 'snc',
+        variant: 'no-credential',
+        facts: sncFacts,
+        reason: 'sk-fallback-reason',
+        diagnostics: { library: 'sk-fallback-diagnostics' },
+      } as unknown as IAuthProviderError;
+      const outcome = classifyOutcome(null, forged);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) return;
+      expect(outcome.refusal).not.toBe(forged);
+      expect(isMinted(outcome.refusal)).toBe(true);
+      expect(outcome.refusal.kind).toBe('snc');
+      expect(outcome.refusal.diagnostics).toBeUndefined();
+      expectNoMarker(outcome.refusal, 'sk-fallback');
+    });
+
+    it('a fallback minted by a second copy is rebuilt without diagnostics', () => {
+      const foreign = (
+        second.exports.authError as Record<AuthProviderErrorKind, Builder>
+      ).snc(sncFacts, { library: 'sk-second-copy-diagnostics' });
+      const outcome = classifyOutcome({ ok: 'no' }, foreign);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) return;
+      expect(outcome.refusal).not.toBe(foreign);
+      expect(isMinted(outcome.refusal)).toBe(true);
+      expect(outcome.refusal.diagnostics).toBeUndefined();
+      expectNoMarker(outcome.refusal, 'sk-second-copy');
+    });
+
+    it('a garbage fallback answers unknown, unfamiliar-error', () => {
+      const outcome = classifyOutcome(undefined, {
+        reason: 'sk-garbage',
+      } as unknown as IAuthProviderError);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) return;
+      expect(shape(outcome.refusal)).toStrictEqual(
+        shape(unknownWith('unfamiliar-error')),
+      );
+      expectNoMarker(outcome.refusal, 'sk-garbage');
+    });
+
+    it('a fallback minted by this copy is kept as itself, diagnostics included', () => {
+      const own = authError.snc(sncFacts, {
+        library: '/usr/lib/libsapcrypto.so',
+      });
+      const outcome = classifyOutcome(null, own);
+      expect(outcome.ok === false && outcome.refusal).toBe(own);
+    });
+  });
+
   it('getters on `ok` and `refusal` are never invoked', () => {
     let invoked = 0;
     const getter = {
