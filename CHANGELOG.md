@@ -15,3 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `OK` — the one success outcome, `{ ok: true }`, frozen, typed as the
   `{ ok: true }` member of `AuthOutcome` from
   `@mcp-abap-adt/interfaces-auth` 5.0.0.
+- `httpStatus()`, `count()`, `port()` — the branded-integer makers: a finite
+  integer inside 100–599, 0–1 000 000, 0–65 535, read without coercion,
+  comes back as `HttpStatus`, `Count`, `Port`; anything else is `undefined`.
+- One membership guard per allowlist array of `interfaces-auth` 5.0.0
+  (`isSystemCode`, `isTlsFailureCode`, `isOAuthErrorCode`, `isRfcKey`,
+  `isConfigField`, `isAssertionRule`, `isOperation`, … — 34 in all), each
+  narrowing `unknown` to the array's union. The sets behind them are
+  module-private, copied from the arrays at load, and read through a
+  `Set.prototype.has` captured at load, so patching it later changes no
+  answer.
