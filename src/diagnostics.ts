@@ -5,11 +5,13 @@
  * builder admitted each field and froze the error, so these functions render
  * what is there and re-admit nothing. An error that is not minted — a
  * structural copy, another copy's error, anything else — has its
- * diagnostics never read: `renderDiagnostics` answers `undefined`.
+ * diagnostics never read: `renderDiagnostics` answers `undefined`, and
+ * `logFields` answers the fields of what `classify` makes of it.
  *
  * Both functions are total and read only own data properties, once each
- * (`readOwn`): no getter, `toPrimitive` or Proxy trap of the input is
- * invoked. Neither is called by `render`.
+ * (`readOwn`): no getter or `toPrimitive` of the input is invoked; of a
+ * Proxy, only the `getOwnPropertyDescriptor` trap may run, and one that
+ * throws reads as absent. Neither is called by `render`.
  */
 import type {
   AuthProviderErrorFacts,
@@ -18,6 +20,7 @@ import type {
 } from '@mcp-abap-adt/interfaces-auth';
 import { readOwn } from './admission';
 import { isAuthProviderErrorKind } from './allowlists';
+import { classify } from './classify';
 import { checkFacts } from './factCheck';
 import { isMinted } from './mint';
 import { ASSERTION_RULE_CHECK, render } from './words';
@@ -144,23 +147,27 @@ function unfamiliarFields(): LogFields {
  * `status` only when the error's facts hold a valid HTTP status;
  * `diagnostics` (the rendered text, as its own field so a logger can drop
  * it) only for an error this copy minted. A value that is not minted here
- * answers the fields of the unfamiliar error. Total.
+ * is classified first (`classify`, operation `unfamiliar-error`) and
+ * answers the fields of what that gives. Total.
  */
 export function logFields(error: IAuthProviderError): LogFields {
   try {
-    if (!isMinted(error)) return unfamiliarFields();
-    const kind = readOwn(error, 'kind');
-    const reason = readOwn(error, 'reason');
+    // A value this copy did not mint is classified first: a carrier of a
+    // minted error answers that error's fields, a structure its rebuild's
+    // (re-rendered, no diagnostics), anything else `unknown`.
+    const known = isMinted(error) ? error : classify(error, 'unfamiliar-error');
+    const kind = readOwn(known, 'kind');
+    const reason = readOwn(known, 'reason');
     if (!isAuthProviderErrorKind(kind) || typeof reason !== 'string') {
       return unfamiliarFields();
     }
     const facts = checkFacts(
       kind,
-      readOwn(error, 'facts'),
+      readOwn(known, 'facts'),
       ASSERTION_RULE_CHECK,
     );
     const status = readOwn(facts, 'status');
-    const diagnostics = renderDiagnostics(error);
+    const diagnostics = renderDiagnostics(known);
     return {
       error: reason,
       kind,

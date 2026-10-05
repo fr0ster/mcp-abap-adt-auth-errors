@@ -42,6 +42,7 @@ import {
   admitConfigDiagnostics,
   admitSamlDiagnostics,
   admitSncDiagnostics,
+  readOwn,
 } from './admission';
 import { checkFacts } from './factCheck';
 import { type ErrorDraft, mint } from './mint';
@@ -192,6 +193,43 @@ function plain(kind: PlainKind, facts: unknown): IAuthProviderError {
   const kept = checkFacts(kind, facts, ASSERTION_RULE_CHECK);
   if (kept === undefined) return unfamiliar();
   return mint(draft(kind, undefined, kept, render(kind, kept), undefined));
+}
+
+/** The variant of a kind with diagnostics: its discriminant; else none. */
+function variantOf(
+  kind: AuthProviderErrorKind,
+  facts: object,
+): string | undefined {
+  const key =
+    kind === 'saml-assertion'
+      ? 'rule'
+      : kind === 'snc'
+        ? 'problem'
+        : kind === 'configuration'
+          ? 'case'
+          : undefined;
+  if (key === undefined) return undefined;
+  const value = readOwn(facts, key);
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * The structural rebuild of classification (spec §5.4 step 3): the facts of
+ * `kind` read and checked by the same per-kind validator the builders use —
+ * only the declared keys kept — and re-minted with words rendered here and
+ * **no diagnostics**: a rebuild never carries any. `undefined` when the
+ * facts fail their check (the caller falls through). Never reads a
+ * `reason`, `hint` or `diagnostics`; never throws.
+ */
+export function rebuild(
+  kind: AuthProviderErrorKind,
+  facts: unknown,
+): IAuthProviderError | undefined {
+  const kept = checkFacts(kind, facts, ASSERTION_RULE_CHECK);
+  if (kept === undefined) return undefined;
+  return mint(
+    draft(kind, variantOf(kind, kept), kept, render(kind, kept), undefined),
+  );
 }
 
 /**

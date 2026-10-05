@@ -1,13 +1,3 @@
-import type { AuthOutcome } from '@mcp-abap-adt/interfaces-auth';
-
-/**
- * The one success outcome, `{ ok: true }`, frozen: every provider and every
- * relay answers this object, so no caller can change what "Ok" means.
- */
-export const OK: Extract<AuthOutcome, { ok: true }> = Object.freeze({
-  ok: true,
-});
-
 export {
   isAllowedValueSet,
   isAssertionCheck,
@@ -52,6 +42,7 @@ export {
   type PlainBuilders,
   type VariantBuilders,
 } from './builders';
+export { classify, classifyOutcome, OK } from './classify';
 export { type LogFields, logFields, renderDiagnostics } from './diagnostics';
 export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';

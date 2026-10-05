@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { cpSync, existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 /**
  * The built package, required by path as a consumer would: what `main`
@@ -33,4 +34,40 @@ export function loadBuiltModule(name: string): Record<string, unknown> {
     throw new Error(`${file} is missing: run "npm run build" first`);
   }
   return require(file) as Record<string, unknown>;
+}
+
+/** A second copy of the built package, loaded from a temporary path. */
+export interface SecondCopy {
+  readonly exports: Record<string, unknown>;
+  /** Removes the temporary directory. */
+  readonly remove: () => void;
+}
+
+/**
+ * Copies `dist/` into a fresh temporary directory, links the repository's
+ * `node_modules` beside it (so the copy resolves `interfaces-auth`), and
+ * requires the copy's entry: another copy of the package, with its own
+ * module state — its own minted `WeakSet` — as a second install would have.
+ */
+export function loadSecondCopy(): SecondCopy {
+  if (!existsSync(builtEntry)) {
+    throw new Error(`${builtEntry} is missing: run "npm run build" first`);
+  }
+  const root = mkdtempSync(join(tmpdir(), 'auth-errors-copy-'));
+  cpSync(resolve(__dirname, '../../dist'), join(root, 'dist'), {
+    recursive: true,
+  });
+  symlinkSync(
+    resolve(__dirname, '../../node_modules'),
+    join(root, 'node_modules'),
+    'dir',
+  );
+  const exports = require(join(root, 'dist/index.js')) as Record<
+    string,
+    unknown
+  >;
+  return {
+    exports,
+    remove: () => rmSync(root, { recursive: true, force: true }),
+  };
 }

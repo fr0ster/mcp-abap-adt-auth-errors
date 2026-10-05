@@ -187,10 +187,7 @@ describe('logFields', () => {
     expect('diagnostics' in logFields(without)).toBe(false);
   });
 
-  it('answers the unfamiliar fields for a non-minted value, status and diagnostics never read', () => {
-    const unfamiliar = logFields(
-      authError.unknown({ operation: 'unfamiliar-error' }),
-    );
+  it('classifies a non-minted value first: its reason, status and diagnostics never read', () => {
     const forged = {
       kind: 'snc',
       reason: 'sk-secret',
@@ -199,13 +196,16 @@ describe('logFields', () => {
       diagnostics: { library: '/x' },
     };
     expect(logFields(forged)).toStrictEqual({
-      error: unfamiliar.error,
-      kind: 'unknown',
+      error: authError.snc({ problem: 'library-init-failed' }).reason,
+      kind: 'snc',
     });
+    expect(logFields(null)).toStrictEqual(
+      logFields(authError.unknown({ operation: 'unfamiliar-error' })),
+    );
     expect(logFields(null)).toStrictEqual(logFields(undefined));
   });
 
-  it('is total and invokes no getter or trap', () => {
+  it('is total and invokes no getter, nor any trap but getOwnPropertyDescriptor', () => {
     let touched = 0;
     const hostile = new Proxy(
       {},
@@ -218,13 +218,25 @@ describe('logFields', () => {
           touched += 1;
           throw new Error('trap');
         },
-        getOwnPropertyDescriptor() {
+        getPrototypeOf() {
           touched += 1;
+          throw new Error('trap');
+        },
+        getOwnPropertyDescriptor() {
           throw new Error('trap');
         },
       },
     );
     expect(logFields(hostile).kind).toBe('unknown');
     expect(touched).toBe(0);
+    let invoked = 0;
+    const getters = Object.defineProperty({}, 'kind', {
+      get() {
+        invoked += 1;
+        return 'snc';
+      },
+    });
+    expect(logFields(getters).kind).toBe('unknown');
+    expect(invoked).toBe(0);
   });
 });
