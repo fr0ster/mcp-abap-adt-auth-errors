@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "tools/check-provider-shape.mjs",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -36,8 +37,8 @@
   },
   "scripts": {
     "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
-    "lint": "npx biome check --write src",
-    "lint:check": "npx biome check --error-on-warnings src",
+    "lint": "npx biome check --write src tools/check-provider-shape.mjs",
+    "lint:check": "npx biome check --error-on-warnings src tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
