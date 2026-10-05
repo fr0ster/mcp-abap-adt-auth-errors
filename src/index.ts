@@ -44,6 +44,11 @@ export {
 } from './builders';
 export { classify, classifyOutcome, OK } from './classify';
 export { type LogFields, logFields, renderDiagnostics } from './diagnostics';
+export {
+  AuthProviderFailure,
+  isAuthProviderFailure,
+  readFailure,
+} from './failure';
 export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';
 export { blamesCredential, render, type Words } from './words';

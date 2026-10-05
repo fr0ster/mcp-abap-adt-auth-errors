@@ -51,8 +51,14 @@ export const OK: Extract<AuthOutcome, { ok: true }> = freeze({
   ok: true,
 });
 
-/** Step 3 on one candidate: its `kind` and `facts`, each read once. */
-function rebuildFrom(candidate: unknown): IAuthProviderError | undefined {
+/**
+ * Step 3 on one candidate: its `kind` and `facts`, each read once. Also
+ * `isAuthProviderFailure`'s test of a carried error (not exported by the
+ * index).
+ */
+export function rebuildFrom(
+  candidate: unknown,
+): IAuthProviderError | undefined {
   const kind = readOwn(candidate, 'kind');
   if (!isAuthProviderErrorKind(kind)) return undefined;
   return rebuild(kind, readOwn(candidate, 'facts'));

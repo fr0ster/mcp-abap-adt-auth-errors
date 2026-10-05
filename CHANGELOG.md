@@ -56,3 +56,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `credential-refused` and `renewal-unchanged`; `snc` `no-credential`, and
   `logon-refused` with `RFC_LOGON_FAILURE`; `connection`
   `refused-after-renewal`. Total.
+- `AuthProviderFailure` — the one thrown class: an `Error` named
+  `AuthProviderFailure` holding one minted error as its own `error` data
+  property; `message` is the error's `reason`, or `reason — hint`, never a
+  diagnostic; no `cause`. `name`, `message` and `error` are its only
+  enumerable own properties, so `JSON.stringify` and pino's serializer see
+  those three. The constructor takes an error minted by this copy (typed and
+  checked): anything else — a `structuredClone`, a JSON copy, another copy's
+  error — becomes `unknown` with operation `unfamiliar-error`; classify a
+  foreign value with `readFailure` first to keep its kind and facts.
+- `readFailure(thrown, operation)` — `classify` for a caught value: this
+  copy's failure answers its error as it is, diagnostics included; another
+  copy's failure, or any carrier, is rebuilt without diagnostics.
+- `isAuthProviderFailure(value)` — true for a failure of this copy or
+  another: an own data `name` of `AuthProviderFailure` and an own data
+  `error` this copy minted or that rebuilds structurally. No `instanceof`,
+  no getter, never `message`. Total.

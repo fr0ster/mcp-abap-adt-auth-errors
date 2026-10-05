@@ -10,8 +10,8 @@ import { loadBuilt, loadSecondCopy, type SecondCopy } from './builtPackage';
  * `classify` and `classifyOutcome` (spec §5.4, §11.1 "Hostile values",
  * "Carriers from another copy", "Forged diagnostics", "Exception text
  * excluded", "Re-mint across copies"; §13 item 3), run against the built
- * package. Carriers here are plain objects: `AuthProviderFailure` cases are
- * Task 10's.
+ * package. Carriers here are plain objects: the `AuthProviderFailure` cases
+ * are in failure.test.ts.
  */
 type Builder = (facts: unknown, diagnostics?: unknown) => IAuthProviderError;
 type Exports = Record<string, unknown>;
