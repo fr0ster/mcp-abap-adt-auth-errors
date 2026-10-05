@@ -44,7 +44,8 @@
  * computed key from a constant, through assertions, included) in the base,
  * `AuthProviderBase.prototype.<moment> = …`, and `Object.assign` /
  * `Object.defineProperty` of a moment onto the base's `this` or prototype —
- * in any checked file. A base read from a declaration file has no bodies:
+ * in any checked file, and in the base's own file whatever files were
+ * selected. A base read from a declaration file has no bodies:
  * there only the four methods are required, and the bodies are verified
  * where the base is written (auth-providers runs rules 1–3 on its source).
  *
@@ -875,6 +876,8 @@ function createRules(program, contractFile, baseFile, options, sites) {
    */
   function momentTarget(target) {
     const kind = targetKind(target);
+    if (baseWritesOnly)
+      return kind === 'base' && checksBase() ? 'base' : undefined;
     if (kind === 'base') return checksBase() ? 'base' : undefined;
     if (kind === 'provider')
       return options.rules.has(2) ? 'provider' : undefined;
@@ -1476,6 +1479,34 @@ function createRules(program, contractFile, baseFile, options, sites) {
 
   // ------------------------------------------------------------ the base
 
+  /** Set while the base's own files are scanned beside the selected ones. */
+  let baseWritesOnly = false;
+
+  /**
+   * The base's implementation files (where it has bodies) are scanned for
+   * writes onto the base whatever files were selected; a file also selected
+   * is left to `visit`, so nothing is reported twice.
+   */
+  function scanBaseFiles(selected) {
+    const files = new Set();
+    for (const declaration of baseDeclarations) {
+      const source = declaration.getSourceFile();
+      if (!source.isDeclarationFile && !selected.includes(source))
+        files.add(source);
+    }
+    const walk = (node) => {
+      if (ts.isBinaryExpression(node)) checkMomentAssignment(node);
+      else if (ts.isCallExpression(node)) checkMomentCall(node);
+      ts.forEachChild(node, walk);
+    };
+    baseWritesOnly = true;
+    try {
+      for (const source of files) walk(source);
+    } finally {
+      baseWritesOnly = false;
+    }
+  }
+
   /** `this.#moments.<moment>`, through parentheses. */
   function isMomentsRead(node, moment) {
     const inner = skipParentheses(node);
@@ -1554,7 +1585,7 @@ function createRules(program, contractFile, baseFile, options, sites) {
     }
   }
 
-  return { visit, verifyBase, findings };
+  return { visit, verifyBase, scanBaseFiles, findings };
 }
 
 // ---------------------------------------------------------------- main
@@ -1572,15 +1603,17 @@ const sites = {
   ]),
 };
 const { program, sources, contract, baseFile } = loadProgram(options);
-const { visit, verifyBase, findings } = createRules(
+const { visit, verifyBase, scanBaseFiles, findings } = createRules(
   program,
   contract,
   baseFile,
   options,
   sites,
 );
-if (options.rules.has(1) || options.rules.has(2) || options.rules.has(3))
+if (options.rules.has(1) || options.rules.has(2) || options.rules.has(3)) {
   verifyBase();
+  scanBaseFiles(sources);
+}
 for (const source of sources) visit(source);
 findings.sort((a, b) =>
   a.file === b.file

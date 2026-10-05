@@ -314,6 +314,24 @@ describe('check-provider-shape: the base, by declaration', () => {
     }
   });
 
+  it('the base’s own file is scanned for its writes even when only another file is checked', () => {
+    const run = check([
+      '--rules',
+      '1',
+      '--root',
+      fixtures,
+      '--base',
+      './bases/RewritingBase#AuthProviderBase',
+      join(fixtures, 'src', 'auth', 'prose.ts'),
+    ]);
+    expect(run.status).toBe(1);
+    expect(run.findings).toHaveLength(7);
+    for (const finding of run.findings) {
+      expect(finding.file).toBe('bases/RewritingBase.ts');
+      expect(finding.rule).toBe(1);
+    }
+  });
+
   it('the base may not declare a moment as a constructor parameter property', () => {
     const run = check([
       '--rules',

@@ -741,9 +741,10 @@ be one method whose body is only `return guard(this.#moments.<moment>,
 property may be named after a moment; and nothing may replace a moment —
 `this.<moment> = …` in the base, `AuthProviderBase.prototype.<moment> = …`,
 `Object.assign` / `Object.defineProperty` of a moment onto its `this` or
-prototype, in any checked file. A base read from a declaration
-file has no bodies — there only the four methods are required, and the
-bodies are verified where the base is written.
+prototype, in any checked file and in the base's own file whatever files
+were selected. A base read from a declaration file has no bodies — there
+only the four methods are required, and the bodies are verified where the
+base is written.
 
 | Rule | Refuses, in `src/` outside tests |
 |---|---|
