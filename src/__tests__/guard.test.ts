@@ -120,11 +120,96 @@ function hostileValues(): [string, unknown][] {
 }
 
 describe('guard', () => {
-  it('answers the body’s outcome when it does not throw', async () => {
+  it('a body’s answer of this copy passes: OK as itself, a minted refusal as itself', async () => {
     const refusal = authError['not-prepared']({ provider: 'snc' });
     const answer = { ok: false, refusal };
-    await expect(guard('establishing', () => answer)).resolves.toBe(answer);
+    const outcome = await guard('establishing', () => answer);
+    expect(refusalOf(outcome)).toBe(refusal);
+    expect(Object.isFrozen(outcome)).toBe(true);
     await expect(guard('establishing', async () => OK)).resolves.toBe(OK);
+    await expect(guard('establishing', () => ({ ok: true }))).resolves.toBe(OK);
+  });
+
+  describe('a non-throwing body’s answer is classified', () => {
+    let second: SecondCopy;
+    beforeAll(() => {
+      second = loadSecondCopy();
+    });
+    afterAll(() => second.remove());
+
+    it('a forged refusal is rebuilt: its reason and diagnostics are dropped', async () => {
+      const forged = {
+        ok: false,
+        refusal: {
+          kind: 'client-certificate',
+          facts: { problem: 'expired' },
+          reason: 'sk-forged-reason',
+          diagnostics: { library: 'sk-forged-diagnostics' },
+        },
+      };
+      const refusal = refusalOf(await guard('token-request', () => forged));
+      expect(isMinted(refusal)).toBe(true);
+      expect(refusal.kind).toBe('client-certificate');
+      expect(refusal.diagnostics).toBeUndefined();
+      for (const text of renderings(refusal)) {
+        expect(text).not.toContain('sk-forged');
+      }
+    });
+
+    it('a refusal minted by a second copy is rebuilt without diagnostics', async () => {
+      const theirs = (
+        second.exports.authError as Record<AuthProviderErrorKind, Builder>
+      ).snc(
+        { problem: 'no-credential', secureLoginClient: false },
+        { library: 'sk-second-copy-library' },
+      );
+      const refusal = refusalOf(
+        await guard('authorizing', async () => ({
+          ok: false,
+          refusal: theirs,
+        })),
+      );
+      expect(refusal).not.toBe(theirs);
+      expect(isMinted(refusal)).toBe(true);
+      expect(refusal.kind).toBe('snc');
+      expect(refusal.diagnostics).toBeUndefined();
+      for (const text of renderings(refusal)) {
+        expect(text).not.toContain('sk-second-copy');
+      }
+    });
+
+    it.each([
+      ['a string', 'SECRET-STRING'],
+      ['an unforgeable refusal', { ok: false, refusal: { reason: 'SECRET' } }],
+      ['a getter on ok', Object.defineProperty({}, 'ok', { get: () => true })],
+      ['undefined', undefined],
+    ])(
+      '%s answers the fallback: unknown with the operation and the kept grant',
+      async (_label, answer) => {
+        const outcome = await guard(
+          'token-request',
+          () => answer as never,
+          () => 'client_credentials',
+        );
+        const refusal = refusalOf(outcome);
+        expect(isMinted(refusal)).toBe(true);
+        expect(refusal.kind).toBe('unknown');
+        expect(refusal.facts).toStrictEqual({
+          operation: 'token-request',
+          grant: 'client_credentials',
+        });
+        expect(JSON.stringify(outcome)).not.toContain('SECRET');
+      },
+    );
+
+    it('a thenable resolving to a non-outcome answers the fallback', async () => {
+      const outcome = await guard('preparing', () =>
+        Promise.resolve('SECRET-STRING' as never),
+      );
+      expect(refusalOf(outcome).facts).toStrictEqual({
+        operation: 'preparing',
+      });
+    });
   });
 
   it.each(hostileValues())(

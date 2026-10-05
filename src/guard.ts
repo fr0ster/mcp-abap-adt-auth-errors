@@ -1,6 +1,7 @@
 /**
  * Rule 1 held structurally (spec §7, §8.1): `guard`, the one boundary every
- * moment of a provider runs inside, and `relayOutcome`, how a provider hands
+ * moment of a provider runs inside — a throw becomes a refusal, an answer is
+ * classified — and `relayOutcome`, how a provider hands
  * on what a logon target answered without ever returning the target's object.
  *
  * Neither ever throws or rejects: everything that can throw runs inside one
@@ -71,6 +72,14 @@ function quiet(value: unknown): void {
   }
 }
 
+/** The facts of `guard`'s fallback: the operation, and the grant when kept. */
+function unknownFacts(
+  operation: Operation,
+  grant: OAuth2GrantType | undefined,
+): { readonly operation: Operation; readonly grant?: OAuth2GrantType } {
+  return grant === undefined ? { operation } : { operation, grant };
+}
+
 /**
  * Runs one moment of a provider (spec §8.1). `operation` is a value its
  * caller already validated; `grant`, when given, is read inside the
@@ -78,6 +87,13 @@ function quiet(value: unknown): void {
  * `grant`, from `body`, from a thenable `body` answers — becomes
  * `{ ok: false, refusal: classify(thrown, operation, grant) }`, the grant
  * being what was read before the throw (none when `grant` itself threw).
+ * The answer of a body that does not throw is never handed back as it is:
+ * it goes through `classifyOutcome` — `{ ok: true }` answers `OK`, a refusal
+ * this copy minted passes as itself (in a fresh frozen outcome), another
+ * copy's or a forged one is rebuilt without diagnostics, and anything else
+ * (not an outcome, an unrebuildable refusal) answers the fallback built
+ * here: `unknown` with the operation and the kept grant — the refusal a
+ * throw without facts gets.
  * Never rejects. A grant thunk answering a plain native promise gets a
  * no-op rejection handler; one answering a rejecting Promise subclass or a
  * Proxy around a promise (breaking its contract) can still cause an
@@ -93,7 +109,11 @@ export async function guard(
     const candidate = grant?.();
     quiet(candidate);
     if (isGrantType(candidate)) read = candidate;
-    return await body();
+    const answer: unknown = await body();
+    return classifyOutcome(
+      answer,
+      authError.unknown(unknownFacts(operation, read)),
+    );
   } catch (thrown) {
     // Only the two locals: never a property of the provider.
     return freeze({ ok: false, refusal: classify(thrown, operation, read) });
