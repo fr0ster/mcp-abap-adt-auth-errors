@@ -82,9 +82,26 @@ export function readOwn(holder: unknown, key: string): unknown {
 }
 
 /**
+ * An invisible format character: U+200B–U+200F (ZWSP, ZWNJ, ZWJ, LRM, RLM),
+ * U+061C (ALM), U+FEFF (BOM), U+2060–U+2064 (word joiner, invisible
+ * operators), U+180E (Mongolian vowel separator). Each can hide or reorder
+ * what a printed value shows.
+ */
+function isInvisibleFormat(codePoint: number): boolean {
+  return (
+    (codePoint >= 0x200b && codePoint <= 0x200f) ||
+    codePoint === 0x061c ||
+    codePoint === 0xfeff ||
+    (codePoint >= 0x2060 && codePoint <= 0x2064) ||
+    codePoint === 0x180e
+  );
+}
+
+/**
  * A code point neither `LocalPath` nor `DocumentValue` admits: a C0 control,
  * DEL, a C1 control, U+2028 / U+2029, a bidirectional control (U+202A–U+202E,
- * U+2066–U+2069), or a surrogate (only a lone one reaches here).
+ * U+2066–U+2069), an invisible format character, or a surrogate (only a
+ * lone one reaches here).
  */
 function isRefusedCodePoint(codePoint: number): boolean {
   return (
@@ -94,6 +111,7 @@ function isRefusedCodePoint(codePoint: number): boolean {
     codePoint === 0x2029 ||
     (codePoint >= 0x202a && codePoint <= 0x202e) ||
     (codePoint >= 0x2066 && codePoint <= 0x2069) ||
+    isInvisibleFormat(codePoint) ||
     (codePoint >= 0xd800 && codePoint <= 0xdfff)
   );
 }
