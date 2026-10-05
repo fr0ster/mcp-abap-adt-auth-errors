@@ -22,3 +22,15 @@ export function builtFunction(name: string): (value: unknown) => unknown {
   }
   return exported as (value: unknown) => unknown;
 }
+
+/**
+ * One internal module of the built package, required by its `dist/` path:
+ * for a module the builders use but the entry does not export (admission).
+ */
+export function loadBuiltModule(name: string): Record<string, unknown> {
+  const file = resolve(__dirname, `../../dist/${name}.js`);
+  if (!existsSync(file)) {
+    throw new Error(`${file} is missing: run "npm run build" first`);
+  }
+  return require(file) as Record<string, unknown>;
+}
