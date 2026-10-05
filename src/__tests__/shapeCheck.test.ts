@@ -22,6 +22,8 @@ const script = join(repo, 'tools', 'check-provider-shape.mjs');
 const fixtures = join(repo, 'tools', '__fixtures__');
 const fixtureSites = join(fixtures, 'sites');
 const ALL_RULES = '1,2,3,4,5,6,7,8';
+/** The fixtures' base, named by declaration (relative to the fixture root). */
+const FIXTURE_BASE = './src/auth/AuthProviderBase#AuthProviderBase';
 
 jest.setTimeout(120_000);
 
@@ -71,6 +73,8 @@ function fixtureFiles(dir: string): string[] {
 const BREAKING: Readonly<Record<string, readonly [number, number]>> = {
   'src/rule1.ts': [1, 2],
   'src/rule1-structural.ts': [1, 2],
+  'src/impostor/AuthProviderBase.ts': [1, 1],
+  'src/impostor/provider.ts': [1, 1],
   'src/rule2.ts': [2, 9],
   'src/rule3.ts': [3, 1],
   'src/rule4-branded.ts': [4, 1],
@@ -104,6 +108,8 @@ describe('check-provider-shape: the fixtures', () => {
       fixtures,
       '--sites',
       fixtureSites,
+      '--base',
+      FIXTURE_BASE,
     ]);
   });
 
@@ -177,6 +183,8 @@ describe('check-provider-shape: the fixtures', () => {
       fixtures,
       '--sites',
       fixtureSites,
+      '--base',
+      FIXTURE_BASE,
       join(fixtures, 'src', 'rule3.ts'),
       join(fixtures, 'src', 'obeys.ts'),
     ]);
@@ -194,8 +202,13 @@ describe('check-provider-shape: this repository', () => {
     expect(run.status).toBe(0);
   });
 
-  it('is clean under every rule', () => {
-    const run = check(['--rules', ALL_RULES]);
+  it('is clean under every rule (rules 1–3 against the fixtures’ base)', () => {
+    const run = check([
+      '--rules',
+      ALL_RULES,
+      '--base',
+      './tools/__fixtures__/src/auth/AuthProviderBase#AuthProviderBase',
+    ]);
     expect(run.stdout).toBe('');
     expect(run.status).toBe(0);
   });
@@ -216,6 +229,108 @@ describe('check-provider-shape: this repository', () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+});
+
+describe('check-provider-shape: the base, by declaration', () => {
+  it('a same-named local class, in a file of that name, exempts nothing', () => {
+    const lines = check([
+      '--rules',
+      '1,2,3',
+      '--root',
+      fixtures,
+      '--base',
+      FIXTURE_BASE,
+      join(fixtures, 'src', 'impostor', 'AuthProviderBase.ts'),
+      join(fixtures, 'src', 'impostor', 'provider.ts'),
+    ]).findings.map((finding) => finding.line);
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^src\/impostor\/AuthProviderBase\.ts:.*a class implements IAuthProvider; a provider extends AuthProviderBase$/,
+      ),
+      expect.stringMatching(
+        /^src\/impostor\/provider\.ts:.*a class satisfies IAuthProvider without extending AuthProviderBase$/,
+      ),
+    ]);
+  });
+
+  it('the base named is verified: each moment only returns guard(…, () => …, () => …)', () => {
+    const run = check([
+      '--rules',
+      '1',
+      '--root',
+      fixtures,
+      '--base',
+      './bases/AuthProviderBase#AuthProviderBase',
+      join(fixtures, 'bases', 'AuthProviderBase.ts'),
+    ]);
+    expect(run.status).toBe(1);
+    expect(run.findings.map((finding) => finding.line)).toEqual(
+      ['prepare', 'establish', 'authorize', 'rejected'].map((moment) =>
+        expect.stringMatching(
+          new RegExp(
+            `^bases/AuthProviderBase\\.ts:\\d+:\\d+: rule 1: AuthProviderBase\\.${moment} must only return guard\\(`,
+          ),
+        ),
+      ),
+    );
+  });
+
+  it('a provider of the named base is clean; with another base named, it reaches none', () => {
+    const obeys = join(fixtures, 'src', 'obeys.ts');
+    const clean = check([
+      '--rules',
+      '1,2,3',
+      '--root',
+      fixtures,
+      '--base',
+      FIXTURE_BASE,
+      obeys,
+    ]);
+    expect(clean.status).toBe(0);
+    const other = check([
+      '--rules',
+      '1',
+      '--root',
+      fixtures,
+      '--base',
+      './src/impostor/AuthProviderBase#AuthProviderBase',
+      obeys,
+    ]);
+    expect(
+      other.findings.some((finding) => finding.file === 'src/obeys.ts'),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['rules 1–3 without --base', ['--rules', '1']],
+    ['rule 2 without --base', ['--rules', '2']],
+    ['rule 3 without --base', ['--rules', '3']],
+    [
+      'a base without #export',
+      ['--rules', '1', '--base', './src/auth/AuthProviderBase'],
+    ],
+    [
+      'a module that does not resolve',
+      ['--rules', '1', '--base', './src/auth/Nope#AuthProviderBase'],
+    ],
+    [
+      'a package that does not resolve',
+      ['--rules', '1', '--base', '@mcp-abap-adt/nope#AuthProviderBase'],
+    ],
+    [
+      'an export that is not there',
+      ['--rules', '1', '--base', `${FIXTURE_BASE}X`],
+    ],
+    [
+      'an export that is not a class',
+      ['--rules', '1', '--base', '@mcp-abap-adt/interfaces-auth#IAuthProvider'],
+    ],
+  ])('exits 2 on %s', (_label, args) => {
+    const run = check([...args, '--root', fixtures, '--sites', fixtureSites]);
+    expect(run.status).toBe(2);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toMatch(/--base/);
   });
 });
 

@@ -10,6 +10,8 @@
  * `typescript`, which every repository running it has as a devDependency.
  *
  *   node tools/check-provider-shape.mjs --rules 4,5,6
+ *     [--base <module>#AuthProviderBase]
+ *                          the base, by declaration — required by rules 1–3
  *     [--root <dir>]       the repository root (default: the working directory)
  *     [--project <file>]   its tsconfig (default: <root>/tsconfig.json)
  *     [--sites <dir>]      where assertion-sites.json and
@@ -24,12 +26,28 @@
  * usage error, a file given that does not exist, nothing to check, a
  * program that does not type-check (the rules read types, so they are not
  * decided on a broken program), or rules 4 / 5 asked for while the brands of
- * interfaces-auth 6.0.0 or later are not found (they would pass in silence).
+ * interfaces-auth 6.0.0 or later are not found (they would pass in silence),
+ * or rules 1–3 asked for without a `--base` that resolves to a class.
+ *
+ * **The base is named by declaration.** `--base <module>#<export>` names the
+ * repository's `AuthProviderBase`: `<module>` is a path relative to the root
+ * (`./src/auth/AuthProviderBase`, the extension optional) or a package
+ * specifier resolved as the compiler resolves it from the root
+ * (`@mcp-abap-adt/auth-providers`); `<export>` is the class's export name.
+ * A class reaches the base only if a class it extends is that declaration; a
+ * class of the same name elsewhere — in a file of the same name too —
+ * exempts nothing. The base itself is verified under rule 1: each of its
+ * four moments must be one method whose body is only
+ * `return guard(this.#moments.<moment>, () => …, () => …)`, the callee
+ * auth-errors' `guard`. A base read from a declaration file has no bodies:
+ * there only the four methods are required, and the bodies are verified
+ * where the base is written (auth-providers runs rules 1–3 on its source).
  *
  * The rules (§8.2), each selected by its number:
  *   1  a class that implements IAuthProvider, other than AuthProviderBase —
  *      by an `implements` clause, or structurally (its instances satisfy
- *      IAuthProvider) without reaching AuthProviderBase;
+ *      IAuthProvider) without reaching AuthProviderBase; a moment of the
+ *      base itself that does more than delegate to guard;
  *   2  a class reaching AuthProviderBase that declares, or assigns to `this`,
  *      a member named prepare, establish, authorize or rejected (a computed
  *      name folded from its literal type); an assignment of one to `this` or
@@ -96,12 +114,12 @@
  *     under a name the heuristic does not know, axios's `auth: { username,
  *     password }` option (axios writes that Basic header itself).
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 
 const USAGE =
-  'usage: check-provider-shape.mjs --rules <n,…> [--root <dir>] [--project <tsconfig>] [--sites <dir>] [files…]';
+  'usage: check-provider-shape.mjs --rules <n,…> [--base <module>#AuthProviderBase] [--root <dir>] [--project <tsconfig>] [--sites <dir>] [files…]';
 const KNOWN_RULES = new Set([1, 2, 3, 4, 5, 6, 7, 8]);
 const INTERFACES_AUTH = '@mcp-abap-adt/interfaces-auth';
 const AUTH_ERRORS = '@mcp-abap-adt/auth-errors';
@@ -143,6 +161,7 @@ function parseArguments(argv) {
     const arg = argv[i];
     if (
       arg === '--rules' ||
+      arg === '--base' ||
       arg === '--root' ||
       arg === '--project' ||
       arg === '--sites'
@@ -165,8 +184,25 @@ function parseArguments(argv) {
     rules.add(rule);
   }
   const root = resolve(options.root ?? process.cwd());
+  let base;
+  if (options.base !== undefined) {
+    const at = options.base.lastIndexOf('#');
+    if (at <= 0 || at === options.base.length - 1) {
+      fail(`--base must be <module>#<export>: ${options.base}`);
+    }
+    base = {
+      spec: options.base,
+      module: options.base.slice(0, at),
+      name: options.base.slice(at + 1),
+    };
+  } else if (rules.has(1) || rules.has(2) || rules.has(3)) {
+    fail(
+      'rules 1, 2 and 3 need --base <module>#AuthProviderBase: the base, by declaration',
+    );
+  }
   return {
     rules,
+    base,
     root,
     project: resolve(options.project ?? join(root, 'tsconfig.json')),
     sites: resolve(options.sites ?? join(root, 'tools')),
@@ -253,6 +289,16 @@ function loadProgram(options) {
     fail(`no file to check under ${join(options.root, 'src')}`);
   }
   const roots = [...checked];
+  let baseFile;
+  if (options.base !== undefined) {
+    baseFile = resolveBase(options.base.module, options.root, compilerOptions);
+    if (baseFile === undefined) {
+      fail(
+        `--base: ${options.base.module} does not resolve from ${options.root}`,
+      );
+    }
+    roots.push(baseFile);
+  }
   const contract = resolveModule(
     INTERFACES_AUTH,
     options.root,
@@ -284,7 +330,25 @@ function loadProgram(options) {
   if (sources.length !== checked.length)
     fail('a file to check is not in the program');
   if (options.rules.has(4) || options.rules.has(5)) requireBrands(program);
-  return { program, sources, contract };
+  return { program, sources, contract, baseFile };
+}
+
+/** `--base`'s module: a path relative to the root, or a package specifier. */
+function resolveBase(module, root, compilerOptions) {
+  if (module.startsWith('./') || module.startsWith('../')) {
+    const plain = resolve(root, module);
+    const stem = plain.replace(/\.[cm]?js$/, '');
+    const candidates = [
+      plain,
+      ...['.ts', '.tsx', '.mts', '.cts', '.d.ts'].map((ext) => stem + ext),
+      join(plain, 'index.ts'),
+      join(plain, 'index.d.ts'),
+    ];
+    return candidates.find(
+      (file) => existsSync(file) && statSync(file).isFile(),
+    );
+  }
+  return resolveModule(module, root, compilerOptions);
 }
 
 /**
@@ -392,7 +456,7 @@ function isAuthErrorsModule(file, base) {
 
 // ---------------------------------------------------------------- the checker
 
-function createRules(program, contractFile, options, sites) {
+function createRules(program, contractFile, baseFile, options, sites) {
   const checker = program.getTypeChecker();
   const findings = [];
 
@@ -435,6 +499,28 @@ function createRules(program, contractFile, options, sites) {
     fail(
       `rules 1 and 3 need ${INTERFACES_AUTH}, which does not resolve from ${options.root}`,
     );
+  }
+
+  // The base named by --base, by declaration (rules 1–3).
+  const baseDeclarations = new Set();
+  if (baseFile !== undefined) {
+    const { spec, name } = options.base;
+    const source = program.getSourceFile(baseFile);
+    const moduleSymbol = source && checker.getSymbolAtLocation(source);
+    if (moduleSymbol === undefined) fail(`--base: ${spec} is not a module`);
+    let exported = checker
+      .getExportsOfModule(moduleSymbol)
+      .find((symbol) => symbol.name === name);
+    if (exported === undefined) fail(`--base: ${spec} exports no ${name}`);
+    if (exported.flags & ts.SymbolFlags.Alias) {
+      exported = checker.getAliasedSymbol(exported);
+    }
+    for (const declaration of exported.declarations ?? []) {
+      if (ts.isClassDeclaration(declaration)) baseDeclarations.add(declaration);
+    }
+    if (baseDeclarations.size === 0) {
+      fail(`--base: ${name} of ${spec} is not a class`);
+    }
   }
 
   function declaredIn(symbol, name) {
@@ -613,14 +699,7 @@ function createRules(program, contractFile, options, sites) {
   // ------------------------------------------------------------ classes
 
   function isBaseClass(declaration) {
-    if (
-      !(ts.isClassDeclaration(declaration) || ts.isClassExpression(declaration))
-    )
-      return false;
-    if (declaration.name?.text !== BASE) return false;
-    return /(^|[\\/])AuthProviderBase\.(d\.)?[cm]?ts$/.test(
-      declaration.getSourceFile().fileName,
-    );
+    return baseDeclarations.has(declaration);
   }
 
   /** Whether the class declared by `node` has AuthProviderBase among its ancestors. */
@@ -1353,7 +1432,70 @@ function createRules(program, contractFile, options, sites) {
     ts.forEachChild(node, visit);
   }
 
-  return { visit, findings };
+  // ------------------------------------------------------------ the base
+
+  /** `this.#moments.<moment>`, through parentheses. */
+  function isMomentsRead(node, moment) {
+    const inner = skipParentheses(node);
+    return (
+      ts.isPropertyAccessExpression(inner) &&
+      ts.isIdentifier(inner.name) &&
+      inner.name.text === moment &&
+      ts.isPropertyAccessExpression(inner.expression) &&
+      inner.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+      ts.isPrivateIdentifier(inner.expression.name) &&
+      inner.expression.name.text === '#moments'
+    );
+  }
+
+  /** A body that is only `return guard(this.#moments.<m>, () => …, () => …)`. */
+  function delegatesToGuard(body, moment) {
+    if (body.statements.length !== 1) return false;
+    const [statement] = body.statements;
+    if (!ts.isReturnStatement(statement) || statement.expression === undefined)
+      return false;
+    const call = skipParentheses(statement.expression);
+    if (!ts.isCallExpression(call)) return false;
+    const args = call.arguments;
+    return (
+      args.length === 3 &&
+      !args.some(ts.isSpreadElement) &&
+      isMomentsRead(args[0], moment) &&
+      isFunctionExpression(args[1]) &&
+      isFunctionExpression(args[2]) &&
+      declarationsOfCallable(call.expression).some(isGuardDeclaration)
+    );
+  }
+
+  /** Rule 1 on the base itself: each moment one method delegating to guard. */
+  function verifyBase() {
+    for (const declaration of baseDeclarations) {
+      const declarationFile = declaration.getSourceFile().isDeclarationFile;
+      for (const moment of MOMENTS) {
+        const members = declaration.members.filter(
+          (member) => memberName(member.name) === moment,
+        );
+        const [method] = members;
+        const what = `${BASE}.${moment} must only return guard(this.#moments.${moment}, () => …, () => …)`;
+        if (
+          members.length !== 1 ||
+          method === undefined ||
+          !ts.isMethodDeclaration(method) ||
+          isAbstract(method)
+        ) {
+          report(method ?? declaration.name ?? declaration, 1, what);
+          continue;
+        }
+        if (method.body === undefined) {
+          if (!declarationFile) report(method, 1, what);
+          continue;
+        }
+        if (!delegatesToGuard(method.body, moment)) report(method, 1, what);
+      }
+    }
+  }
+
+  return { visit, verifyBase, findings };
 }
 
 // ---------------------------------------------------------------- main
@@ -1370,8 +1512,16 @@ const sites = {
     'field',
   ]),
 };
-const { program, sources, contract } = loadProgram(options);
-const { visit, findings } = createRules(program, contract, options, sites);
+const { program, sources, contract, baseFile } = loadProgram(options);
+const { visit, verifyBase, findings } = createRules(
+  program,
+  contract,
+  baseFile,
+  options,
+  sites,
+);
+if (options.rules.has(1) || options.rules.has(2) || options.rules.has(3))
+  verifyBase();
 for (const source of sources) visit(source);
 findings.sort((a, b) =>
   a.file === b.file
