@@ -97,12 +97,73 @@ export interface SharedAttempt<T> {
 
 /** The failure of an aborted waiter: `interactive-login` `aborted`. */
 function abortedFailure(): AuthProviderFailure {
-  return new AuthProviderFailure(
-    authError['interactive-login']({ outcome: 'aborted' }),
+  return withoutFrames(
+    () =>
+      new AuthProviderFailure(
+        authError['interactive-login']({ outcome: 'aborted' }),
+      ),
+  );
+}
+
+/**
+ * `make()` with no stack frames captured. An error built while a signal
+ * dispatches its abort would otherwise hold the dispatch's frames — their
+ * functions and receivers, the consumer's signal among them — for as long
+ * as the error lives (a waiter's rejection, an attempt's `signal.reason`).
+ * When `Error.stackTraceLimit` cannot be set, frames are captured as usual.
+ */
+function withoutFrames<V>(make: () => V): V {
+  let limit: unknown;
+  let set = false;
+  try {
+    limit = Error.stackTraceLimit;
+    Error.stackTraceLimit = 0;
+    set = true;
+  } catch {
+    // A frozen Error: build as usual.
+  }
+  try {
+    return make();
+  } finally {
+    if (set) {
+      try {
+        Error.stackTraceLimit = limit as number;
+      } catch {
+        // Nothing to restore.
+      }
+    }
+  }
+}
+
+/** The reason an attempt's or a moment's signal aborts with: no frames. */
+function abortReason(): DOMException {
+  return withoutFrames(
+    () => new DOMException('This operation was aborted', 'AbortError'),
   );
 }
 
 const ignore = (): void => undefined;
+
+/**
+ * `() => fn(a, b)`, built here so that the closure holds `fn`, `a` and `b`
+ * only — never a variable of the caller's scope (V8 shares one context
+ * among a scope's closures, so a closure built there would keep, say, a
+ * consumer's signal alive through a captured stack frame).
+ */
+function bound<A, B>(fn: (a: A, b: B) => void, a: A, b: B): () => void {
+  return () => fn(a, b);
+}
+
+/** A signal's listener removal, built apart for the same reason. */
+function remover(signal: AbortSignal, listener: () => void): () => void {
+  return () => {
+    try {
+      signal.removeEventListener('abort', listener);
+    } catch {
+      // Ignored: the member is gone whatever the signal does.
+    }
+  };
+}
 
 /** `promise`, settled either way, as a promise that never rejects. */
 function quietly(promise: Promise<unknown>): Promise<void> {
@@ -207,6 +268,16 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   let active: Attempt<T> | undefined;
   let previousDrain: Promise<void> = Promise.resolve();
 
+  /**
+   * The waiter's listener removal, run once and then dropped: a settled
+   * waiter keeps no reference to its signal.
+   */
+  function detachOnce(waiter: Waiter<T>): void {
+    const detach = waiter.detach;
+    waiter.detach = ignore;
+    detach();
+  }
+
   /** The attempt ends; it leaves the slot if the slot still holds it. */
   function leave(attempt: Attempt<T>): void {
     attempt.ended = true;
@@ -227,7 +298,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     leave(attempt);
     const waiters = attempt.waiters.splice(0);
     for (const waiter of waiters) waiter.done = true;
-    for (const waiter of waiters) waiter.detach();
+    for (const waiter of waiters) detachOnce(waiter);
     for (const waiter of waiters) answer(waiter);
   }
 
@@ -244,9 +315,9 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     if (index >= 0) attempt.waiters.splice(index, 1);
     const last = !attempt.ended && attempt.waiters.length === 0;
     if (last) leave(attempt);
-    waiter.detach();
+    detachOnce(waiter);
     waiter.reject(abortedFailure());
-    if (last) attempt.controller.abort();
+    if (last) attempt.controller.abort(abortReason());
   }
 
   function exclusiveOf(attempt: Attempt<T>): AttemptContext['exclusive'] {
@@ -313,15 +384,12 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     waiter: Waiter<T>,
     signal: AbortSignal,
   ): void {
-    const onAbort = (): void => abandon(attempt, waiter);
+    // No closure is built in this scope (see `bound`): the listener holds
+    // the attempt and the waiter, the removal the signal and the listener.
+    const onAbort = bound(abandon, attempt, waiter);
+    const removal = remover(signal, onAbort);
     // The cleanup is in place before the foreign registration runs.
-    waiter.detach = () => {
-      try {
-        signal.removeEventListener('abort', onAbort);
-      } catch {
-        // Ignored: the waiter is settled whatever the signal does.
-      }
-    };
+    waiter.detach = removal;
     let threw = false;
     try {
       signal.addEventListener('abort', onAbort, { once: true });
@@ -332,7 +400,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     // removal then ran before the registration installed the listener, so
     // remove it once more, with no further change.
     if (waiter.done) {
-      waiter.detach();
+      removal();
       return;
     }
     if (threw) {
@@ -411,8 +479,9 @@ export interface Parties {
 }
 
 interface Party {
-  readonly signal: AbortSignal;
-  readonly onAbort: () => void;
+  /** Dropped once the party is released: a released party holds no signal. */
+  signal: AbortSignal | undefined;
+  onAbort: () => void;
   released: boolean;
 }
 
@@ -421,6 +490,24 @@ interface Moment {
   /** Its parties not yet aborted nor detached. */
   readonly members: Party[];
   released: boolean;
+}
+
+/**
+ * A moment handle's `release`: the moment and the party set's `end` are
+ * held until the first call, then dropped, so a kept handle keeps neither.
+ */
+function releaser(moment: Moment, end: (moment: Moment) => void): () => void {
+  // Both dropped at the first call: `end` closes over the whole party set.
+  let held: { moment: Moment; end: (moment: Moment) => void } | undefined = {
+    moment,
+    end,
+  };
+  return () => {
+    const current = held;
+    held = undefined;
+    if (current !== undefined && !current.moment.released)
+      current.end(current.moment);
+  };
 }
 
 /** Removes `item` from `list`, if there. */
@@ -445,6 +532,8 @@ export function createParties(): Parties {
   function endMoment(moment: Moment): void {
     moment.released = true;
     remove(moments, moment);
+    // An ended moment keeps no party (a kept handle must not keep them).
+    moment.members.length = 0;
   }
 
   /**
@@ -465,24 +554,26 @@ export function createParties(): Parties {
         emptied.push(moment);
       }
     }
-    try {
-      party.signal.removeEventListener('abort', party.onAbort);
-    } catch {
-      // Ignored: the party is gone whatever the signal does.
-    }
-    for (const moment of emptied) moment.controller.abort();
+    const signal = party.signal;
+    party.signal = undefined;
+    if (signal !== undefined) remover(signal, party.onAbort)();
+    party.onAbort = ignore;
+    for (const moment of emptied) moment.controller.abort(abortReason());
   }
 
   function attach(signal: AbortSignal): () => void {
     if (readSignal(signal) !== 'live') return ignore;
-    const existing = parties.find((party) => party.signal === signal);
+    // No closure is built in this scope (see `bound`), so none holds the
+    // signal beside the party.
+    let existing: Party | undefined;
+    for (const candidate of parties) {
+      if (candidate.signal === signal) existing = candidate;
+    }
     // An explicit detach of the same party: not a cancellation.
-    if (existing !== undefined) return () => release(existing, false);
-    const party: Party = {
-      signal,
-      onAbort: () => release(party, true),
-      released: false,
-    };
+    if (existing !== undefined) return bound(release, existing, false);
+    const party: Party = { signal, onAbort: ignore, released: false };
+    party.onAbort = bound(release, party, true);
+    const listener = party.onAbort;
     parties.push(party);
     for (const moment of moments) moment.members.push(party);
     // A registration that does not end cleanly — it throws, or the signal is
@@ -491,7 +582,7 @@ export function createParties(): Parties {
     // member is aborted (the registration may have aborted the others).
     let registered = false;
     try {
-      signal.addEventListener('abort', party.onAbort, { once: true });
+      signal.addEventListener('abort', listener, { once: true });
       registered = true;
     } catch {
       registered = false;
@@ -500,11 +591,7 @@ export function createParties(): Parties {
     // abort): its removal ran before the listener was installed, so remove
     // it once more, with no further membership change.
     if (party.released) {
-      try {
-        signal.removeEventListener('abort', party.onAbort);
-      } catch {
-        // Ignored: the party is gone whatever the signal does.
-      }
+      remover(signal, listener)();
       return ignore;
     }
     if (!registered || readSignal(signal) !== 'live') {
@@ -512,7 +599,7 @@ export function createParties(): Parties {
       return ignore;
     }
     // The one removal that is not a cancellation: an explicit detach.
-    return () => release(party, false);
+    return bound(release, party, false);
   }
 
   function waiterSignal(): MomentWaiter | undefined {
@@ -525,9 +612,7 @@ export function createParties(): Parties {
     moments.push(moment);
     return Object.freeze({
       signal: moment.controller.signal,
-      release: () => {
-        if (!moment.released) endMoment(moment);
-      },
+      release: releaser(moment, endMoment),
     });
   }
 

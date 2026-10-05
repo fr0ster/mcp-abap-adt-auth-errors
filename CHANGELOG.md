@@ -183,7 +183,14 @@ README.md documents the whole surface.
   abort. A member (waiter or party) that leaves while its own registration
   runs — a re-entrant detach, abort or eager listener call — gets one more
   `removeEventListener` once the registration returns or throws, with no
-  further membership change, so no listener outlives it. No timer; what an attempt commits stays with the caller.
+  further membership change, so no listener outlives it. A finished member
+  keeps nothing of the consumer's: a released party drops its signal, an
+  ended moment its parties, a released `MomentWaiter` its moment and the
+  party set, a settled waiter its listener removal; an aborted waiter's
+  failure and an aborted attempt's or moment's `signal.reason` are built
+  without stack frames (which would hold the dispatching signal). A kept
+  handle — a `MomentWaiter`, a `detach`, an `AttemptContext`, a waiter's
+  promise — lets the signal be collected. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
