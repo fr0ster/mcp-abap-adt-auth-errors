@@ -538,3 +538,82 @@ describe('relayOutcome', () => {
     });
   });
 });
+
+describe('a rejecting native promise is never left unhandled', () => {
+  /** Runs `act`, waits a macrotask, answers the unhandled rejections seen. */
+  async function unhandledDuring(act: () => Promise<void>): Promise<unknown[]> {
+    const seen: unknown[] = [];
+    const listener = (reason: unknown) => {
+      seen.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    try {
+      await act();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } finally {
+      process.off('unhandledRejection', listener);
+    }
+    return seen;
+  }
+
+  it('relayOutcome: a target answering a rejecting promise gets the fallback, thrown false, no unhandled rejection', async () => {
+    let relayed: Relayed | undefined;
+    const seen = await unhandledDuring(async () => {
+      relayed = relayOutcome(
+        () => Promise.reject(new Error('sk-async-target')),
+        'tls-material',
+        'establishing',
+      );
+    });
+    expect(seen).toStrictEqual([]);
+    expect(relayed?.thrown).toBe(false);
+    expect(
+      shape(refusalOf(relayed?.outcome ?? (OK as AuthOutcome))),
+    ).toStrictEqual(
+      shape(
+        authError['logon-target']({ wire: 'unknown', refused: 'tls-material' }),
+      ),
+    );
+  });
+
+  it('relayOutcome: an async target that throws, likewise', async () => {
+    const seen = await unhandledDuring(async () => {
+      relayOutcome(
+        async () => {
+          throw new Error('sk-async-target');
+        },
+        'logon-parameters',
+        'establishing',
+      );
+    });
+    expect(seen).toStrictEqual([]);
+  });
+
+  it('relayOutcome: a foreign thenable’s `then` is never called', () => {
+    let called = 0;
+    const thenable = Object.defineProperty({}, 'then', {
+      value: () => {
+        called += 1;
+      },
+    });
+    relayOutcome(() => thenable, 'tls-material', 'establishing');
+    expect(called).toBe(0);
+  });
+
+  it('guard: a grant thunk answering a rejecting promise is ignored, no unhandled rejection', async () => {
+    let outcome: AuthOutcome | undefined;
+    const seen = await unhandledDuring(async () => {
+      outcome = await guard(
+        'refresh',
+        () => {
+          throw new Error('sk-x');
+        },
+        () => Promise.reject(new Error('sk-async-grant')),
+      );
+    });
+    expect(seen).toStrictEqual([]);
+    expect(refusalOf(outcome ?? (OK as AuthOutcome)).facts).toStrictEqual({
+      operation: 'refresh',
+    });
+  });
+});

@@ -7,6 +7,8 @@
  * `try`, and the `catch` reads only locals this module set, then `classify`,
  * which is total.
  */
+
+import { isPromise } from 'node:util/types';
 import type {
   AuthOutcome,
   LogonTargetRefusal,
@@ -18,6 +20,27 @@ import { classify, classifyOutcome } from './classify';
 import { isGrantType } from './factCheck';
 
 const freeze = Object.freeze;
+const promiseThen: (
+  promise: Promise<unknown>,
+  onFulfilled: undefined,
+  onRejected: () => void,
+) => Promise<unknown> = Function.prototype.call.bind(Promise.prototype.then);
+const ignore = (): void => {};
+
+/**
+ * A native promise answered where an outcome or a grant was expected is not
+ * awaited, but its rejection must not go unhandled: under Node's default an
+ * unhandled rejection ends the process and prints the foreign value. Only a
+ * native promise gets the handler, through the `then` captured at load —
+ * a foreign thenable's `then` is never called. Never throws.
+ */
+function quiet(value: unknown): void {
+  try {
+    if (isPromise(value)) promiseThen(value, undefined, ignore);
+  } catch {
+    // A tampered promise (a throwing `constructor` getter): nothing to do.
+  }
+}
 
 /**
  * Runs one moment of a provider (spec §8.1). `operation` is a value its
@@ -36,6 +59,7 @@ export async function guard(
   let read: OAuth2GrantType | undefined;
   try {
     const candidate = grant?.();
+    quiet(candidate);
     if (isGrantType(candidate)) read = candidate;
     return await body();
   } catch (thrown) {
@@ -75,6 +99,7 @@ export function relayOutcome(
       thrown: true,
     });
   }
+  quiet(answered);
   // Built by this copy: classifyOutcome hands the fallback back unchecked.
   const fallback = authError['logon-target']({ wire: 'unknown', refused });
   return freeze({
