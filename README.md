@@ -3,7 +3,7 @@
 
 The runtime half of the `@mcp-abap-adt` authentication error contract.
 
-`@mcp-abap-adt/interfaces-auth` (5.0.0 and later) declares the types: every
+`@mcp-abap-adt/interfaces-auth` (6.0.0 and later) declares the types: every
 failure of authentication is an `IAuthProviderError` — a `kind` from a closed
 list, `facts` drawn only from allowlists and integer ranges, the default
 `reason` / `hint` words, and, for three kinds, `diagnostics` admitted one field
@@ -51,7 +51,7 @@ async function prepare(): Promise<AuthOutcome> {
 npm install @mcp-abap-adt/auth-errors
 ```
 
-It depends on `@mcp-abap-adt/interfaces-auth` `^5.0.0` and nothing else.
+It depends on `@mcp-abap-adt/interfaces-auth` `^6.0.0` and nothing else.
 Node.js 22, 24 or 26.
 
 ## Development

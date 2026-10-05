@@ -683,6 +683,18 @@ describe('F1: every fact value is read own and checked, in builders and render',
       { rule: 'expired', check: 'notOnOrAfter' },
     ],
     [
+      'aborted strategy not a strategy',
+      'interactive-login',
+      { outcome: 'aborted', strategy: 'device' },
+      { outcome: 'aborted' },
+    ],
+    [
+      'failed oauthError unregistered',
+      'interactive-login',
+      { outcome: 'failed', status: 400, oauthError: 'MARKER' },
+      { outcome: 'failed', status: 400 },
+    ],
+    [
       'ignoredCallbacks negative',
       'interactive-login',
       { outcome: 'aborted', ignoredCallbacks: -1 },
@@ -945,6 +957,42 @@ describe('the branded makers in facts', () => {
     expect(aborted.facts).toStrictEqual({
       outcome: 'aborted',
       ignoredCallbacks: 2,
+    });
+  });
+
+  it('aborted keeps its strategy, failed its registered oauthError, in a fixed order', () => {
+    const aborted = authError['interactive-login']({
+      ignoredCallbacks: count(2),
+      strategy: 'browser',
+      outcome: 'aborted',
+    });
+    expect(aborted.facts).toStrictEqual({
+      outcome: 'aborted',
+      strategy: 'browser',
+      ignoredCallbacks: 2,
+    });
+    expect(Object.keys(aborted.facts)).toStrictEqual([
+      'outcome',
+      'strategy',
+      'ignoredCallbacks',
+    ]);
+    const failed = authError['interactive-login']({
+      oauthError: 'invalid_grant',
+      status: httpStatus(400),
+      code: 'EPROTO',
+      outcome: 'failed',
+    });
+    expect(Object.keys(failed.facts)).toStrictEqual([
+      'outcome',
+      'code',
+      'status',
+      'oauthError',
+    ]);
+    expect(failed.facts).toStrictEqual({
+      outcome: 'failed',
+      code: 'EPROTO',
+      status: 400,
+      oauthError: 'invalid_grant',
     });
   });
 });

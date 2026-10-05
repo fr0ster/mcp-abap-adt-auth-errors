@@ -285,6 +285,54 @@ describe('classify — step 3: structural rebuild', () => {
     });
   });
 
+  it.each([
+    [
+      'aborted, manual',
+      { outcome: 'aborted', strategy: 'manual', ignoredCallbacks: 2 },
+      { outcome: 'aborted', strategy: 'manual', ignoredCallbacks: 2 },
+      'the manual login was aborted',
+    ],
+    [
+      'aborted, browser',
+      { outcome: 'aborted', strategy: 'browser' },
+      { outcome: 'aborted', strategy: 'browser' },
+      'the browser login was aborted',
+    ],
+    [
+      'aborted, a strategy out of its set',
+      { outcome: 'aborted', strategy: 'device', ignoredCallbacks: 2 },
+      { outcome: 'aborted', ignoredCallbacks: 2 },
+      'the browser login was aborted; 2 incomplete request(s) reached /callback and were ignored',
+    ],
+    [
+      'failed, a registered oauthError',
+      { outcome: 'failed', status: 400, oauthError: 'invalid_grant' },
+      { outcome: 'failed', status: 400, oauthError: 'invalid_grant' },
+      'the browser login failed (HTTP 400, invalid_grant)',
+    ],
+    [
+      'failed, an unregistered oauthError',
+      { outcome: 'failed', status: 400, oauthError: 'sk-evil-code' },
+      { outcome: 'failed', status: 400 },
+      'the browser login failed (HTTP 400)',
+    ],
+  ])(
+    'rebuilds a foreign interactive-login (%s)',
+    (_name, facts, kept, reason) => {
+      for (const value of [
+        { kind: 'interactive-login', facts, reason: 'sk-forged' },
+        { error: { kind: 'interactive-login', facts, reason: 'sk-forged' } },
+      ]) {
+        const result = classify(value, 'refresh');
+        expect(isMinted(result)).toBe(true);
+        expect(result.kind).toBe('interactive-login');
+        expect(result.facts).toStrictEqual(kept);
+        expect(result.reason).toBe(reason);
+        expectNoMarker(result, 'sk-');
+      }
+    },
+  );
+
   it('keeps only the declared keys of facts and drops diagnostics (index-signature limit, §13 item 3)', () => {
     const facts: { [key: string]: string } = {
       rule: 'untrusted-issuer',

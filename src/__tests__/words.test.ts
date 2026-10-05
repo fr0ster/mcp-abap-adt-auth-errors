@@ -573,6 +573,34 @@ const VERBATIM: readonly (readonly [
     undefined,
   ],
   [
+    'K4',
+    'interactive-login',
+    { outcome: 'aborted' },
+    'the browser login was aborted',
+    undefined,
+  ],
+  [
+    'K4 browser',
+    'interactive-login',
+    { outcome: 'aborted', strategy: 'browser' },
+    'the browser login was aborted',
+    undefined,
+  ],
+  [
+    'K4 browser, ignored callbacks',
+    'interactive-login',
+    { outcome: 'aborted', strategy: 'browser', ignoredCallbacks: count(2) },
+    'the browser login was aborted; 2 incomplete request(s) reached /callback and were ignored',
+    undefined,
+  ],
+  [
+    'K4 manual',
+    'interactive-login',
+    { outcome: 'aborted', strategy: 'manual' },
+    'the manual login was aborted',
+    undefined,
+  ],
+  [
     'K11',
     'interactive-login',
     { outcome: 'failed' },
@@ -598,6 +626,39 @@ const VERBATIM: readonly (readonly [
     'interactive-login',
     { outcome: 'failed', status: httpStatus(502), code: 'EPROTO' },
     'the browser login failed (HTTP 502, EPROTO)',
+    'complete the login, or abort it',
+  ],
+  [
+    'K11 oauthError',
+    'interactive-login',
+    { outcome: 'failed', oauthError: 'access_denied' },
+    'the browser login failed (unknown error, access_denied)',
+    'complete the login, or abort it',
+  ],
+  [
+    'K11 oauthError and code',
+    'interactive-login',
+    { outcome: 'failed', oauthError: 'access_denied', code: 'ECONNRESET' },
+    'the browser login failed (unknown error, access_denied, ECONNRESET)',
+    'complete the login, or abort it',
+  ],
+  [
+    'K11 status and oauthError',
+    'interactive-login',
+    { outcome: 'failed', status: httpStatus(400), oauthError: 'invalid_grant' },
+    'the browser login failed (HTTP 400, invalid_grant)',
+    'complete the login, or abort it',
+  ],
+  [
+    'K11 status, oauthError and code',
+    'interactive-login',
+    {
+      outcome: 'failed',
+      status: httpStatus(400),
+      oauthError: 'invalid_grant',
+      code: 'EPROTO',
+    },
+    'the browser login failed (HTTP 400, invalid_grant, EPROTO)',
     'complete the login, or abort it',
   ],
   [
@@ -1032,6 +1093,45 @@ describe('interactive-login words', () => {
     ).toBe('the browser login was aborted');
   });
 
+  it('aborted, manual: its own sentence, never the callback tally', () => {
+    expect(
+      build('interactive-login', {
+        outcome: 'aborted',
+        strategy: 'manual',
+        ignoredCallbacks: count(3),
+      }).reason,
+    ).toBe('the manual login was aborted');
+  });
+
+  it('aborted: a strategy out of its set is dropped, the words are those without it', () => {
+    for (const strategy of ['device', 'Manual', 7, null]) {
+      const error = build('interactive-login', {
+        outcome: 'aborted',
+        strategy,
+        ignoredCallbacks: count(3),
+      });
+      expect(error.facts).toStrictEqual({
+        outcome: 'aborted',
+        ignoredCallbacks: 3,
+      });
+      expect(error.reason).toBe(
+        'the browser login was aborted; 3 incomplete request(s) reached /callback and were ignored',
+      );
+    }
+  });
+
+  it('failed: an unregistered oauthError is dropped, the words are those without it', () => {
+    for (const oauthError of ['sk-made-up', 'ACCESS_DENIED', 401, null]) {
+      const error = build('interactive-login', {
+        outcome: 'failed',
+        status: httpStatus(400),
+        oauthError,
+      });
+      expect(error.facts).toStrictEqual({ outcome: 'failed', status: 400 });
+      expect(error.reason).toBe('the browser login failed (HTTP 400)');
+    }
+  });
+
   it('browser-launch-failed, with and without a code', () => {
     const plain = build('interactive-login', {
       outcome: 'browser-launch-failed',
@@ -1066,9 +1166,11 @@ describe('interactive-login words', () => {
       }
       if (outcome === 'aborted') {
         variants.push({ outcome, ignoredCallbacks: count(4) });
+        variants.push({ outcome, strategy: 'manual' });
       }
       if (outcome === 'failed') {
         variants.push({ outcome, status: httpStatus(504), code: 'EPROTO' });
+        variants.push({ outcome, oauthError: 'access_denied' });
       }
       for (const facts of variants) {
         const error = build('interactive-login', facts);

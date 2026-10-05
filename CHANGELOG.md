@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dependencies
+
+- `@mcp-abap-adt/interfaces-auth` `^6.0.0` — the only dependency, resolved
+  from the registry. 6.0.0 adds two optional facts to `interactive-login`:
+  `strategy` on outcome `aborted`, `oauthError` on outcome `failed`.
+
 ### Added
 
 - The package scaffold: build, type check (tests and type tests included),
@@ -14,11 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release workflow on a `v*.*.*` tag.
 - `OK` — the one success outcome, `{ ok: true }`, frozen, typed as the
   `{ ok: true }` member of `AuthOutcome` from
-  `@mcp-abap-adt/interfaces-auth` 5.0.0.
+  `@mcp-abap-adt/interfaces-auth` 6.0.0.
 - `httpStatus()`, `count()`, `port()` — the branded-integer makers: a finite
   integer inside 100–599, 0–1 000 000, 0–65 535, read without coercion,
   comes back as `HttpStatus`, `Count`, `Port`; anything else is `undefined`.
-- One membership guard per allowlist array of `interfaces-auth` 5.0.0
+- One membership guard per allowlist array of `interfaces-auth` 6.0.0
   (`isSystemCode`, `isTlsFailureCode`, `isOAuthErrorCode`, `isRfcKey`,
   `isConfigField`, `isAssertionRule`, `isOperation`, … — 34 in all), each
   narrowing `unknown` to the array's union. The sets behind them are
@@ -52,6 +58,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build does not know (`constructor` and `toString` included), or a
   required fact that is missing.
   No word mentions a login timeout.
+  `interactive-login` `aborted` with `strategy: 'browser'` or no strategy
+  reads `the browser login was aborted`, with `; <k> incomplete request(s)
+  reached /callback and were ignored` when `ignoredCallbacks` is above 0;
+  with `strategy: 'manual'` it reads `the manual login was aborted`, never
+  with that clause. `failed` reads `the browser login failed (HTTP <n>[,
+  <oauthError>][, <code>])`, or `(unknown error[, <oauthError>][, <code>])`
+  without a status — the registered OAuth code where today's words put it.
+  A `strategy` outside `browser` / `manual` and an unregistered `oauthError`
+  are dropped, and the words are those without them.
 - `blamesCredential(error)` — whether an error blames the credential:
   `credential-refused` and `renewal-unchanged`; `snc` `no-credential`, and
   `logon-refused` with `RFC_LOGON_FAILURE`; `connection`

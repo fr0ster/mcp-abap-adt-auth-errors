@@ -7,6 +7,7 @@
 import type {
   AssertionRule,
   AuthProviderErrorOf,
+  HttpStatus,
   IAuthProviderError,
   SamlAssertionError,
   SncError,
@@ -156,3 +157,27 @@ export function minted(value: unknown): IAuthProviderError | undefined {
   const error: IAuthProviderError = value;
   return error;
 }
+
+// interactive-login, interfaces-auth 6.0.0: aborted's strategy, failed's oauthError
+declare const status400: HttpStatus;
+authError['interactive-login']({ outcome: 'aborted', strategy: 'manual' }); // ok
+authError['interactive-login']({
+  outcome: 'failed',
+  status: status400,
+  oauthError: 'invalid_grant',
+}); // ok
+authError['interactive-login']({
+  outcome: 'aborted',
+  // @ts-expect-error the strategy set is browser | manual
+  strategy: 'device',
+});
+authError['interactive-login']({
+  outcome: 'aborted',
+  // @ts-expect-error aborted carries no oauthError
+  oauthError: 'access_denied',
+});
+authError['interactive-login']({
+  outcome: 'failed',
+  // @ts-expect-error a registered OAuth error code only
+  oauthError: 'made_up_code',
+});

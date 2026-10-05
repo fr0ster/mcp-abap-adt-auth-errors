@@ -512,6 +512,9 @@ function interactiveLoginWords(
         `Port ${required(facts.port)} is already in use. Please specify a different port or free the port.`,
       );
     case 'aborted': {
+      if (facts.strategy === 'manual') {
+        return say('the manual login was aborted');
+      }
       const ignored: Count | undefined = facts.ignoredCallbacks;
       return say(
         ignored !== undefined && ignored > 0
@@ -564,7 +567,7 @@ function interactiveLoginWords(
       return say('showing the device code failed');
     case 'failed':
       return say(
-        `the browser login failed (${unknownClause(facts.status, undefined, facts.code)})`,
+        `the browser login failed (${unknownClause(facts.status, facts.oauthError, facts.code)})`,
         'complete the login, or abort it',
       );
     default:

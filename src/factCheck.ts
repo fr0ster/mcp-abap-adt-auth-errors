@@ -21,7 +21,7 @@
  * - A `count` of a "carries N" rule, and of a candidate with several
  *   SubjectConfirmationData, must be at least 2; otherwise it is dropped.
  *
- * `interfaces-auth` 5.0.0 exports no allowlist array of grant types, so the
+ * `interfaces-auth` 6.0.0 exports no allowlist array of grant types, so the
  * grant guard is built here from its seven `AUTH_TYPE_*` constants, checked
  * against `OAuth2GrantType` by a mapped type.
  */
@@ -238,6 +238,7 @@ function interactiveLogin(input: object, out: Out): void {
       need(out, input, 'port', port);
       return;
     case 'aborted':
+      may(out, input, 'strategy', by(isInteractiveLoginStrategy));
       may(out, input, 'ignoredCallbacks', count);
       return;
     case 'disposed':
@@ -252,6 +253,7 @@ function interactiveLogin(input: object, out: Out): void {
     case 'failed':
       may(out, input, 'code', systemCode);
       may(out, input, 'status', httpStatus);
+      may(out, input, 'oauthError', oauthError);
       return;
     default:
       return;

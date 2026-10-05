@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 `@mcp-abap-adt/auth-errors` — the **runtime half** of the authentication error
-contract. `@mcp-abap-adt/interfaces-auth` (5.0.0+) declares the types —
+contract. `@mcp-abap-adt/interfaces-auth` (6.0.0+) declares the types —
 `IAuthProviderError` (`kind`, `variant` for three kinds, `facts`, `reason`,
 `hint?`, `diagnostics?`), `IAuthRefusal` (the error itself), `AuthOutcome`,
 `IAuthProviderFailure`, the allowlist arrays and their unions, the branded
