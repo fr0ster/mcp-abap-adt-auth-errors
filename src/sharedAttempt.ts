@@ -441,6 +441,7 @@ export function createParties(): Parties {
   function attach(signal: AbortSignal): () => void {
     if (readSignal(signal) !== 'live') return ignore;
     const existing = parties.find((party) => party.signal === signal);
+    // An explicit detach of the same party: not a cancellation.
     if (existing !== undefined) return () => release(existing, false);
     const party: Party = {
       signal,
@@ -449,20 +450,22 @@ export function createParties(): Parties {
     };
     parties.push(party);
     for (const moment of moments) moment.members.push(party);
+    // A registration that does not end cleanly — it throws, or the signal is
+    // aborted or unreadable after it — removes the provisional party as an
+    // abort (as join refuses such a waiter `aborted`): a moment left with no
+    // member is aborted (the registration may have aborted the others).
+    let clean = false;
     try {
       signal.addEventListener('abort', party.onAbort, { once: true });
+      clean = readSignal(signal) === 'live';
     } catch {
-      release(party, false);
-      return ignore;
+      clean = false;
     }
-    // Aborted or unreadable after its registration: never added, and removed
-    // as an abort (as join refuses such a waiter `aborted`) — a provisional
-    // moment left with no member is aborted (the registration may have
-    // aborted the others).
-    if (readSignal(signal) !== 'live') {
+    if (!clean) {
       release(party, true);
       return ignore;
     }
+    // The one removal that is not a cancellation: an explicit detach.
     return () => release(party, false);
   }
 

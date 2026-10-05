@@ -171,9 +171,11 @@ README.md documents the whole surface.
   boolean, or whose `addEventListener` throws refuses only its own waiter
   (`aborted`); `aborted` is read again after the listener is added, so a
   signal aborting during its own registration refuses its waiter too (and
-  is not added as a party), its listener removed; a party aborted or
-  unreadable after its registration leaves its provisional moments as an
-  abort does, so a moment left with no member is aborted. No timer; what an attempt commits stays with the caller.
+  is not added as a party), its listener removed; a registration that does
+  not end cleanly — `addEventListener` throws, or the signal is aborted or
+  unreadable after it — removes the provisional party as an abort, so a
+  moment left with no member is aborted. Only an explicit `detach` removes
+  a party without aborting. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
