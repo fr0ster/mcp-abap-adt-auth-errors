@@ -145,6 +145,12 @@ const REFUSED_BY_CLASS: Readonly<
     ['variation selector U+E0100', cp(0xe0100)],
     ['variation selector U+E01EF', cp(0xe01ef)],
   ],
+  'tag block (unassigned)': [
+    ['tag block U+E0000', cp(0xe0000)],
+    ['tag block U+E0002', cp(0xe0002)],
+    ['tag block U+E0010', cp(0xe0010)],
+    ['tag block U+E001F', cp(0xe001f)],
+  ],
   CGJ: [['CGJ U+034F', '\u034f']],
   'Hangul filler': [
     ['Hangul filler U+115F', '\u115f'],
@@ -195,6 +201,7 @@ const BOUNDARY_ADMITTED: ReadonlyArray<[string, string]> = [
   ['U+FFA1', '\uffa1'],
   ['U+1FFFD (unassigned)', cp(0x1fffd)],
   ['U+E0080 (unassigned)', cp(0xe0080)],
+  ['U+DFFFD (unassigned)', cp(0xdfffd)],
   ['U+E01F0 (unassigned)', cp(0xe01f0)],
   ['an astral character', ASTRAL],
 ];

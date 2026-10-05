@@ -104,8 +104,10 @@ const REFUSED_CATEGORIES = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Co}]/u;
  * Refused code points outside those categories, each listed: the
  * noncharacters (U+FDD0–U+FDEF and U+xFFFE / U+xFFFF of every plane), the
  * variation selectors (U+FE00–U+FE0F, U+E0100–U+E01EF), the combining
- * grapheme joiner U+034F, and the Hangul fillers U+115F, U+1160, U+3164,
- * U+FFA0 — invisible, or changing what is shown without being seen.
+ * grapheme joiner U+034F, the whole tag block U+E0000–U+E007F (its
+ * unassigned code points are Cn, which `\p{Cf}` misses), and the Hangul
+ * fillers U+115F, U+1160, U+3164, U+FFA0 — invisible, or changing what is
+ * shown without being seen.
  */
 function isRefusedOutsideCategories(codePoint: number): boolean {
   return (
@@ -113,6 +115,7 @@ function isRefusedOutsideCategories(codePoint: number): boolean {
     (codePoint & 0xfffe) === 0xfffe ||
     (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
     (codePoint >= 0xe0100 && codePoint <= 0xe01ef) ||
+    (codePoint >= 0xe0000 && codePoint <= 0xe007f) ||
     codePoint === 0x034f ||
     codePoint === 0x115f ||
     codePoint === 0x1160 ||
