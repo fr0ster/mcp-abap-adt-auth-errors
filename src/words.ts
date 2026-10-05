@@ -512,15 +512,22 @@ function interactiveLoginWords(
         `Port ${required(facts.port)} is already in use. Please specify a different port or free the port.`,
       );
     case 'aborted': {
-      if (facts.strategy === 'manual') {
-        return say('the manual login was aborted');
+      const strategy = facts.strategy;
+      switch (strategy) {
+        case undefined:
+        case 'browser': {
+          const ignored: Count | undefined = facts.ignoredCallbacks;
+          return say(
+            ignored !== undefined && ignored > 0
+              ? `the browser login was aborted; ${ignored} incomplete request(s) reached /callback and were ignored`
+              : 'the browser login was aborted',
+          );
+        }
+        case 'manual':
+          return say('the manual login was aborted');
+        default:
+          return unreachable(strategy);
       }
-      const ignored: Count | undefined = facts.ignoredCallbacks;
-      return say(
-        ignored !== undefined && ignored > 0
-          ? `the browser login was aborted; ${ignored} incomplete request(s) reached /callback and were ignored`
-          : 'the browser login was aborted',
-      );
     }
     case 'disposed': {
       const strategy = facts.strategy;

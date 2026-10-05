@@ -11,6 +11,7 @@ import type {
   AuthProviderErrorFacts,
   ClientCertificateProblem,
   IAuthProviderError,
+  InteractiveLoginStrategy,
 } from '@mcp-abap-adt/interfaces-auth';
 import type { blamesCredential, render } from '../index';
 import {
@@ -124,3 +125,32 @@ export type RenderFacts = Expect<
 export type BlameSignature = Expect<
   Equal<Parameters<typeof blamesCredential>[0], IAuthProviderError>
 >;
+
+/** An aborted login's strategy, absent included, switched over every member. */
+export function everyAbortStrategy(
+  strategy: InteractiveLoginStrategy | undefined,
+): Words {
+  switch (strategy) {
+    case undefined:
+    case 'browser':
+      return words();
+    case 'manual':
+      return words();
+    default:
+      return unreachable(strategy);
+  }
+}
+
+/** The same switch missing one strategy does not compile. */
+export function missingAbortStrategy(
+  strategy: InteractiveLoginStrategy | undefined,
+): Words {
+  switch (strategy) {
+    case undefined:
+    case 'browser':
+      return words();
+    default:
+      // @ts-expect-error 'manual' is not handled
+      return unreachable(strategy);
+  }
+}
