@@ -171,7 +171,9 @@ README.md documents the whole surface.
   boolean, or whose `addEventListener` throws refuses only its own waiter
   (`aborted`); `aborted` is read again after the listener is added, so a
   signal aborting during its own registration refuses its waiter too (and
-  is not added as a party), its listener removed. No timer; what an attempt commits stays with the caller.
+  is not added as a party), its listener removed; such an abort leaves a
+  party's provisional moments as any abort does, so a moment left with no
+  member is aborted. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
@@ -216,7 +218,8 @@ README.md documents the whole surface.
   guard(this.#moments.<moment>, () => …, () => …)`, with no constructor
   parameter property named after a moment and no write replacing one
   (`this.<moment> =`, `AuthProviderBase.prototype.<moment> =`,
-  `Object.assign` / `Object.defineProperty` onto its `this` or prototype)
+  `Object.assign` / `Object.defineProperty` onto its `this` or prototype,
+  its own file scanned whatever files were selected)
   (reported as rule 1;
   required methods only, for a base read from a declaration file). It exits
   2 rather than pass in silence: on a program that does not type-check, a

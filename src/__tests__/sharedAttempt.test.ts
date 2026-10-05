@@ -1141,3 +1141,66 @@ describe('a signal that aborts while its listener is registered', () => {
     expect(moment.signal.aborted).toBe(true);
   });
 });
+
+/**
+ * A foreign signal whose registration first aborts another party's (or
+ * waiter's) controller, then its own, before forwarding the registration.
+ */
+function reentrantAdapter(other: AbortController): {
+  readonly signal: AbortSignal;
+  readonly inner: AbortSignal;
+} {
+  const controller = new AbortController();
+  const inner = controller.signal;
+  const signal = {
+    get aborted() {
+      return inner.aborted;
+    },
+    addEventListener(
+      type: string,
+      listener: () => void,
+      options?: AddEventListenerOptions,
+    ) {
+      other.abort();
+      controller.abort();
+      inner.addEventListener(type, listener, options);
+    },
+    removeEventListener(type: string, listener: () => void) {
+      inner.removeEventListener(type, listener);
+    },
+  } as unknown as AbortSignal;
+  return { signal, inner };
+}
+
+describe('a registration that aborts another party, then itself', () => {
+  it('attach: the moment left with no live party is aborted; listeners at baseline', () => {
+    const parties = createParties();
+    const existing = new AbortController();
+    parties.attach(existing.signal);
+    const moment = momentOf(parties);
+    const { signal, inner } = reentrantAdapter(existing);
+    parties.attach(signal);
+    expect(moment.signal.aborted).toBe(true);
+    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
+    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    expect(parties.waiterSignal()).toBeUndefined();
+  });
+
+  it('join: the attempt whose waiters all aborted is aborted and leaves the slot', async () => {
+    const slot = sharedAttempt<string>('token-request');
+    const held = heldStart<string>();
+    const existing = new AbortController();
+    const first = track(slot.join(held.start, existing.signal));
+    const { signal, inner } = reentrantAdapter(existing);
+    const second = track(slot.join(held.start, signal));
+    await flush();
+    expectAborted(first.reason());
+    expectAborted(second.reason());
+    expect(held.context().signal.aborted).toBe(true);
+    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
+    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    const fresh = heldStart<string>();
+    void slot.join(fresh.start);
+    expect(fresh.start).toHaveBeenCalledTimes(1);
+  });
+});

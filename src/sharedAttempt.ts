@@ -455,9 +455,12 @@ export function createParties(): Parties {
       release(party, false);
       return ignore;
     }
-    // Aborted during its registration (or unreadable now): never added.
-    if (readSignal(signal) !== 'live') {
-      release(party, false);
+    // Aborted during its registration (or unreadable now): never added. An
+    // abort leaves its provisional moments as any abort does — one left with
+    // no member is aborted (the registration may have aborted the others).
+    const state = readSignal(signal);
+    if (state !== 'live') {
+      release(party, state === 'aborted');
       return ignore;
     }
     return () => release(party, false);
