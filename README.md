@@ -35,6 +35,12 @@ npm install @mcp-abap-adt/auth-errors
 It depends on `@mcp-abap-adt/interfaces-auth` `^6.0.0` and nothing else.
 Node.js 22, 24 or 26.
 
+The package's `exports` map exposes three paths by name: the entry
+(`@mcp-abap-adt/auth-errors`), `@mcp-abap-adt/auth-errors/package.json` and
+`@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs`. A deep path such as
+`@mcp-abap-adt/auth-errors/dist/allowlists` fails with
+`ERR_PACKAGE_PATH_NOT_EXPORTED`: the internal modules are not an API.
+
 ## What an error is
 
 Every failure of authentication is an `IAuthProviderError`, a frozen object:
@@ -641,6 +647,14 @@ on every export with `.call`, patching `Set.prototype.has` and
 `Array.prototype.includes` after load — and then checks that a foreign code is
 still refused everywhere and appears in no word. A consumer that needs a list
 uses the frozen `as const` array from interfaces-auth.
+
+**The threat model's boundary.** These guarantees are about values: what a
+caller passes in, throws, or does to the exports. Code running in the same
+process that requires a file under `dist/` by its absolute path, or redefines
+an export of a module, can change what this package does. That code can
+patch anything in the process; this package does not defend against it. The
+`exports` map is hygiene that keeps internal modules from being imported by
+name, not a security boundary.
 
 `httpStatus()`, `count()`, `port()` make the branded integers: a finite
 integer in 100–599, 0–1 000 000 or 0–65 535, read without coercion, comes

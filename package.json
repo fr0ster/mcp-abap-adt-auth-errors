@@ -4,6 +4,15 @@
   "description": "The runtime half of the MCP ABAP ADT authentication error contract: builders, renderers, allowlist guards and classification for IAuthProviderError",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./tools/check-provider-shape.mjs": "./tools/check-provider-shape.mjs"
+  },
   "files": [
     "dist",
     "tools/check-provider-shape.mjs",

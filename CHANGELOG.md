@@ -210,7 +210,18 @@ README.md documents the whole surface.
   field or diagnostic. No export is a `Set`, `Map`, `WeakSet` or `WeakMap`,
   nested one level, and an array one level down is frozen.
 
+- An `exports` map: the entry (`types`, `require`, `default` →
+  `dist/`), `./package.json` and `./tools/check-provider-shape.mjs`. A deep
+  path by name (`@mcp-abap-adt/auth-errors/dist/allowlists`) is
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`. A test packs the package, installs it
+  into a temporary `node_modules` and checks the three paths and the
+  refusal.
+
 ### Known limits
+
+- Out of the threat model: code in the same process that requires `dist/`
+  by absolute path or redefines an export of a module. The `exports` map is
+  hygiene, not a security boundary.
 
 - `structuredClone` of an `AuthProviderFailure` comes back a plain `Error`:
   `isAuthProviderFailure` answers false and `readFailure` answers

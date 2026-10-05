@@ -122,6 +122,7 @@ src/
 ├── __tests__/        # Jest; built-package tests require dist/ by path
 │                     #   widening.test.ts — §11.1 "allowlists cannot be widened"
 │                     #   kindsTable.test.ts — README table equals the generated one
+│                     #   exportsMap.test.ts — packed package: three paths by name, deep paths refused
 └── __typechecks__/   # compiled by test:check only, never built or run
 scripts/
 └── generate-kinds-table.mjs  # the README kinds table from dist/ (§11.4); not published
