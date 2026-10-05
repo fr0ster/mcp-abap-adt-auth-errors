@@ -721,27 +721,29 @@ describe('forged diagnostics (§11.1 matrix: a, b, c bare, e)', () => {
     ],
   ];
 
-  it('through classify: kind and facts kept, no diagnostics, marker in no rendering', () => {
-    for (const [label, make, marker, kind, facts] of cases()) {
+  it.each(cases())(
+    '%s through classify: kind and facts kept, no diagnostics, marker in no rendering',
+    (_label, make, marker, kind, facts) => {
       const result = classify(make(), 'establishing');
-      expect([label, result.kind]).toStrictEqual([label, kind]);
+      expect(result.kind).toBe(kind);
       expect(result.facts).toStrictEqual(facts);
-      expect([label, 'diagnostics' in result]).toStrictEqual([label, false]);
+      expect('diagnostics' in result).toBe(false);
       expectNoMarker(result, marker);
-    }
-  });
+    },
+  );
 
-  it('through classifyOutcome (a, b, c bare): kind and facts kept, no diagnostics, marker in no rendering', () => {
-    for (const [label, make, marker, kind, facts] of cases().slice(0, 4)) {
+  it.each(cases().slice(0, 4))(
+    '%s through classifyOutcome: kind and facts kept, no diagnostics, marker in no rendering',
+    (_label, make, marker, kind, facts) => {
       const value = make();
       const result = classifyRefusal(value);
       expect(result).not.toBe(value);
-      expect([label, result.kind]).toStrictEqual([label, kind]);
+      expect(result.kind).toBe(kind);
       expect(result.facts).toStrictEqual(facts);
-      expect([label, 'diagnostics' in result]).toStrictEqual([label, false]);
+      expect('diagnostics' in result).toBe(false);
       expectNoMarker(result, marker);
-    }
-  });
+    },
+  );
 
   it('positive: the same errors minted by this copy keep their diagnostics, the same object', () => {
     const a = authError.snc(sncFacts, { library: JWT_MARKER });
