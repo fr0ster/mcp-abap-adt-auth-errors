@@ -77,3 +77,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AuthProviderFailure`, without `error`): read the error with
   `readFailure(value, operation)`, never print `message` or `error.reason`
   of a value this copy did not construct.
+- `guard(operation, body, grant?)` — the boundary of one provider moment:
+  the grant thunk and the body run inside one `try`; the grant is kept only
+  when it is an `OAuth2GrantType`; a throw (from the grant, the body, or a
+  thenable the body answers) becomes `{ ok: false, refusal:
+  classify(thrown, operation, grant) }`, the catch reading only its two
+  locals. Never rejects.
+- `relayOutcome(call, refused, operation)` and `RelayedOutcome` — a logon
+  target's answer, never the target's own object: a throw is
+  `classify(thrown, operation)` with `thrown: true`; an answer goes through
+  `classifyOutcome` (this copy's refusal as it is, another copy's rebuilt
+  without diagnostics, anything else — a carrier included — the
+  `logon-target` fallback `{ wire: 'unknown', refused }`, built here) with
+  `thrown: false`. Never throws.
+- `matchKind(error, handlers)` and `KindHandlers<R>` — a handler map typed
+  over every kind (a missing handler does not compile); `unreachableKind(
+  error: never)` — the exhaustiveness check of a `switch`'s `default`. Both
+  normalise through `classify(error, 'unfamiliar-error')`: a handler, or the
+  default branch, only ever sees an error this copy minted — a newer
+  contract's kind, or a fact this build does not know, arrives as `unknown`
+  with operation `unfamiliar-error`.

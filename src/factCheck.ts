@@ -102,7 +102,7 @@ export const GRANT_TYPES = Object.freeze({
   [AUTH_TYPE_SAML2_BEARER]: true,
 }) satisfies { readonly [G in OAuth2GrantType]: true };
 
-function isGrantType(value: unknown): value is OAuth2GrantType {
+export function isGrantType(value: unknown): value is OAuth2GrantType {
   return typeof value === 'string' && hasOwn(GRANT_TYPES, value);
 }
 

@@ -45,11 +45,17 @@ export {
 export { classify, classifyOutcome, OK } from './classify';
 export { type LogFields, logFields, renderDiagnostics } from './diagnostics';
 export {
+  type KindHandlers,
+  matchKind,
+  unreachableKind,
+} from './exhaustive';
+export {
   AuthProviderFailure,
   type AuthProviderFailureLike,
   isAuthProviderFailure,
   readFailure,
 } from './failure';
+export { guard, type RelayedOutcome, relayOutcome } from './guard';
 export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';
 export { blamesCredential, render, type Words } from './words';
