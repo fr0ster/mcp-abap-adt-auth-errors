@@ -10,9 +10,10 @@ import type {
 } from '@mcp-abap-adt/interfaces-auth';
 import {
   AuthProviderFailure,
+  type AuthProviderFailureLike,
   authError,
-  type isAuthProviderFailure,
-  type readFailure,
+  isAuthProviderFailure,
+  readFailure,
 } from '../index';
 
 type Equal<A, B> =
@@ -62,6 +63,18 @@ export type ReadFailureSignature = Expect<
 export type IsAuthProviderFailureGuards = Expect<
   Equal<
     typeof isAuthProviderFailure,
-    (value: unknown) => value is IAuthProviderFailure
+    (value: unknown) => value is AuthProviderFailureLike
   >
 >;
+
+// After the guard the value is an Error named AuthProviderFailure, nothing
+// more: its words are not trusted, so `error` is not offered.
+declare const caught: unknown;
+if (isAuthProviderFailure(caught)) {
+  const name: 'AuthProviderFailure' = caught.name;
+  // @ts-expect-error a guarded value offers no `error`: read it with readFailure
+  caught.error.reason;
+  const read: IAuthProviderError = readFailure(caught, 'refresh');
+  void name;
+  void read;
+}

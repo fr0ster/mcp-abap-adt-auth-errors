@@ -46,6 +46,7 @@ export { classify, classifyOutcome, OK } from './classify';
 export { type LogFields, logFields, renderDiagnostics } from './diagnostics';
 export {
   AuthProviderFailure,
+  type AuthProviderFailureLike,
   isAuthProviderFailure,
   readFailure,
 } from './failure';

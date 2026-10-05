@@ -110,6 +110,7 @@ function failureRenderings(failure: Failure): string[] {
     JSON.stringify(failure),
     String(failure),
     failure.message,
+    failure.stack ?? '',
     inspect(failure, { depth: null }),
     JSON.stringify({ ...failure }),
   ];
@@ -169,6 +170,76 @@ describe('AuthProviderFailure — the instance', () => {
     // classify reads `error` only as an own data property: it gets it back.
     expect(classify(failure, 'refresh')).toBe(error);
     expect(readFailure(failure, 'refresh')).toBe(error);
+  });
+
+  it('error and message cannot be reassigned, deleted or redefined', () => {
+    const error = sample('snc');
+    const failure = new AuthProviderFailure(error);
+    const message = failure.message;
+    for (const key of ['error', 'message'] as const) {
+      const descriptor = Object.getOwnPropertyDescriptor(failure, key);
+      expect(descriptor).toMatchObject({
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      });
+    }
+    const writable = failure as unknown as Record<string, unknown>;
+    expect(() => {
+      writable.error = sample('tls');
+    }).toThrow(TypeError);
+    expect(() => {
+      writable.message = 'sk-assigned';
+    }).toThrow(TypeError);
+    expect(() => {
+      delete writable.error;
+    }).toThrow(TypeError);
+    expect(() =>
+      Object.defineProperty(failure, 'error', { value: sample('tls') }),
+    ).toThrow(TypeError);
+    expect(failure.error).toBe(error);
+    expect(failure.message).toBe(message);
+    expect(classify(failure, 'refresh')).toBe(error);
+  });
+
+  it('a subclass’s prototype accessor `error` cannot intercept the field', () => {
+    const error = sample('tls');
+    const forged = { kind: 'tls', reason: 'sk-accessor' };
+    class Sub extends AuthProviderFailure {}
+    let invoked = 0;
+    Object.defineProperty(Sub.prototype, 'error', {
+      get: () => {
+        invoked += 1;
+        return forged;
+      },
+      set: () => {
+        invoked += 1;
+      },
+      configurable: true,
+    });
+    const failure = new Sub(error);
+    expect(invoked).toBe(0);
+    expect(Object.getOwnPropertyDescriptor(failure, 'error')?.value).toBe(
+      error,
+    );
+    expect(failure.error).toBe(error);
+    expect(classify(failure, 'refresh')).toBe(error);
+  });
+
+  it('stack: its header is the fixed words, nothing of the input', () => {
+    const error = sample('tls');
+    const failure = new AuthProviderFailure(error);
+    expect(failure.stack?.split('\n')[0]).toBe(
+      `AuthProviderFailure: ${messageOf(error)}`,
+    );
+    const forged = new AuthProviderFailure({
+      kind: 'tls',
+      reason: 'sk-stack-marker',
+    } as unknown as IAuthProviderError);
+    expect(forged.stack?.split('\n')[0]).toBe(
+      `AuthProviderFailure: ${messageOf(UNFAMILIAR())}`,
+    );
+    expect(forged.stack).not.toContain('sk-stack-marker');
   });
 
   it('no diagnostics in the message', () => {
@@ -308,6 +379,28 @@ describe('isAuthProviderFailure', () => {
         error: shape(sample('snc')),
       }),
     ).toBe(true);
+  });
+
+  it('a forged structural value passes, and readFailure answers rebuilt words, not the forged ones', () => {
+    const facts = { operation: 'token-request', code: 'CERT_HAS_EXPIRED' };
+    const forged = {
+      name: 'AuthProviderFailure',
+      message: 'sk-forged-message',
+      error: {
+        kind: 'tls',
+        facts,
+        reason: 'sk-forged-reason',
+        hint: 'sk-forged-hint',
+        diagnostics: { library: 'sk-forged-diagnostics' },
+      },
+    };
+    expect(isAuthProviderFailure(forged)).toBe(true);
+    const read = readFailure(forged, 'refresh');
+    expect(isMinted(read)).toBe(true);
+    expect(shape(read)).toStrictEqual(shape(authError.tls(facts)));
+    for (const text of errorRenderings(read)) {
+      expect(text).not.toContain('sk-forged');
+    }
   });
 
   it('false without the name, with another name, or with an invalid error', () => {

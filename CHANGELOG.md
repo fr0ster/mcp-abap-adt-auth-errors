@@ -59,7 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AuthProviderFailure` — the one thrown class: an `Error` named
   `AuthProviderFailure` holding one minted error as its own `error` data
   property; `message` is the error's `reason`, or `reason — hint`, never a
-  diagnostic; no `cause`. `name`, `message` and `error` are its only
+  diagnostic; no `cause`. `error` and `message` are neither writable nor
+  configurable. `name`, `message` and `error` are its only
   enumerable own properties, so `JSON.stringify` and pino's serializer see
   those three. The constructor takes an error minted by this copy (typed and
   checked): anything else — a `structuredClone`, a JSON copy, another copy's
@@ -71,4 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `isAuthProviderFailure(value)` — true for a failure of this copy or
   another: an own data `name` of `AuthProviderFailure` and an own data
   `error` this copy minted or that rebuilds structurally. No `instanceof`,
-  no getter, never `message`. Total.
+  no getter, never `message`. Total. A forged object passes too, so it
+  narrows to `AuthProviderFailureLike` (an `Error` named
+  `AuthProviderFailure`, without `error`): read the error with
+  `readFailure(value, operation)`, never print `message` or `error.reason`
+  of a value this copy did not construct.

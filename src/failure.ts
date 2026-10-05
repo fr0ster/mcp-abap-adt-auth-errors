@@ -21,6 +21,11 @@ import { isMinted } from './mint';
 
 const defineProperty = Object.defineProperty;
 
+/** An own data property: enumerable, neither writable nor configurable. */
+function fixed(value: unknown): PropertyDescriptor {
+  return { value, enumerable: true, writable: false, configurable: false };
+}
+
 /** `reason`, or `reason — hint` (connection's `AuthRefusedError` format). */
 function messageOf(error: IAuthProviderError): string {
   return error.hint === undefined
@@ -29,27 +34,43 @@ function messageOf(error: IAuthProviderError): string {
 }
 
 /**
+ * What a value that passed `isAuthProviderFailure` is known to be: an
+ * `Error` named `AuthProviderFailure` — of this copy, another copy, or any
+ * object shaped like one. Its words are not known to be this copy's: read
+ * the error with `readFailure(value, operation)`, never `value.message` or
+ * `value.error.reason`.
+ */
+export type AuthProviderFailureLike = Error & {
+  readonly name: 'AuthProviderFailure';
+};
+
+/**
  * What `getTokens()` / `refreshTokens()` reject with. The constructor takes
  * an error minted by this copy (typed, and checked against the minted set):
  * anything else — a structural copy, a clone, another copy's error — becomes
  * the fixed `unknown` error with `operation: 'unfamiliar-error'`, since the
  * constructor takes no operation. Classify a foreign value first
  * (`readFailure`) to keep its kind and facts.
+ *
+ * `error` and `message` are own data properties, enumerable, neither
+ * writable nor configurable: `classify` reads `error` without a getter, a
+ * subclass's prototype accessor cannot intercept it, and an assignment
+ * cannot make the message describe another error.
  */
 export class AuthProviderFailure extends Error implements IAuthProviderFailure {
   override readonly name = 'AuthProviderFailure';
-  /** An own data property: `classify` reads it without calling a getter. */
-  readonly error: IAuthProviderError;
+  declare readonly error: IAuthProviderError;
 
   constructor(error: IAuthProviderError) {
     const held = isMinted(error)
       ? error
       : authError.unknown({ operation: 'unfamiliar-error' });
-    super(messageOf(held));
-    this.error = held;
+    const message = messageOf(held);
+    super(message);
     // `Error` defines `message` non-enumerable; the contract's serialised
     // form is name, message and error.
-    defineProperty(this, 'message', { enumerable: true });
+    defineProperty(this, 'message', fixed(message));
+    defineProperty(this, 'error', fixed(held));
   }
 }
 
@@ -72,10 +93,17 @@ export function readFailure(
  * (Decision D2): an own data `name` of `'AuthProviderFailure'` and an own
  * data `error` that this copy minted or that passes the structural rebuild.
  * No `instanceof`, no getter, never `message`. Total.
+ *
+ * It answers what the value is, not whose words it holds: a forged object
+ * passes as well as another copy's failure. So it narrows to
+ * `AuthProviderFailureLike`, without `error`: read the error with
+ * `readFailure(value, operation)`, which rebuilds a foreign one with this
+ * copy's words, and never print `message` or `error.reason` of a value this
+ * copy did not construct.
  */
 export function isAuthProviderFailure(
   value: unknown,
-): value is IAuthProviderFailure {
+): value is AuthProviderFailureLike {
   try {
     if (readOwn(value, 'name') !== 'AuthProviderFailure') return false;
     const error = readOwn(value, 'error');
