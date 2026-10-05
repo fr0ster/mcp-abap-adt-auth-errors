@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { inspect } from 'node:util';
 import type {
   AuthOutcome,
@@ -539,57 +540,129 @@ describe('relayOutcome', () => {
   });
 });
 
-describe('a rejecting native promise is never left unhandled', () => {
-  /** Runs `act`, waits a macrotask, answers the unhandled rejections seen. */
-  async function unhandledDuring(act: () => Promise<void>): Promise<unknown[]> {
-    const seen: unknown[] = [];
-    const listener = (reason: unknown) => {
-      seen.push(reason);
-    };
-    process.on('unhandledRejection', listener);
-    try {
-      await act();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    } finally {
-      process.off('unhandledRejection', listener);
+/**
+ * Unhandled rejections are observed in a child process: Jest installs its own
+ * `unhandledRejection` handling around a test, so a listener inside the test
+ * neither sees every event nor can absorb one. The child loads the built
+ * package, runs one scenario — the value answered by a logon target to
+ * `relayOutcome` and by a grant thunk to `guard` — waits a macrotask, and
+ * prints what happened.
+ */
+interface ChildReport {
+  readonly unhandled: number;
+  readonly calls: string[];
+  readonly threw: boolean;
+  readonly relayThrown: boolean;
+  readonly relayKind: string;
+  readonly relayWire: string;
+  readonly guardFacts: unknown;
+}
+
+const SCENARIOS = `
+const E = require(${JSON.stringify(require.resolve('../../dist/index.js'))});
+let unhandled = 0;
+process.on('unhandledRejection', () => { unhandled += 1; });
+// Recorded only while the package runs: the harness's own awaits read
+// \`constructor\` too. Both calls below do all their work synchronously.
+let inside = false;
+const recorded = [];
+const calls = { push: (call) => { if (inside) recorded.push(call); }, set length(n) { recorded.length = n; } };
+const scenarios = {
+  plain: () => Promise.reject(new Error('sk-plain')),
+  async: () => (async () => { throw new Error('sk-async'); })(),
+  subclass: () => {
+    class Sub extends Promise {
+      static get [Symbol.species]() { calls.push('species'); return Promise; }
+      constructor(executor) { calls.push('constructor'); super(executor); }
     }
-    return seen;
-  }
-
-  it('relayOutcome: a target answering a rejecting promise gets the fallback, thrown false, no unhandled rejection', async () => {
-    let relayed: Relayed | undefined;
-    const seen = await unhandledDuring(async () => {
-      relayed = relayOutcome(
-        () => Promise.reject(new Error('sk-async-target')),
-        'tls-material',
-        'establishing',
-      );
+    const sub = Sub.reject(new Error('sk-sub'));
+    calls.length = 0;
+    return sub;
+  },
+  speciesThrows: () => {
+    class Throwing extends Promise {
+      static get [Symbol.species]() { calls.push('species'); throw new Error('sk-species'); }
+    }
+    return Throwing.reject(new Error('sk-throwing'));
+  },
+  ownConstructor: () => {
+    const p = Promise.reject(new Error('sk-own'));
+    Object.defineProperty(p, 'constructor', {
+      get() { calls.push('own constructor'); return Promise; },
     });
-    expect(seen).toStrictEqual([]);
-    expect(relayed?.thrown).toBe(false);
-    expect(
-      shape(refusalOf(relayed?.outcome ?? (OK as AuthOutcome))),
-    ).toStrictEqual(
-      shape(
-        authError['logon-target']({ wire: 'unknown', refused: 'tls-material' }),
-      ),
-    );
+    return p;
+  },
+  proxy: () => new Proxy(Promise.reject(new Error('sk-proxy')), new Proxy({}, {
+    get(_t, trap) { calls.push('trap ' + String(trap)); return undefined; },
+  })),
+  patchedConstructor: () => {
+    Object.defineProperty(Promise.prototype, 'constructor', {
+      configurable: true,
+      get() { calls.push('prototype constructor'); return Promise; },
+    });
+    return Promise.reject(new Error('sk-patched-constructor'));
+  },
+  patchedSpecies: () => {
+    Object.defineProperty(Promise, Symbol.species, {
+      configurable: true,
+      get() { calls.push('patched species'); return Promise; },
+    });
+    return Promise.reject(new Error('sk-patched-species'));
+  },
+};
+(async () => {
+  const make = scenarios[process.argv[1]];
+  let threw = false;
+  let relayed, outcome;
+  let pending;
+  try {
+    const value = make();
+    inside = true;
+    relayed = E.relayOutcome(() => value, 'tls-material', 'establishing');
+    pending = E.guard('refresh', () => { throw new Error('sk-x'); }, () => value);
+    inside = false;
+    outcome = await pending;
+  } catch { threw = true; }
+  inside = false;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  process.stdout.write(JSON.stringify({
+    unhandled, calls: recorded, threw,
+    relayThrown: relayed && relayed.thrown,
+    relayKind: relayed && relayed.outcome.refusal.kind,
+    relayWire: relayed && relayed.outcome.refusal.facts.wire,
+    guardFacts: outcome && outcome.refusal.facts,
+  }));
+})();
+`;
+
+function runScenario(name: string): ChildReport {
+  const out = execFileSync(process.execPath, ['-e', SCENARIOS, name], {
+    encoding: 'utf8',
+    env: { ...process.env, NODE_OPTIONS: '' },
+  });
+  return JSON.parse(out) as ChildReport;
+}
+
+/** What every scenario answers: the fallback, not thrown; guard's grant ignored. */
+function expectFallback(report: ChildReport): void {
+  expect(report.threw).toBe(false);
+  expect(report.relayThrown).toBe(false);
+  expect(report.relayKind).toBe('logon-target');
+  expect(report.relayWire).toBe('unknown');
+  expect(report.guardFacts).toStrictEqual({ operation: 'refresh' });
+}
+
+describe('a rejecting plain native promise is never left unhandled', () => {
+  it.each([
+    ['a target / grant answering Promise.reject', 'plain'],
+    ['an async target / grant that throws', 'async'],
+  ])('%s: the fallback, no unhandled rejection', (_label, name) => {
+    const report = runScenario(name);
+    expectFallback(report);
+    expect(report.unhandled).toBe(0);
   });
 
-  it('relayOutcome: an async target that throws, likewise', async () => {
-    const seen = await unhandledDuring(async () => {
-      relayOutcome(
-        async () => {
-          throw new Error('sk-async-target');
-        },
-        'logon-parameters',
-        'establishing',
-      );
-    });
-    expect(seen).toStrictEqual([]);
-  });
-
-  it('relayOutcome: a foreign thenable’s `then` is never called', () => {
+  it('a foreign thenable’s `then` is never called', () => {
     let called = 0;
     const thenable = Object.defineProperty({}, 'then', {
       value: () => {
@@ -599,21 +672,43 @@ describe('a rejecting native promise is never left unhandled', () => {
     relayOutcome(() => thenable, 'tls-material', 'establishing');
     expect(called).toBe(0);
   });
+});
 
-  it('guard: a grant thunk answering a rejecting promise is ignored, no unhandled rejection', async () => {
-    let outcome: AuthOutcome | undefined;
-    const seen = await unhandledDuring(async () => {
-      outcome = await guard(
-        'refresh',
-        () => {
-          throw new Error('sk-x');
-        },
-        () => Promise.reject(new Error('sk-async-grant')),
-      );
-    });
-    expect(seen).toStrictEqual([]);
-    expect(refusalOf(outcome ?? (OK as AuthOutcome)).facts).toStrictEqual({
-      operation: 'refresh',
-    });
+describe('no foreign code runs while a promise is handled (the limit)', () => {
+  it('a Promise subclass: neither its species getter nor its constructor runs; its rejection stays unhandled (the limit)', () => {
+    const report = runScenario('subclass');
+    expectFallback(report);
+    expect(report.calls).toStrictEqual([]);
+    expect(report.unhandled).toBeGreaterThan(0);
+  });
+
+  it('a Promise subclass whose species getter throws: nothing thrown out, never run', () => {
+    const report = runScenario('speciesThrows');
+    expectFallback(report);
+    expect(report.calls).toStrictEqual([]);
+    expect(report.unhandled).toBeGreaterThan(0);
+  });
+
+  it('a native promise with an own `constructor` getter: the getter never runs', () => {
+    const report = runScenario('ownConstructor');
+    expectFallback(report);
+    expect(report.calls).toStrictEqual([]);
+  });
+
+  it('a Proxy around a promise: no trap runs but classifyOutcome’s guarded own-property reads', () => {
+    const report = runScenario('proxy');
+    expectFallback(report);
+    expect(
+      report.calls.filter((call) => call !== 'trap getOwnPropertyDescriptor'),
+    ).toStrictEqual([]);
+  });
+
+  it.each([
+    ['Promise.prototype.constructor', 'patchedConstructor'],
+    ['Promise[Symbol.species]', 'patchedSpecies'],
+  ])('a patched %s: never run', (_label, name) => {
+    const report = runScenario(name);
+    expectFallback(report);
+    expect(report.calls).toStrictEqual([]);
   });
 });

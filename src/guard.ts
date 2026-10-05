@@ -8,7 +8,7 @@
  * which is total.
  */
 
-import { isPromise } from 'node:util/types';
+import { isPromise, isProxy } from 'node:util/types';
 import type {
   AuthOutcome,
   LogonTargetRefusal,
@@ -20,6 +20,12 @@ import { classify, classifyOutcome } from './classify';
 import { isGrantType } from './factCheck';
 
 const freeze = Object.freeze;
+const getPrototypeOf = Object.getPrototypeOf;
+const getOwnDescriptor = Reflect.getOwnPropertyDescriptor;
+const hasOwn = Object.hasOwn;
+const NativePromise = Promise;
+const PROMISE_PROTOTYPE = Promise.prototype;
+const SPECIES_GETTER = getOwnDescriptor(Promise, Symbol.species)?.get;
 const promiseThen: (
   promise: Promise<unknown>,
   onFulfilled: undefined,
@@ -28,17 +34,40 @@ const promiseThen: (
 const ignore = (): void => {};
 
 /**
+ * Whether `then` on `value` runs no code but the engine's: a native promise
+ * (no Proxy around it) whose prototype is `Promise.prototype` and which has
+ * no own `constructor` — `then` reads `value.constructor` and its
+ * `Symbol.species` (SpeciesConstructor), so both must still be the
+ * built-ins captured at load. Every read here is of an object that is not a
+ * Proxy, so no trap runs.
+ */
+function isPlainPromise(value: unknown): value is Promise<unknown> {
+  if (!isPromise(value) || isProxy(value)) return false;
+  if (getPrototypeOf(value) !== PROMISE_PROTOTYPE) return false;
+  if (hasOwn(value, 'constructor')) return false;
+  const ctor = getOwnDescriptor(PROMISE_PROTOTYPE, 'constructor');
+  if (ctor === undefined || ctor.value !== NativePromise) {
+    return false;
+  }
+  const species = getOwnDescriptor(NativePromise, Symbol.species);
+  return species !== undefined && species.get === SPECIES_GETTER;
+}
+
+/**
  * A native promise answered where an outcome or a grant was expected is not
  * awaited, but its rejection must not go unhandled: under Node's default an
  * unhandled rejection ends the process and prints the foreign value. Only a
- * native promise gets the handler, through the `then` captured at load —
- * a foreign thenable's `then` is never called. Never throws.
+ * plain native promise (`isPlainPromise`) gets a no-op rejection handler,
+ * through the `then` captured at load; anything else — a foreign thenable,
+ * a Promise subclass, a Proxy around a promise, a promise with an own
+ * `constructor` — gets none, since handling it would run its code. Never
+ * throws.
  */
 function quiet(value: unknown): void {
   try {
-    if (isPromise(value)) promiseThen(value, undefined, ignore);
+    if (isPlainPromise(value)) promiseThen(value, undefined, ignore);
   } catch {
-    // A tampered promise (a throwing `constructor` getter): nothing to do.
+    // Nothing to do: no rejection handler is attached.
   }
 }
 
@@ -49,7 +78,10 @@ function quiet(value: unknown): void {
  * `grant`, from `body`, from a thenable `body` answers — becomes
  * `{ ok: false, refusal: classify(thrown, operation, grant) }`, the grant
  * being what was read before the throw (none when `grant` itself threw).
- * Never rejects.
+ * Never rejects. A grant thunk answering a plain native promise gets a
+ * no-op rejection handler; one answering a rejecting Promise subclass or a
+ * Proxy around a promise (breaking its contract) can still cause an
+ * unhandled rejection, since handling it would run its code — a limit.
  */
 export async function guard(
   operation: Operation,
@@ -83,7 +115,11 @@ export interface RelayedOutcome {
  * copy's rebuilt without diagnostics, anything else the `logon-target`
  * fallback `{ wire: 'unknown', refused }`, built here — with `thrown:
  * false`, even when the answer is unusable, because the target answered.
- * Never throws.
+ * Never throws. A target is synchronous by contract: a plain native promise
+ * it answers is the fallback and gets a no-op rejection handler; a
+ * rejecting Promise subclass, a Proxy around a promise or a promise with an
+ * own `constructor` gets none, and can still cause an unhandled rejection,
+ * since handling it would run its code — a limit.
  */
 export function relayOutcome(
   call: () => unknown,

@@ -89,10 +89,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `classifyOutcome` (this copy's refusal as it is, another copy's rebuilt
   without diagnostics, anything else — a carrier included — the
   `logon-target` fallback `{ wire: 'unknown', refused }`, built here) with
-  `thrown: false`. A native promise answered by a target (or by `guard`'s
-  grant thunk) gets a no-op rejection handler through the `then` captured
-  at load, so an async target's rejection is never left unhandled; a
-  foreign thenable's `then` is never called. Never throws.
+  `thrown: false`. Never throws. A plain native promise answered by a
+  target (or by `guard`'s grant thunk) — `Promise.prototype` its prototype,
+  no own `constructor`, no Proxy around it, `Promise.prototype.constructor`
+  and `Promise[Symbol.species]` still the built-ins — gets a no-op rejection
+  handler through the `then` captured at load, so an async target's
+  rejection is never left unhandled. Nothing else is handled, since handling
+  it would run its code: a foreign thenable's `then` is never called, and
+  **a limit** remains — a target or grant thunk that breaks its contract by
+  answering a rejecting Promise subclass or a proxied promise can still
+  cause an unhandled rejection.
 - `matchKind(error, handlers)` and `KindHandlers<R>` — a handler map typed
   over every kind (a missing handler does not compile); `unreachableKind(
   error: never)` — the exhaustiveness check of a `switch`'s `default`. Both
