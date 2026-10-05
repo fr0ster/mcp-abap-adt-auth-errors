@@ -68,8 +68,8 @@ describe('-0', () => {
     expect(builtFunction('httpStatus')(-0)).toBeUndefined();
   });
 
-  it('is in range for count and port, admitted as the spec writes the makers (an integer, >= 0)', () => {
-    expect(Object.is(builtFunction('count')(-0), -0)).toBe(true);
-    expect(Object.is(builtFunction('port')(-0), -0)).toBe(true);
+  it('is 0 for count and port, normalised to +0: a fact never carries -0', () => {
+    expect(Object.is(builtFunction('count')(-0), 0)).toBe(true);
+    expect(Object.is(builtFunction('port')(-0), 0)).toBe(true);
   });
 });
