@@ -37,13 +37,14 @@
   },
   "scripts": {
     "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
-    "lint": "npx biome check --write src tools/check-provider-shape.mjs",
-    "lint:check": "npx biome check --error-on-warnings src tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
+    "lint": "npx biome check --write src scripts tools/check-provider-shape.mjs",
+    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:check": "npx tsc --noEmit",
+    "docs:kinds": "node scripts/generate-kinds-table.mjs --write",
     "prepublishOnly": "npm run build"
   },
   "engines": {
