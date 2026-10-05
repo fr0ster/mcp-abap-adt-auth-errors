@@ -41,12 +41,20 @@
  * **A waiter's signal is foreign.** Its `aborted` must be a boolean, read
  * before its listener is added and again after (a signal aborting during its
  * own registration never calls the listener); the listener is added and
- * removed inside a `try`, its removal in place before the registration runs. A signal that
- * is not an object, whose `aborted` throws or is not a boolean, or whose
- * `addEventListener` throws cannot be honoured: its waiter is refused
- * `aborted` at once, so it neither starts nor keeps an attempt. Its listener
- * is idempotent (a second call changes nothing), and a throwing
+ * removed inside a `try`, its removal in place before the registration
+ * runs. A signal that is not an object, whose `aborted` throws or is not a
+ * boolean, or whose `addEventListener` throws cannot be honoured: its waiter
+ * is refused `aborted` at once, so it neither starts nor keeps an attempt.
+ * Its listener is idempotent (a second call changes nothing), and a throwing
  * `removeEventListener` is ignored: no signal can harm another waiter.
+ *
+ * **Foreign code runs on a consistent state.** A signal's getter,
+ * `addEventListener` and `removeEventListener` are consumer code that may
+ * call back in (join, attach, detach, abort another signal). Each runs only
+ * once every membership change is complete — a waiter out of its attempt
+ * and the slot left, a party out of the set and its moments, the moments to
+ * abort decided — and the rejections and aborts follow it, in spec §6b's
+ * order (a waiter's rejection before its attempt's abort).
  */
 import type { Operation } from '@mcp-abap-adt/interfaces-auth';
 import { authError } from './builders';
@@ -208,27 +216,35 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
     }
   }
 
-  /** The attempt settled: every live waiter gets `answer`. */
+  /**
+   * The attempt settled: every live waiter gets `answer`. State first (the
+   * slot left, every waiter done and out), then the foreign cleanups (a
+   * signal's `removeEventListener` may call back in and must see the final
+   * state), then the answers.
+   */
   function settle(attempt: Attempt<T>, answer: (waiter: Waiter<T>) => void) {
     if (attempt.ended) return;
     leave(attempt);
-    for (const waiter of attempt.waiters.splice(0)) {
-      waiter.done = true;
-      waiter.detach();
-      answer(waiter);
-    }
+    const waiters = attempt.waiters.splice(0);
+    for (const waiter of waiters) waiter.done = true;
+    for (const waiter of waiters) waiter.detach();
+    for (const waiter of waiters) answer(waiter);
   }
 
-  /** A waiter's abort: it leaves; the last one takes the attempt with it. */
+  /**
+   * A waiter's abort: it leaves; the last one takes the attempt with it.
+   * State first — the waiter done and out, the slot left when it was the
+   * last — then the foreign cleanup, then (spec §6b's order) the waiter's
+   * rejection and the attempt's abort.
+   */
   function abandon(attempt: Attempt<T>, waiter: Waiter<T>): void {
     if (waiter.done) return;
     waiter.done = true;
-    waiter.detach();
     const index = attempt.waiters.indexOf(waiter);
     if (index >= 0) attempt.waiters.splice(index, 1);
     const last = !attempt.ended && attempt.waiters.length === 0;
-    // Order (spec §6b): leave the slot, reject the waiter, abort the attempt.
     if (last) leave(attempt);
+    waiter.detach();
     waiter.reject(abortedFailure());
     if (last) attempt.controller.abort();
   }
@@ -420,22 +436,30 @@ export function createParties(): Parties {
     remove(moments, moment);
   }
 
+  /**
+   * A party leaves. State first — out of the set and of every moment, each
+   * moment an abort empties ended — then the foreign cleanup (its signal's
+   * `removeEventListener` may call back in and must see the final state),
+   * then the emptied moments abort.
+   */
   function release(party: Party, aborted: boolean): void {
     if (party.released) return;
     party.released = true;
     remove(parties, party);
+    const emptied: Moment[] = [];
+    for (const moment of moments.slice()) {
+      if (!remove(moment.members, party)) continue;
+      if (aborted && moment.members.length === 0) {
+        endMoment(moment);
+        emptied.push(moment);
+      }
+    }
     try {
       party.signal.removeEventListener('abort', party.onAbort);
     } catch {
       // Ignored: the party is gone whatever the signal does.
     }
-    for (const moment of moments.slice()) {
-      if (!remove(moment.members, party)) continue;
-      if (aborted && moment.members.length === 0) {
-        endMoment(moment);
-        moment.controller.abort();
-      }
-    }
+    for (const moment of emptied) moment.controller.abort();
   }
 
   function attach(signal: AbortSignal): () => void {

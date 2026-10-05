@@ -175,7 +175,12 @@ README.md documents the whole surface.
   not end cleanly — `addEventListener` throws, or the signal is aborted or
   unreadable after it — removes the provisional party as an abort, so a
   moment left with no member is aborted. Only an explicit `detach` removes
-  a party without aborting. No timer; what an attempt commits stays with the caller.
+  a party without aborting. A signal's getter, `addEventListener` and
+  `removeEventListener` run only on a consistent state — memberships, the
+  slot and the moments to abort decided first — so code calling back in
+  from them (join, attach, detach, an abort) sees the final state; the
+  rejections and aborts follow, a waiter's rejection before its attempt's
+  abort. No timer; what an attempt commits stays with the caller.
   Calls of `exclusive` within one attempt run one at a time, in call order.
   `T` must not be thenable.
 - `createParties()` — a provider's attached parties (spec §6b), with
