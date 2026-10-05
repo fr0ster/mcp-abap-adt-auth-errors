@@ -121,3 +121,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default branch, only ever sees an error this copy minted — a newer
   contract's kind, or a fact this build does not know, arrives as `unknown`
   with operation `unfamiliar-error`.
+- `sharedAttempt<T>(operation)` — a slot of shared attempts (spec §6b), with
+  `SharedAttempt`, `AttemptContext` and `AttemptStart`. `join(start,
+  signal?)` starts an attempt when the slot is empty or joins the active
+  one; `start` gets the attempt's `signal` and `exclusive(work)`. One
+  waiter's abort rejects only that waiter with an `AuthProviderFailure` of
+  `interactive-login` `aborted`; a waiter without a signal never aborts;
+  the last live waiter's abort makes the attempt leave the slot
+  (identity-checked) before that waiter is rejected and before the
+  attempt's signal aborts, so a join arriving meanwhile starts afresh. A
+  settled attempt leaves the slot; a throw or rejection of `start` reaches
+  the waiters only as `classify(thrown, operation)`. Every attempt carries a
+  drain — its `exclusive` work, settled either way, plus the drain it
+  inherited — which the slot hands to the next attempt; `exclusive` awaits
+  it, raced only against the attempt's signal. A waiter's signal is read
+  guarded: one that is not an object, whose `aborted` throws or is not a
+  boolean, or whose `addEventListener` throws refuses only its own waiter
+  (`aborted`). No timer; what an attempt commits stays with the caller.
