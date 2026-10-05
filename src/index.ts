@@ -58,4 +58,10 @@ export {
 export { guard, type RelayedOutcome, relayOutcome } from './guard';
 export { isMinted } from './mint';
 export { count, httpStatus, port } from './numbers';
+export {
+  type AttemptContext,
+  type AttemptStart,
+  type SharedAttempt,
+  sharedAttempt,
+} from './sharedAttempt';
 export { blamesCredential, render, type Words } from './words';
