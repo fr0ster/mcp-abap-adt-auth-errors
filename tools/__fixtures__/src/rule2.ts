@@ -1,7 +1,7 @@
 /** Rule 2: a class reaching AuthProviderBase (two levels down) declares `prepare`. */
 import type { AuthOutcome } from '@mcp-abap-adt/interfaces-auth';
 import { OK } from '../../../src/index';
-import { FixedProvider } from './obeys';
+import { FixedProvider, NamedProvider } from './obeys';
 
 export class OverridingProvider extends FixedProvider {
   override async prepare(): Promise<AuthOutcome> {
@@ -21,3 +21,21 @@ export class ParameterProvider extends FixedProvider {
     super();
   }
 }
+
+const PREPARE = 'prepare';
+
+export class ComputedProvider extends FixedProvider {
+  override async [PREPARE](): Promise<AuthOutcome> {
+    return OK;
+  }
+}
+
+export class AssignedProvider extends FixedProvider {
+  constructor() {
+    super();
+    Object.assign(this, { rejected: async () => OK });
+    Object.defineProperty(this, PREPARE, { value: async () => OK });
+  }
+}
+
+Object.assign(NamedProvider.prototype, { authorize: async () => OK });

@@ -155,19 +155,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the broker to copy byte for byte; it needs only `typescript`. Run as
   `node tools/check-provider-shape.mjs --rules <n,…>`, it refuses, in
   `src/` outside tests: (1) a class implementing `IAuthProvider` — by
-  `implements`, or structurally without reaching `AuthProviderBase`; (2) a
-  class reaching `AuthProviderBase` that declares or assigns `prepare`,
-  `establish`, `authorize` or `rejected`; (3) an object literal satisfying
-  `IAuthProvider`; (4) a type assertion to a type carrying a brand of
-  `interfaces-auth` (an error, a refusal, an outcome, a failure, a branded
-  integer) outside the sites of `tools/assertion-sites.json`, and an
-  overload returning an error, refusal, outcome or failure outside this
-  package's `builders.ts` and `mint.ts`; (5) a spread or `Object.assign` of
-  an error; (6) a builder call with diagnostics outside the sites of
-  `tools/diagnostic-sites.json`; (7) a `guard` call whose grant is not a
-  function expression or whose arguments read `this` other than
+  `implements` (beside the base: drop the clause), or structurally without
+  reaching `AuthProviderBase`, class expressions included; (2) a class
+  reaching `AuthProviderBase` that declares or assigns `prepare`,
+  `establish`, `authorize` or `rejected` — a computed name from a constant,
+  `Object.assign` / `Object.defineProperty` onto `this` or its `prototype`
+  included; (3) an object literal satisfying `IAuthProvider`; (4) a type
+  assertion to a type carrying a brand of `interfaces-auth` (an error, a
+  refusal, an outcome, a failure, a branded integer) outside the sites of
+  `tools/assertion-sites.json`, and an overload returning an error,
+  refusal, outcome or failure outside this package's `builders.ts` and
+  `mint.ts`; (5) a spread or `Object.assign` of an error; (6) a builder call
+  with diagnostics outside the sites of `tools/diagnostic-sites.json`, or a
+  builder through call / apply / bind; (7) a `guard` call whose grant is not
+  a function expression or whose arguments read `this` other than
   `this.#moments`; (8) in `src/auth` and `src/providers`, a `Basic `
-  authorization value or a base64 of a client secret outside `legacyBasic`
-  and `clientSecretBasic`. It refuses to decide on a program that does not
-  type-check (exit 2). This repository runs rules 4 and 6 in `lint:check`,
-  its four assertion sites being `mint` and the three integer makers.
+  header value (a template head, a constant, `Basic` joined later, a
+  literal credential — not prose) or a base64 of a value named as a client
+  secret (a heuristic; a hash or HMAC is not reported) outside
+  `legacyBasic` and `clientSecretBasic`. It exits 2 rather than pass in
+  silence: on a program that does not type-check, a given file that does
+  not exist, nothing to check, or rules 4 / 5 without the brands of
+  interfaces-auth 6.0.0 or later. What it does not see is listed in the
+  script's header (Limits). This repository runs rules 4 and 6 in
+  `lint:check`, its four assertion sites being `mint` and the three integer
+  makers.

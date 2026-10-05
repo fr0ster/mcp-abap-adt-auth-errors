@@ -70,17 +70,18 @@ function fixtureFiles(dir: string): string[] {
 /** Each fixture: the one rule it breaks, and how many findings it holds. */
 const BREAKING: Readonly<Record<string, readonly [number, number]>> = {
   'src/rule1.ts': [1, 2],
-  'src/rule1-structural.ts': [1, 1],
-  'src/rule2.ts': [2, 3],
+  'src/rule1-structural.ts': [1, 2],
+  'src/rule2.ts': [2, 7],
   'src/rule3.ts': [3, 1],
   'src/rule4-branded.ts': [4, 1],
   'src/rule4-site.ts': [4, 1],
   'src/rule4-casts.ts': [4, 7],
   'src/rule4-overload.ts': [4, 2],
+  'src/rule4-deep.ts': [4, 1],
   'src/rule5.ts': [5, 2],
   'src/rule6.ts': [6, 2],
   'src/rule7.ts': [7, 3],
-  'src/auth/rule8.ts': [8, 5],
+  'src/auth/rule8.ts': [8, 10],
 };
 
 const OBEYING = [
@@ -88,6 +89,7 @@ const OBEYING = [
   'src/numbers.ts',
   'src/auth/AuthProviderBase.ts',
   'src/auth/tokenRequest.ts',
+  'src/auth/prose.ts',
   'src/credentials/BasicLike.ts',
 ];
 
@@ -137,6 +139,18 @@ describe('check-provider-shape: the fixtures', () => {
       expect.objectContaining({
         line: expect.stringMatching(/^src\/rule4-branded\.ts:4:\d+: rule 4: /),
       }),
+    ]);
+  });
+
+  it('tells a class beside the base to drop `implements IAuthProvider`', () => {
+    const lines = run.findings
+      .filter((finding) => finding.file === 'src/rule1.ts')
+      .map((finding) => finding.line);
+    expect(lines).toEqual([
+      expect.stringMatching(/a provider extends AuthProviderBase$/),
+      expect.stringMatching(
+        /drop `implements IAuthProvider`: AuthProviderBase already implements it$/,
+      ),
     ]);
   });
 
@@ -214,6 +228,74 @@ describe('check-provider-shape: usage', () => {
 
   it('refuses a rule it does not know', () => {
     expect(check(['--rules', '4,9']).status).toBe(2);
+  });
+
+  it('refuses a file that does not exist', () => {
+    const run = check(['--rules', '4', join(repo, 'src', 'nope.ts')]);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toMatch(/no such file: .*nope\.ts/);
+    expect(run.stdout).toBe('');
+  });
+
+  it('refuses a root with nothing to check', () => {
+    const root = mkdtempSync(join(tmpdir(), 'shape-empty-'));
+    try {
+      const run = check(['--rules', '6', '--root', root]);
+      expect(run.status).toBe(2);
+      expect(run.stderr).toMatch(/no file to check/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses rules 4 and 5 without the brands of interfaces-auth 6', () => {
+    const root = mkdtempSync(join(tmpdir(), 'shape-old-'));
+    try {
+      const contract = join(
+        root,
+        'node_modules',
+        '@mcp-abap-adt',
+        'interfaces-auth',
+      );
+      mkdirSync(contract, { recursive: true });
+      writeFileSync(
+        join(contract, 'package.json'),
+        JSON.stringify({
+          name: '@mcp-abap-adt/interfaces-auth',
+          version: '5.0.0',
+          types: 'index.d.ts',
+        }),
+      );
+      writeFileSync(
+        join(contract, 'index.d.ts'),
+        'export interface IAuthRefusal { readonly reason: string }\n',
+      );
+      writeFileSync(
+        join(root, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'node16',
+            moduleResolution: 'node16',
+          },
+          include: ['src'],
+        }),
+      );
+      mkdirSync(join(root, 'src'));
+      writeFileSync(
+        join(root, 'src', 'old.ts'),
+        "import type { IAuthRefusal } from '@mcp-abap-adt/interfaces-auth';\nexport const r = {} as IAuthRefusal;\n",
+      );
+      for (const rules of ['4', '5']) {
+        const run = check(['--rules', rules, '--root', root]);
+        expect(run.status).toBe(2);
+        expect(run.stdout).toBe('');
+        expect(run.stderr).toMatch(/need the brands .* not found: minted/);
+      }
+      expect(check(['--rules', '6', '--root', root]).status).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('refuses a program that does not type-check', () => {

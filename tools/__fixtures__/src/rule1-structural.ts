@@ -21,3 +21,24 @@ export class UndeclaredProvider {
     return OK;
   }
 }
+
+/** A class expression, unnamed, that satisfies IAuthProvider. */
+export const AnonymousProvider = class {
+  readonly kind = 'anonymous';
+
+  async prepare(): Promise<AuthOutcome> {
+    return OK;
+  }
+
+  async establish(): Promise<AuthOutcome> {
+    return OK;
+  }
+
+  async authorize(): Promise<AuthOutcome> {
+    return OK;
+  }
+
+  async rejected(): Promise<AuthOutcome> {
+    return OK;
+  }
+};

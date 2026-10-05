@@ -20,16 +20,21 @@
  * outside tests (`__tests__`, `__typechecks__`, `__fixtures__`, `__mocks__`,
  * `*.test.ts`, `*.spec.ts`) and declarations. Each finding is one line on
  * stdout, `<file>:<line>:<column>: rule <n>: <what>`, the file relative to
- * the root. Exit 0: nothing found; 1: findings; 2: a usage error, or a
+ * the root. Exit 0: nothing found; 1: findings; 2, reported on stderr: a
+ * usage error, a file given that does not exist, nothing to check, a
  * program that does not type-check (the rules read types, so they are not
- * decided on a broken program), reported on stderr.
+ * decided on a broken program), or rules 4 / 5 asked for while the brands of
+ * interfaces-auth 6.0.0 or later are not found (they would pass in silence).
  *
  * The rules (§8.2), each selected by its number:
  *   1  a class that implements IAuthProvider, other than AuthProviderBase —
  *      by an `implements` clause, or structurally (its instances satisfy
  *      IAuthProvider) without reaching AuthProviderBase;
  *   2  a class reaching AuthProviderBase that declares, or assigns to `this`,
- *      a member named prepare, establish, authorize or rejected;
+ *      a member named prepare, establish, authorize or rejected (a computed
+ *      name folded from its literal type); `Object.assign` or
+ *      `Object.defineProperty` writing one onto `this` of such a class or
+ *      onto its `prototype`;
  *   3  an object literal that satisfies IAuthProvider;
  *   4  a type assertion whose target is or contains an error, a refusal, an
  *      outcome, a failure or a branded integer of the contract, outside the
@@ -45,10 +50,18 @@
  *      arguments are spread, or whose argument list reads `this` (outside
  *      a function expression) other than `this.#moments`; `guard` reached
  *      through call / apply / bind;
- *   8  in src/auth and src/providers: a `Basic ` authorization value, or a
- *      base64 encoding of a value built from a client secret, outside
- *      `legacyBasic` (src/auth/tokenRequest.ts) and `clientSecretBasic`
- *      (src/clientAuthentication/clientSecret.ts).
+ *   8  in src/auth and src/providers (spec §6, C12): a `Basic ` authorization
+ *      value, or a base64 encoding (`toString('base64' | 'base64url')`,
+ *      `btoa`) of a value built from a client secret, outside `legacyBasic`
+ *      (src/auth/tokenRequest.ts) and `clientSecretBasic`
+ *      (src/clientAuthentication/clientSecret.ts). A Basic value is a string
+ *      that is `Basic ` (any case) alone — a template head, a constant, a
+ *      string joined later — or `Basic` alone, or `Basic` and a literal
+ *      base64 credential; prose naming Basic is not one. "Built from a client
+ *      secret" is a heuristic: an identifier or key named `secret`,
+ *      `…_secret` or `…Secret`, following same-file variable initialisers.
+ *      A hash or HMAC of a secret is not a reversible form of it, so not
+ *      reported.
  *
  * A site list is a JSON array: assertion-sites.json of `{ file, function }`,
  * diagnostic-sites.json of `{ file, function, field }`, `file` relative to the
@@ -56,6 +69,28 @@
  * nearest enclosing named function: a function declaration, a method, an
  * accessor, or a function expression or arrow assigned to a variable or a
  * property.
+ *
+ * Limits — what the check does not see (each would need data flow or a
+ * second type system, and none is a pattern the repositories write):
+ *   - rule 1: a provider built by a mixin returning an anonymous class;
+ *   - rule 2: `Object.defineProperties`, an `Object.assign` / `defineProperty`
+ *     reached through an alias, a member name not folded to a literal;
+ *   - rule 3: an object built by `Object.create` or `Object.assign` of partial
+ *     literals and returned as IAuthProvider;
+ *   - rule 4: an unconstrained generic cast helper
+ *     (`<T>(x: unknown): T => x as T`, then `cast<IAuthProviderError>(x)`), a
+ *     value of type `any` assigned without an assertion, a JSDoc cast in a
+ *     checked `.js` file;
+ *   - rule 5: `Object.assign` through an alias (`const assign =
+ *     Object.assign`, `Object['assign']`), `structuredClone` of an error;
+ *   - rules 6 and 7: `Reflect.apply` of a builder or of `guard`; in rule 7, a
+ *     provider property read before the call (`const self = this`,
+ *     `const op = this.op`, then `guard(op, …)`);
+ *   - rule 8: a `Basic ` value assembled from pieces (`'Ba' + 'sic '`), a
+ *     lowercase `basic` with no space after it (it is also an auth type's
+ *     name), `toString(encoding)` with the encoding in a variable, a secret
+ *     under a name the heuristic does not know, axios's `auth: { username,
+ *     password }` option (axios writes that Basic header itself).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -207,6 +242,12 @@ function loadProgram(options) {
       const path = rel(options.root, file);
       return path.startsWith('src/') && !isTestPath(path);
     });
+  for (const file of options.files) {
+    if (!existsSync(file)) fail(`no such file: ${file}`);
+  }
+  if (checked.length === 0) {
+    fail(`no file to check under ${join(options.root, 'src')}`);
+  }
   const roots = [...checked];
   const contract = resolveModule(
     INTERFACES_AUTH,
@@ -236,7 +277,42 @@ function loadProgram(options) {
     );
     process.exit(2);
   }
+  if (sources.length !== checked.length)
+    fail('a file to check is not in the program');
+  if (options.rules.has(4) || options.rules.has(5)) requireBrands(program);
   return { program, sources, contract };
+}
+
+/**
+ * Rules 4 and 5 recognise the contract's types by the brands interfaces-auth
+ * declares; without every brand they would pass in silence (an
+ * interfaces-auth before 6.0.0, a brand renamed), so the check refuses.
+ */
+function requireBrands(program) {
+  const found = new Set();
+  for (const source of program.getSourceFiles()) {
+    if (packageOf(source.fileName).name !== INTERFACES_AUTH) continue;
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          BRANDS.has(declaration.name.text) &&
+          declaration.type !== undefined &&
+          ts.isTypeOperatorNode(declaration.type) &&
+          declaration.type.operator === ts.SyntaxKind.UniqueKeyword
+        ) {
+          found.add(declaration.name.text);
+        }
+      }
+    }
+  }
+  const missing = [...BRANDS].filter((brand) => !found.has(brand));
+  if (missing.length > 0) {
+    fail(
+      `rules 4 and 5 need the brands of ${INTERFACES_AUTH} 6.0.0 or later; not found: ${missing.join(', ')}`,
+    );
+  }
 }
 
 function resolveModule(name, root, compilerOptions) {
@@ -405,11 +481,14 @@ function createRules(program, contractFile, options, sites) {
    * walked; its type arguments are.
    */
   function containsContract(type, brands) {
-    const seen = new Set();
+    // The shallowest depth each type was walked at: a type first met near
+    // the cut-off is walked again when met higher, where its members fit.
+    const walked = new Map();
     const walk = (current, depth) => {
-      if (current === undefined || depth > MAX_DEPTH || seen.has(current))
-        return false;
-      seen.add(current);
+      if (current === undefined || depth > MAX_DEPTH) return false;
+      const before = walked.get(current);
+      if (before !== undefined && before <= depth) return false;
+      walked.set(current, depth);
       // A type parameter, a conditional or an indexed access: its constraint.
       if (current.flags & ts.TypeFlags.Instantiable) {
         return walk(checker.getBaseConstraintOfType(current), depth + 1);
@@ -541,11 +620,30 @@ function createRules(program, contractFile, options, sites) {
   }
 
   /** Whether the class declared by `node` has AuthProviderBase among its ancestors. */
+  /** The symbol of the class `node` declares, named or not. */
+  function classSymbol(node) {
+    return node.name !== undefined
+      ? checker.getSymbolAtLocation(node.name)
+      : checker.getTypeAtLocation(node).getSymbol();
+  }
+
+  /** A member's name, a computed one folded from its literal type. */
+  function memberName(name) {
+    if (name !== undefined && ts.isComputedPropertyName(name)) {
+      return keyOf(name.expression);
+    }
+    return nameOf(name);
+  }
+
+  /** The string an expression used as a key is typed as, if a literal. */
+  function keyOf(expression) {
+    if (expression === undefined) return undefined;
+    const type = checker.getTypeAtLocation(expression);
+    return type.isStringLiteral() ? type.value : undefined;
+  }
+
   function reachesBase(node) {
-    const symbol =
-      node.name !== undefined
-        ? checker.getSymbolAtLocation(node.name)
-        : checker.getTypeAtLocation(node).getSymbol();
+    const symbol = classSymbol(node);
     if (symbol === undefined) return false;
     const seen = new Set();
     const walk = (type) => {
@@ -609,11 +707,18 @@ function createRules(program, contractFile, options, sites) {
         report(
           implementsProvider,
           1,
-          `a class implements IAuthProvider; a provider extends ${BASE}`,
+          reaches
+            ? `drop \`implements IAuthProvider\`: ${BASE} already implements it`
+            : `a class implements IAuthProvider; a provider extends ${BASE}`,
         );
       } else if (!reaches && providerType !== undefined && !isAbstract(node)) {
-        const instance = checker.getTypeAtLocation(node);
+        const symbol = classSymbol(node);
+        const instance =
+          symbol === undefined
+            ? undefined
+            : checker.getDeclaredTypeOfSymbol(symbol);
         if (
+          instance !== undefined &&
           instance.flags & ts.TypeFlags.Object &&
           checker.isTypeAssignableTo(instance, providerType)
         ) {
@@ -627,7 +732,7 @@ function createRules(program, contractFile, options, sites) {
     }
     if (options.rules.has(2) && reaches) {
       for (const member of node.members) {
-        const name = nameOf(member.name);
+        const name = memberName(member.name);
         if (name !== undefined && MOMENTS.has(name)) {
           report(
             member,
@@ -667,9 +772,7 @@ function createRules(program, contractFile, options, sites) {
           ) {
             const name = ts.isPropertyAccessExpression(target)
               ? target.name.text
-              : ts.isStringLiteralLike(target.argumentExpression)
-                ? target.argumentExpression.text
-                : undefined;
+              : keyOf(target.argumentExpression);
             if (name !== undefined && MOMENTS.has(name)) {
               report(
                 child,
@@ -683,6 +786,65 @@ function createRules(program, contractFile, options, sites) {
       };
       ts.forEachChild(node, visit);
     }
+  }
+
+  /**
+   * Rule 2 through a call: `Object.assign` or `Object.defineProperty` onto
+   * `this` of a class reaching the base, or onto `X.prototype` of one,
+   * with a moment's key.
+   */
+  function checkMomentCall(node) {
+    if (!options.rules.has(2)) return;
+    const method = globalObjectMethod(node);
+    if (method !== 'assign' && method !== 'defineProperty') return;
+    const target = node.arguments[0];
+    if (target === undefined || !targetsProvider(skipParentheses(target)))
+      return;
+    const names =
+      method === 'defineProperty'
+        ? [keyOf(node.arguments[1])]
+        : node.arguments.slice(1).flatMap((argument) => {
+            const source = ts.isSpreadElement(argument)
+              ? argument.expression
+              : argument;
+            return checker
+              .getPropertiesOfType(checker.getTypeAtLocation(source))
+              .map((property) => property.name);
+          });
+    const moment = names.find(
+      (name) => name !== undefined && MOMENTS.has(name),
+    );
+    if (moment !== undefined) {
+      report(
+        node,
+        2,
+        `Object.${method} writes ${moment} onto a class reaching ${BASE}; ${BASE} owns the four methods`,
+      );
+    }
+  }
+
+  /** `this` inside a class reaching the base, or `X.prototype` of one. */
+  function targetsProvider(target) {
+    if (target.kind === ts.SyntaxKind.ThisKeyword) {
+      const owner = ts.findAncestor(target, ts.isClassLike);
+      return owner !== undefined && reachesBase(owner);
+    }
+    if (
+      ts.isPropertyAccessExpression(target) &&
+      target.name.text === 'prototype'
+    ) {
+      const symbol = checker.getSymbolAtLocation(target.expression);
+      const resolved =
+        symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias
+          ? checker.getAliasedSymbol(symbol)
+          : symbol;
+      const declarations = resolved?.declarations ?? [];
+      return declarations.some(
+        (declaration) =>
+          ts.isClassLike(declaration) && reachesBase(declaration),
+      );
+    }
+    return false;
   }
 
   function isAbstract(node) {
@@ -799,16 +961,21 @@ function createRules(program, contractFile, options, sites) {
     }
   }
 
-  function isGlobalObjectAssign(node) {
+  /** The method of the global `Object` that `node` calls, if it calls one. */
+  function globalObjectMethod(node) {
     const callee = skipParentheses(node.expression);
-    if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== 'assign')
-      return false;
+    if (!ts.isPropertyAccessExpression(callee)) return undefined;
     const object = skipParentheses(callee.expression);
-    if (!ts.isIdentifier(object) || object.text !== 'Object') return false;
+    if (!ts.isIdentifier(object) || object.text !== 'Object') return undefined;
     const symbol = checker.getSymbolAtLocation(object);
-    return (symbol?.declarations ?? []).every((declaration) =>
+    const global = (symbol?.declarations ?? []).every((declaration) =>
       program.isSourceFileDefaultLibrary(declaration.getSourceFile()),
     );
+    return global ? callee.name.text : undefined;
+  }
+
+  function isGlobalObjectAssign(node) {
+    return globalObjectMethod(node) === 'assign';
   }
 
   function checkObjectAssign(node) {
@@ -1006,8 +1173,23 @@ function createRules(program, contractFile, options, sites) {
     return isSite(node, BASIC_SITES);
   }
 
-  const BASIC_TAIL = /(^|[^A-Za-z])Basic\s+$/;
-  const BASIC_WHOLE = /^Basic\s+[A-Za-z0-9+/_-]{8,}={0,2}$/;
+  /**
+   * A header value: `Basic ` (any case) and nothing else — a template head
+   * followed by the credential, or a string joined to it (`+`, `concat`, a
+   * constant used later); `Basic` alone (`join(' ')`, `${'Basic'}`); or
+   * `Basic` and a literal credential (base64 holding a digit, `+`, `/` or
+   * `=`). Prose (`Basic authentication`, `the Basic ${x}`) is none.
+   */
+  const BASIC_PREFIX = /^\s*basic\s+$/i;
+  const BASIC_CREDENTIAL = /^\s*basic\s+([A-Za-z0-9+/_-]{8,}={0,2})$/i;
+
+  function isBasicValue(node) {
+    const text = node.text;
+    if (BASIC_PREFIX.test(text)) return true;
+    if (text.trim() === 'Basic') return true;
+    const credential = BASIC_CREDENTIAL.exec(text)?.[1];
+    return credential !== undefined && /[0-9+/=]/.test(credential);
+  }
 
   function checkBasicText(node) {
     if (
@@ -1016,12 +1198,7 @@ function createRules(program, contractFile, options, sites) {
       isBasicSite(node)
     )
       return;
-    const text = node.text;
-    const tail =
-      ts.isTemplateHead(node) ||
-      ts.isTemplateMiddle(node) ||
-      isConcatenated(node);
-    if ((tail && BASIC_TAIL.test(text)) || BASIC_WHOLE.test(text)) {
+    if (isBasicValue(node)) {
       report(
         node,
         8,
@@ -1030,12 +1207,16 @@ function createRules(program, contractFile, options, sites) {
     }
   }
 
-  function isConcatenated(node) {
-    const parent = node.parent;
+  /**
+   * A name for a secret's value: `secret`, `…_secret`, `…Secret` (a client
+   * secret by any spelling) — not a name that merely starts with it
+   * (`secretName`). A heuristic: a secret under another name is not seen.
+   */
+  function isSecretName(name) {
     return (
-      ts.isBinaryExpression(parent) &&
-      parent.operatorToken.kind === ts.SyntaxKind.PlusToken &&
-      parent.left === node
+      /^secret$/i.test(name) ||
+      /_secret$/i.test(name) ||
+      /[A-Za-z0-9]Secret$/.test(name)
     );
   }
 
@@ -1047,7 +1228,7 @@ function createRules(program, contractFile, options, sites) {
     if (!ts.isPropertyAccessExpression(callee)) return undefined;
     const method = callee.name.text;
     const encoding = node.arguments[0];
-    if (!(method === 'toString' || method === 'digest')) return undefined;
+    if (method !== 'toString') return undefined;
     if (
       encoding === undefined ||
       !ts.isStringLiteralLike(encoding) ||
@@ -1074,7 +1255,7 @@ function createRules(program, contractFile, options, sites) {
     const walk = (current, depth) => {
       if (current === undefined || depth > MAX_DEPTH) return false;
       if (ts.isIdentifier(current) || ts.isPrivateIdentifier(current)) {
-        if (/secret/i.test(current.text)) return true;
+        if (isSecretName(current.text)) return true;
         const symbol = checker.getSymbolAtLocation(current);
         if (symbol === undefined || seen.has(symbol)) return false;
         seen.add(symbol);
@@ -1089,7 +1270,7 @@ function createRules(program, contractFile, options, sites) {
         ts.isStringLiteralLike(current) &&
         ts.isElementAccessExpression(current.parent)
       ) {
-        return /secret/i.test(current.text);
+        return isSecretName(current.text);
       }
       let found = false;
       ts.forEachChild(current, (child) => {
@@ -1131,13 +1312,13 @@ function createRules(program, contractFile, options, sites) {
       checkSpread(node);
     else if (ts.isCallExpression(node)) {
       checkObjectAssign(node);
+      checkMomentCall(node);
       checkCall(node);
       checkBase64(node);
     } else if (
       ts.isStringLiteral(node) ||
       ts.isNoSubstitutionTemplateLiteral(node) ||
-      ts.isTemplateHead(node) ||
-      ts.isTemplateMiddle(node)
+      ts.isTemplateHead(node)
     ) {
       checkBasicText(node);
     }

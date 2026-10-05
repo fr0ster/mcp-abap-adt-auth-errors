@@ -13,3 +13,25 @@ export const fixed = 'Basic dXNlcjpwYXNzd29yZA==';
 export function concatenated(credential: string): string {
   return 'Basic ' + credential;
 }
+
+const PREFIX = 'Basic ';
+
+export function fromConstant(credential: string): string {
+  return PREFIX + credential;
+}
+
+export function concatenatedCall(credential: string): string {
+  return 'Basic '.concat(credential);
+}
+
+export function joined(credential: string): string {
+  return ['Basic', credential].join(' ');
+}
+
+export function nested(credential: string): string {
+  return `${'Basic'} ${credential}`;
+}
+
+export function lowercase(credential: string): string {
+  return `basic ${credential}`;
+}
