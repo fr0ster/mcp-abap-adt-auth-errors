@@ -86,6 +86,13 @@ const BREAKING: Readonly<Record<string, readonly [number, number]>> = {
   'src/rule6.ts': [6, 2],
   'src/rule7.ts': [7, 3],
   'src/auth/rule8.ts': [8, 10],
+  'src/clientAuthentication/rule8.ts': [8, 1],
+  'src/clientAuthentication/rule8-secret.ts': [8, 2],
+  'src/clientAuthentication/rule8-impostors.ts': [8, 4],
+  'src/clientAuthentication/rule8-limits.ts': [8, 4],
+  'src/clientAuthentication/rule8-reassigned.ts': [8, 1],
+  'src/clientAuthentication/rule8-adapters.ts': [8, 3],
+  'src/clientAuthentication/rule8-chains.ts': [8, 2],
 };
 
 const OBEYING = [
@@ -94,6 +101,9 @@ const OBEYING = [
   'src/auth/AuthProviderBase.ts',
   'src/auth/tokenRequest.ts',
   'src/auth/prose.ts',
+  'src/clientAuthentication/clientSecret.ts',
+  'src/clientAuthentication/digest.ts',
+  'src/clientAuthentication/fakeCrypto.ts',
   'src/credentials/BasicLike.ts',
 ];
 

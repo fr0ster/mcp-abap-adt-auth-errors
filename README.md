@@ -755,7 +755,23 @@ base is written.
 | 5 | a spread or `Object.assign` of an error |
 | 6 | a builder call with diagnostics outside the sites of `diagnostic-sites.json`; a builder through `call` / `apply` / `bind` |
 | 7 | a `guard` call whose grant is not a function expression, or whose arguments read `this` other than `this.#moments` |
-| 8 | in `src/auth` and `src/providers`: a `Basic ` header value, or a base64 of a value named as a client secret, outside `legacyBasic` and `clientSecretBasic` |
+| 8 | in `src/auth`, `src/providers` and `src/clientAuthentication`: a `Basic ` header value, or a base64 of a value named as a client secret, outside `legacyBasic` and `clientSecretBasic` |
+
+Rule 8's crypto boundary (a digest or signature of a secret is not the
+secret) is recognised only for direct calls resolving to `@types/node`'s
+`crypto` declarations. A destructured function (`const { createHash } =
+crypto`) and WebCrypto `subtle.digest` are reported: rewrite the call as a
+direct import, or list the site. The boundary holds only for the closed grammar `createHash|createHmac(…)
+[.update(…)]* .digest(…)`, `createSign(…) [.update(…)]* .sign(…)` and
+`crypto.sign(…)`; any other member in the chain (`pipe`, `copy`, `write`)
+keeps secret tracking. It is granted only to a name rooted at an import from `crypto` /
+`node:crypto` (or a `const` alias of one): an injected adapter (a parameter
+typed from `crypto`), a reassigned `let` or a property is reported whatever
+its type. A crypto object held in a `let`, `var`, parameter
+or property keeps secret tracking (only a `const` is trusted), so a `let`
+never reassigned is reported too. A method replaced on a crypto object is
+not detected; the check's threat model is a well-meaning developer's mistake,
+not hostile code.
 
 Site lists live in the repository's `tools/` (or `--sites`): an
 `assertion-sites.json` of `{ file, function }` and a `diagnostic-sites.json`
