@@ -1,7 +1,10 @@
-/** Rule 8: `clientSecretBasic` in `src/clientAuthentication/clientSecret.ts` may build a Basic header. */
-export function clientSecretBasic(
-  clientId: string,
-  clientSecret: string,
-): string {
-  return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
+/** Rule 8: `clientSecretBasic` in `src/clientAuthentication/clientSecret.ts` may build a Basic header, also inside the strategy it returns. */
+export function clientSecretBasic(secret: string) {
+  return {
+    authenticate: async (draft: { readonly clientId: string }) => ({
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${draft.clientId}:${secret}`).toString('base64')}`,
+      },
+    }),
+  };
 }

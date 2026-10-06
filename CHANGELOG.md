@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never applied, because the scope was only `src/auth/` and `src/providers/`:
   a `Basic ${x}` header anywhere in `src/clientAuthentication` passed with exit
   0. It is now reported, except in `clientSecretBasic`.
+- Shape check, rule 8: a digest (`createHash` / `createHmac` `.digest()`) or
+  a signature (`createSign` `.sign()`, `crypto.sign`) ends secret derivation,
+  so a base64 of a hash of a secret is not reported; and the `clientSecretBasic`
+  exemption covers the functions inside it (the returned `authenticate`).
 
 ## [1.0.0] - 2026-10-06
 

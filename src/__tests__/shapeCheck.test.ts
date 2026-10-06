@@ -87,6 +87,7 @@ const BREAKING: Readonly<Record<string, readonly [number, number]>> = {
   'src/rule7.ts': [7, 3],
   'src/auth/rule8.ts': [8, 10],
   'src/clientAuthentication/rule8.ts': [8, 1],
+  'src/clientAuthentication/rule8-secret.ts': [8, 2],
 };
 
 const OBEYING = [
@@ -96,6 +97,7 @@ const OBEYING = [
   'src/auth/tokenRequest.ts',
   'src/auth/prose.ts',
   'src/clientAuthentication/clientSecret.ts',
+  'src/clientAuthentication/digest.ts',
   'src/credentials/BasicLike.ts',
 ];
 

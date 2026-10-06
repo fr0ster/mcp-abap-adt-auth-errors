@@ -659,8 +659,9 @@ function createRules(program, contractFile, baseFile, options, sites) {
     return undefined;
   }
 
-  /** The nearest enclosing named function of `node`. */
-  function functionOf(node) {
+  /** Every enclosing named function of `node`, nearest first. */
+  function namedFunctionsOf(node) {
+    const names = [];
     for (
       let current = node.parent;
       current !== undefined;
@@ -673,11 +674,11 @@ function createRules(program, contractFile, baseFile, options, sites) {
         ts.isSetAccessorDeclaration(current)
       ) {
         const name = nameOf(current.name);
-        if (name !== undefined) return name;
+        if (name !== undefined) names.push(name);
       }
-      if (ts.isConstructorDeclaration(current)) return 'constructor';
+      if (ts.isConstructorDeclaration(current)) names.push('constructor');
       if (ts.isFunctionExpression(current) || ts.isArrowFunction(current)) {
-        if (current.name !== undefined) return current.name.text;
+        if (current.name !== undefined) names.push(current.name.text);
         const holder = current.parent;
         if (
           (ts.isVariableDeclaration(holder) ||
@@ -686,11 +687,16 @@ function createRules(program, contractFile, baseFile, options, sites) {
           holder.initializer === current
         ) {
           const name = nameOf(holder.name);
-          if (name !== undefined) return name;
+          if (name !== undefined) names.push(name);
         }
       }
     }
-    return undefined;
+    return names;
+  }
+
+  /** The nearest enclosing named function of `node`. */
+  function functionOf(node) {
+    return namedFunctionsOf(node)[0];
   }
 
   function isSite(node, list) {
@@ -1324,8 +1330,13 @@ function createRules(program, contractFile, baseFile, options, sites) {
     return BASIC_SCOPE.some((prefix) => file.startsWith(prefix));
   }
 
+  /** A site's function, or any function inside it (`authenticate` in `clientSecretBasic`). */
   function isBasicSite(node) {
-    return isSite(node, BASIC_SITES);
+    const file = rel(options.root, node.getSourceFile().fileName);
+    const names = namedFunctionsOf(node);
+    return BASIC_SITES.some(
+      (site) => site.file === file && names.includes(site.function),
+    );
   }
 
   /**
@@ -1404,11 +1415,71 @@ function createRules(program, contractFile, baseFile, options, sites) {
     return subject;
   }
 
+  /**
+   * Whether the chain `node` is built on a call of one of `names`
+   * (`createHash(…).update(…)`), through local initialisers.
+   */
+  function chainRootsAt(node, names, depth = 0) {
+    if (depth > MAX_DEPTH) return false;
+    const current = skipParentheses(node);
+    if (ts.isCallExpression(current)) {
+      const callee = skipParentheses(current.expression);
+      const name = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : undefined;
+      if (name !== undefined && names.has(name)) return true;
+      return ts.isPropertyAccessExpression(callee)
+        ? chainRootsAt(callee.expression, names, depth + 1)
+        : false;
+    }
+    if (ts.isPropertyAccessExpression(current))
+      return chainRootsAt(current.expression, names, depth + 1);
+    if (ts.isIdentifier(current)) {
+      const symbol = checker.getSymbolAtLocation(current);
+      return (symbol?.declarations ?? []).some(
+        (declaration) =>
+          ts.isVariableDeclaration(declaration) &&
+          declaration.initializer !== undefined &&
+          chainRootsAt(declaration.initializer, names, depth + 1),
+      );
+    }
+    return false;
+  }
+
+  /**
+   * An irreversible boundary ends secret derivation: a digest of
+   * `createHash` / `createHmac`, or a signature of `createSign` /
+   * `crypto.sign` — what is encoded after it is not the secret.
+   */
+  function isIrreversible(call) {
+    const callee = skipParentheses(call.expression);
+    if (ts.isIdentifier(callee)) return callee.text === 'sign';
+    if (!ts.isPropertyAccessExpression(callee)) return false;
+    const method = callee.name.text;
+    if (method === 'digest')
+      return chainRootsAt(
+        callee.expression,
+        new Set(['createHash', 'createHmac']),
+      );
+    if (method !== 'sign') return false;
+    const receiver = skipParentheses(callee.expression);
+    if (
+      (ts.isIdentifier(receiver) && receiver.text === 'crypto') ||
+      (ts.isPropertyAccessExpression(receiver) &&
+        receiver.name.text === 'crypto')
+    )
+      return true;
+    return chainRootsAt(receiver, new Set(['createSign']));
+  }
+
   /** Whether `node` is built from something named a secret, following local initialisers. */
   function builtFromSecret(node) {
     const seen = new Set();
     const walk = (current, depth) => {
       if (current === undefined || depth > MAX_DEPTH) return false;
+      if (ts.isCallExpression(current) && isIrreversible(current)) return false;
       if (ts.isIdentifier(current) || ts.isPrivateIdentifier(current)) {
         if (isSecretName(current.text)) return true;
         const symbol = checker.getSymbolAtLocation(current);
