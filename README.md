@@ -761,7 +761,10 @@ Rule 8's crypto boundary (a digest or signature of a secret is not the
 secret) is recognised only for direct calls resolving to `@types/node`'s
 `crypto` declarations. A destructured function (`const { createHash } =
 crypto`) and WebCrypto `subtle.digest` are reported: rewrite the call as a
-direct import, or list the site. The boundary is granted only to a name rooted at an import from `crypto` /
+direct import, or list the site. The boundary holds only for the closed grammar `createHash|createHmac(…)
+[.update(…)]* .digest(…)`, `createSign(…) [.update(…)]* .sign(…)` and
+`crypto.sign(…)`; any other member in the chain (`pipe`, `copy`, `write`)
+keeps secret tracking. It is granted only to a name rooted at an import from `crypto` /
 `node:crypto` (or a `const` alias of one): an injected adapter (a parameter
 typed from `crypto`), a reassigned `let` or a property is reported whatever
 its type. A crypto object held in a `let`, `var`, parameter

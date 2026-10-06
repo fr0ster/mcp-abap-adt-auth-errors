@@ -123,7 +123,11 @@
  *     only for direct calls resolving to @types/node's crypto declarations:
  *     a destructured function (`const { createHash } = crypto`) and WebCrypto
  *     `subtle.digest` are reported — rewrite the call as a direct import, or
- *     list the site; the boundary is granted only to a name rooted at an import
+ *     list the site; the boundary holds only for the closed grammar
+ *     `createHash|createHmac(…) [.update(…)]* .digest(…)`,
+ *     `createSign(…) [.update(…)]* .sign(…)` and `crypto.sign(…)`, so any
+ *     other member in the chain (`pipe`, `copy`, `write`, …) keeps secret
+ *     tracking; the boundary is granted only to a name rooted at an import
  *     from `crypto` / `node:crypto` (or a `const` alias of one), so an injected
  *     adapter (a parameter typed `Pick<typeof nodeCrypto, 'sign'>`), a
  *     reassigned `let` or a property is reported whatever its type; a crypto object held in a `let`, `var`, parameter or
@@ -1480,12 +1484,21 @@ function createRules(program, contractFile, baseFile, options, sites) {
     if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
       symbol = checker.getAliasedSymbol(symbol);
     if (symbol === undefined) return undefined;
-    const declared = (symbol.declarations ?? []).some((declaration) =>
+    return declaredInSymbol(symbol) ? symbol.name : undefined;
+  }
+
+  function declaredInSymbol(symbol) {
+    return (symbol.declarations ?? []).some((declaration) =>
       /[\\/]node_modules[\\/]@types[\\/]node[\\/]crypto\.d\.ts$/.test(
         declaration.getSourceFile().fileName,
       ),
     );
-    return declared ? symbol.name : undefined;
+  }
+
+  /** Whether the member name `node` is declared by `@types/node`'s crypto module. */
+  function declaredInNodeCrypto(node) {
+    const symbol = checker.getSymbolAtLocation(node);
+    return symbol !== undefined && declaredInSymbol(symbol);
   }
 
   /**
@@ -1500,12 +1513,15 @@ function createRules(program, contractFile, baseFile, options, sites) {
       const callee = skipParentheses(current.expression);
       const name = nodeCryptoName(callee);
       if (name !== undefined && names.has(name)) return true;
-      return ts.isPropertyAccessExpression(callee)
-        ? chainRootsAt(callee.expression, names, depth + 1)
-        : false;
+      // The closed grammar: factory(…) [.update(…)]* — `update` declared by
+      // Node's Hash / Hmac / Sign; any other member (`pipe`, `copy`, …) ends it.
+      return (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === 'update' &&
+        declaredInNodeCrypto(callee.name) &&
+        chainRootsAt(callee.expression, names, depth + 1)
+      );
     }
-    if (ts.isPropertyAccessExpression(current))
-      return chainRootsAt(current.expression, names, depth + 1);
     if (ts.isIdentifier(current)) {
       const symbol = checker.getSymbolAtLocation(current);
       return (symbol?.declarations ?? []).some(
