@@ -1416,19 +1416,36 @@ function createRules(program, contractFile, baseFile, options, sites) {
   }
 
   /**
-   * Whether the chain `node` is built on a call of one of `names`
-   * (`createHash(…).update(…)`), through local initialisers.
+   * The Node `crypto` function `node` names — through the type checker,
+   * import aliases followed — or undefined: a declaration outside
+   * `@types/node`'s crypto module (a local function, a fake `crypto`
+   * object, a shadowing import) or an unresolved name is not Node's.
+   */
+  function nodeCryptoName(node) {
+    const target = ts.isPropertyAccessExpression(node) ? node.name : node;
+    let symbol = checker.getSymbolAtLocation(target);
+    if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
+      symbol = checker.getAliasedSymbol(symbol);
+    if (symbol === undefined) return undefined;
+    const declared = (symbol.declarations ?? []).some((declaration) =>
+      /[\\/]node_modules[\\/]@types[\\/]node[\\/]crypto\.d\.ts$/.test(
+        declaration.getSourceFile().fileName,
+      ),
+    );
+    return declared ? symbol.name : undefined;
+  }
+
+  /**
+   * Whether the chain `node` is built on a call of one of Node's `crypto`
+   * functions in `names` (`createHash(…).update(…)`), through local
+   * initialisers.
    */
   function chainRootsAt(node, names, depth = 0) {
     if (depth > MAX_DEPTH) return false;
     const current = skipParentheses(node);
     if (ts.isCallExpression(current)) {
       const callee = skipParentheses(current.expression);
-      const name = ts.isIdentifier(callee)
-        ? callee.text
-        : ts.isPropertyAccessExpression(callee)
-          ? callee.name.text
-          : undefined;
+      const name = nodeCryptoName(callee);
       if (name !== undefined && names.has(name)) return true;
       return ts.isPropertyAccessExpression(callee)
         ? chainRootsAt(callee.expression, names, depth + 1)
@@ -1449,13 +1466,14 @@ function createRules(program, contractFile, baseFile, options, sites) {
   }
 
   /**
-   * An irreversible boundary ends secret derivation: a digest of
-   * `createHash` / `createHmac`, or a signature of `createSign` /
-   * `crypto.sign` — what is encoded after it is not the secret.
+   * An irreversible boundary ends secret derivation: a digest of Node's
+   * `createHash` / `createHmac`, or a signature of Node's `createSign` /
+   * `crypto.sign` — what is encoded after it is not the secret. Decided by
+   * the declaration the name resolves to, never by the name.
    */
   function isIrreversible(call) {
     const callee = skipParentheses(call.expression);
-    if (ts.isIdentifier(callee)) return callee.text === 'sign';
+    if (nodeCryptoName(callee) === 'sign') return true;
     if (!ts.isPropertyAccessExpression(callee)) return false;
     const method = callee.name.text;
     if (method === 'digest')
@@ -1463,15 +1481,9 @@ function createRules(program, contractFile, baseFile, options, sites) {
         callee.expression,
         new Set(['createHash', 'createHmac']),
       );
-    if (method !== 'sign') return false;
-    const receiver = skipParentheses(callee.expression);
-    if (
-      (ts.isIdentifier(receiver) && receiver.text === 'crypto') ||
-      (ts.isPropertyAccessExpression(receiver) &&
-        receiver.name.text === 'crypto')
-    )
-      return true;
-    return chainRootsAt(receiver, new Set(['createSign']));
+    if (method === 'sign')
+      return chainRootsAt(callee.expression, new Set(['createSign']));
+    return false;
   }
 
   /** Whether `node` is built from something named a secret, following local initialisers. */

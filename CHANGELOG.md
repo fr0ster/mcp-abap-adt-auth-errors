@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   0. It is now reported, except in `clientSecretBasic`.
 - Shape check, rule 8: a digest (`createHash` / `createHmac` `.digest()`) or
   a signature (`createSign` `.sign()`, `crypto.sign`) ends secret derivation,
-  so a base64 of a hash of a secret is not reported; and the `clientSecretBasic`
+  so a base64 of a hash of a secret is not reported (decided by the declaration
+  a name resolves to in Node's `crypto` typings, never by the name); and the `clientSecretBasic`
   exemption covers the functions inside it (the returned `authenticate`).
 
 ## [1.0.0] - 2026-10-06
