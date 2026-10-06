@@ -144,7 +144,11 @@ const BRANDS = new Set([
 /** Rule 4: the files of auth-errors whose overloads are the builders' own. */
 const OVERLOAD_FILES = new Set(['src/builders.ts', 'src/mint.ts']);
 /** Rule 8: where it applies, and its two sites. */
-const BASIC_SCOPE = ['src/auth/', 'src/providers/'];
+const BASIC_SCOPE = [
+  'src/auth/',
+  'src/providers/',
+  'src/clientAuthentication/',
+];
 const BASIC_SITES = [
   { file: 'src/auth/tokenRequest.ts', function: 'legacyBasic' },
   {

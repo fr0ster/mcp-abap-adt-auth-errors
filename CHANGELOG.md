@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - Unreleased
+
+### Fixed
+
+- Shape check, rule 8: its scope now includes `src/clientAuthentication/`. The
+  exemption for `clientSecretBasic` (`src/clientAuthentication/clientSecret.ts`)
+  never applied, because the scope was only `src/auth/` and `src/providers/`:
+  a `Basic ${x}` header anywhere in `src/clientAuthentication` passed with exit
+  0. It is now reported, except in `clientSecretBasic`.
+
 ## [1.0.0] - 2026-10-06
 
 The first release: the runtime half of the authentication error contract,

@@ -755,7 +755,7 @@ base is written.
 | 5 | a spread or `Object.assign` of an error |
 | 6 | a builder call with diagnostics outside the sites of `diagnostic-sites.json`; a builder through `call` / `apply` / `bind` |
 | 7 | a `guard` call whose grant is not a function expression, or whose arguments read `this` other than `this.#moments` |
-| 8 | in `src/auth` and `src/providers`: a `Basic ` header value, or a base64 of a value named as a client secret, outside `legacyBasic` and `clientSecretBasic` |
+| 8 | in `src/auth`, `src/providers` and `src/clientAuthentication`: a `Basic ` header value, or a base64 of a value named as a client secret, outside `legacyBasic` and `clientSecretBasic` |
 
 Site lists live in the repository's `tools/` (or `--sites`): an
 `assertion-sites.json` of `{ file, function }` and a `diagnostic-sites.json`

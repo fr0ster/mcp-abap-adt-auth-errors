@@ -1,6 +1,6 @@
 {
   "name": "@mcp-abap-adt/auth-errors",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The runtime half of the MCP ABAP ADT authentication error contract: builders, renderers, allowlist guards and classification for IAuthProviderError",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
