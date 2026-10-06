@@ -23,7 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exemption covers the functions inside it (the returned `authenticate`).
   Documented limits: destructured crypto functions and `subtle.digest` are
   reported, as is a crypto object held in a `let`/`var`/parameter/property
-  (only a `const` is trusted); a replaced method on a crypto object is not detected.
+  (only a `const` is trusted), and the boundary needs a name rooted at an
+  import from `crypto` / `node:crypto` (an injected, type-only adapter is
+  reported); a replaced method on a crypto object is not detected.
 
 ## [1.0.0] - 2026-10-06
 

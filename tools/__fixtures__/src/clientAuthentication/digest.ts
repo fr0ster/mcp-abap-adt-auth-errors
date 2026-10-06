@@ -33,3 +33,14 @@ export function constHeld(clientSecret: string): string {
   const encoder = createHash('sha256').update(clientSecret);
   return encoder.digest().toString('base64');
 }
+
+import * as c from 'node:crypto';
+
+export function constAlias(clientSecret: string): string {
+  const k = c;
+  return k
+    .createHash('sha256')
+    .update(clientSecret)
+    .digest()
+    .toString('base64');
+}

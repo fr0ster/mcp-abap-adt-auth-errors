@@ -123,7 +123,10 @@
  *     only for direct calls resolving to @types/node's crypto declarations:
  *     a destructured function (`const { createHash } = crypto`) and WebCrypto
  *     `subtle.digest` are reported — rewrite the call as a direct import, or
- *     list the site; a crypto object held in a `let`, `var`, parameter or
+ *     list the site; the boundary is granted only to a name rooted at an import
+ *     from `crypto` / `node:crypto` (or a `const` alias of one), so an injected
+ *     adapter (a parameter typed `Pick<typeof nodeCrypto, 'sign'>`), a
+ *     reassigned `let` or a property is reported whatever its type; a crypto object held in a `let`, `var`, parameter or
  *     property keeps secret tracking (only a `const` is trusted: a later
  *     assignment could replace it), so a `let` never reassigned is reported
  *     too — a fail-closed false positive; a method replaced on a crypto object
@@ -165,6 +168,8 @@ const BASIC_SITES = [
     function: 'clientSecretBasic',
   },
 ];
+/** Rule 8: the modules whose imports are Node's crypto. */
+const CRYPTO_MODULES = new Set(['crypto', 'node:crypto']);
 const MAX_DEPTH = 8;
 
 // ---------------------------------------------------------------- arguments
@@ -1425,12 +1430,51 @@ function createRules(program, contractFile, baseFile, options, sites) {
   }
 
   /**
+   * Whether `node` is rooted at a binding imported from `crypto` /
+   * `node:crypto` (named, namespace or default), or at a `const` alias of
+   * one, transitively. A parameter, `let`, `var`, property or destructured
+   * name is not: it may hold a stub whatever its type says.
+   */
+  function rootedAtCryptoImport(node, depth = 0) {
+    if (depth > MAX_DEPTH) return false;
+    const current = skipParentheses(node);
+    if (ts.isPropertyAccessExpression(current))
+      return rootedAtCryptoImport(current.expression, depth + 1);
+    if (!ts.isIdentifier(current)) return false;
+    const symbol = checker.getSymbolAtLocation(current);
+    return (symbol?.declarations ?? []).some((declaration) => {
+      if (
+        ts.isImportSpecifier(declaration) ||
+        ts.isNamespaceImport(declaration) ||
+        ts.isImportClause(declaration)
+      ) {
+        for (let up = declaration.parent; up !== undefined; up = up.parent) {
+          if (ts.isImportDeclaration(up))
+            return (
+              ts.isStringLiteralLike(up.moduleSpecifier) &&
+              CRYPTO_MODULES.has(up.moduleSpecifier.text)
+            );
+        }
+        return false;
+      }
+      return (
+        ts.isVariableDeclaration(declaration) &&
+        ts.isVariableDeclarationList(declaration.parent) &&
+        (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+        declaration.initializer !== undefined &&
+        rootedAtCryptoImport(declaration.initializer, depth + 1)
+      );
+    });
+  }
+
+  /**
    * The Node `crypto` function `node` names — through the type checker,
    * import aliases followed — or undefined: a declaration outside
    * `@types/node`'s crypto module (a local function, a fake `crypto`
    * object, a shadowing import) or an unresolved name is not Node's.
    */
   function nodeCryptoName(node) {
+    if (!rootedAtCryptoImport(node)) return undefined;
     const target = ts.isPropertyAccessExpression(node) ? node.name : node;
     let symbol = checker.getSymbolAtLocation(target);
     if (symbol !== undefined && symbol.flags & ts.SymbolFlags.Alias)
