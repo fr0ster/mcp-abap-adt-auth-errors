@@ -761,7 +761,9 @@ Rule 8's crypto boundary (a digest or signature of a secret is not the
 secret) is recognised only for direct calls resolving to `@types/node`'s
 `crypto` declarations. A destructured function (`const { createHash } =
 crypto`) and WebCrypto `subtle.digest` are reported: rewrite the call as a
-direct import, or list the site. A method replaced on a crypto object is
+direct import, or list the site. A crypto object held in a `let`, `var`, parameter
+or property keeps secret tracking (only a `const` is trusted), so a `let`
+never reassigned is reported too. A method replaced on a crypto object is
 not detected; the check's threat model is a well-meaning developer's mistake,
 not hostile code.
 

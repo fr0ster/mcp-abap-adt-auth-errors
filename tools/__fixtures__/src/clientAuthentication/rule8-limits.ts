@@ -13,3 +13,10 @@ export async function subtleDigest(clientSecret: string): Promise<string> {
   );
   return Buffer.from(digest).toString('base64');
 }
+
+/** A `let` is reported even when never reassigned: only a `const` is trusted. */
+export function letNeverReassigned(clientSecret: string): string {
+  // biome-ignore lint/style/useConst: the fixture is a `let` never reassigned
+  let encoder = crypto.createHash('sha256').update(clientSecret);
+  return encoder.digest().toString('base64');
+}

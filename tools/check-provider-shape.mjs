@@ -123,7 +123,10 @@
  *     only for direct calls resolving to @types/node's crypto declarations:
  *     a destructured function (`const { createHash } = crypto`) and WebCrypto
  *     `subtle.digest` are reported — rewrite the call as a direct import, or
- *     list the site; a method replaced on a crypto object
+ *     list the site; a crypto object held in a `let`, `var`, parameter or
+ *     property keeps secret tracking (only a `const` is trusted: a later
+ *     assignment could replace it), so a `let` never reassigned is reported
+ *     too — a fail-closed false positive; a method replaced on a crypto object
  *     (`hash.digest = …`) is not detected — hostile code is out of scope.
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -1464,6 +1467,8 @@ function createRules(program, contractFile, baseFile, options, sites) {
       return (symbol?.declarations ?? []).some(
         (declaration) =>
           ts.isVariableDeclaration(declaration) &&
+          ts.isVariableDeclarationList(declaration.parent) &&
+          (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
           declaration.initializer !== undefined &&
           chainRootsAt(declaration.initializer, names, depth + 1),
       );

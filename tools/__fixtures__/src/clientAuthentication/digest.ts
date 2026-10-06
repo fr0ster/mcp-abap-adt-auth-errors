@@ -28,3 +28,8 @@ export function signedDirect(clientSecret: string, key: string): string {
     .sign('sha256', Buffer.from(clientSecret), key)
     .toString('base64');
 }
+
+export function constHeld(clientSecret: string): string {
+  const encoder = createHash('sha256').update(clientSecret);
+  return encoder.digest().toString('base64');
+}
