@@ -118,7 +118,13 @@
  *     lowercase `basic` with no space after it (it is also an auth type's
  *     name), `toString(encoding)` with the encoding in a variable, a secret
  *     under a name the heuristic does not know, axios's `auth: { username,
- *     password }` option (axios writes that Basic header itself).
+ *     password }` option (axios writes that Basic header itself). Its crypto
+ *     boundary (a digest or signature ends secret derivation) is recognised
+ *     only for direct calls resolving to @types/node's crypto declarations:
+ *     a destructured function (`const { createHash } = crypto`) and WebCrypto
+ *     `subtle.digest` are reported — rewrite the call as a direct import, or
+ *     list the site; a method replaced on a crypto object
+ *     (`hash.digest = …`) is not detected — hostile code is out of scope.
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';

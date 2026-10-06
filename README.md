@@ -757,6 +757,14 @@ base is written.
 | 7 | a `guard` call whose grant is not a function expression, or whose arguments read `this` other than `this.#moments` |
 | 8 | in `src/auth`, `src/providers` and `src/clientAuthentication`: a `Basic ` header value, or a base64 of a value named as a client secret, outside `legacyBasic` and `clientSecretBasic` |
 
+Rule 8's crypto boundary (a digest or signature of a secret is not the
+secret) is recognised only for direct calls resolving to `@types/node`'s
+`crypto` declarations. A destructured function (`const { createHash } =
+crypto`) and WebCrypto `subtle.digest` are reported: rewrite the call as a
+direct import, or list the site. A method replaced on a crypto object is
+not detected; the check's threat model is a well-meaning developer's mistake,
+not hostile code.
+
 Site lists live in the repository's `tools/` (or `--sites`): an
 `assertion-sites.json` of `{ file, function }` and a `diagnostic-sites.json`
 of `{ file, function, field }`; a missing list is empty.

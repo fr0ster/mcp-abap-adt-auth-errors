@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a base64 of a hash of a secret is not reported (decided by the declaration
   a name resolves to in Node's `crypto` typings, never by the name); and the `clientSecretBasic`
   exemption covers the functions inside it (the returned `authenticate`).
+  Documented limits: destructured crypto functions and `subtle.digest` are
+  reported; a replaced method on a crypto object is not detected.
 
 ## [1.0.0] - 2026-10-06
 
