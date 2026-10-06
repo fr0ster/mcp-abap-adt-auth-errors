@@ -44,3 +44,20 @@ export function constAlias(clientSecret: string): string {
     .digest()
     .toString('base64');
 }
+
+const aliasHash = createHash;
+const aliasHmac = hmac;
+const aliasSign = createSign;
+const aliasSignFn = c.sign;
+const once = createHash;
+const twice = once;
+
+export function aliasedFunctions(clientSecret: string, key: string): string[] {
+  return [
+    aliasHash('sha256').update(clientSecret).digest().toString('base64'),
+    aliasHmac('sha256', 'k').update(clientSecret).digest().toString('base64'),
+    aliasSign('sha256').update(clientSecret).sign(key).toString('base64'),
+    aliasSignFn('sha256', Buffer.from(clientSecret), key).toString('base64'),
+    twice('sha256').update(clientSecret).digest().toString('base64'),
+  ];
+}

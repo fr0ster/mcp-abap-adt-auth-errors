@@ -1477,7 +1477,8 @@ function createRules(program, contractFile, baseFile, options, sites) {
    * `@types/node`'s crypto module (a local function, a fake `crypto`
    * object, a shadowing import) or an unresolved name is not Node's.
    */
-  function nodeCryptoName(node) {
+  function nodeCryptoName(written) {
+    const node = followConstAlias(written);
     if (!rootedAtCryptoImport(node)) return undefined;
     const target = ts.isPropertyAccessExpression(node) ? node.name : node;
     let symbol = checker.getSymbolAtLocation(target);
@@ -1485,6 +1486,21 @@ function createRules(program, contractFile, baseFile, options, sites) {
       symbol = checker.getAliasedSymbol(symbol);
     if (symbol === undefined) return undefined;
     return declaredInSymbol(symbol) ? symbol.name : undefined;
+  }
+
+  /** The expression a `const` alias (transitively) is initialised with, else `node`. */
+  function followConstAlias(node, depth = 0) {
+    const current = skipParentheses(node);
+    if (depth > MAX_DEPTH || !ts.isIdentifier(current)) return current;
+    const declaration = checker
+      .getSymbolAtLocation(current)
+      ?.declarations?.find(ts.isVariableDeclaration);
+    return declaration !== undefined &&
+      ts.isVariableDeclarationList(declaration.parent) &&
+      (declaration.parent.flags & ts.NodeFlags.Const) !== 0 &&
+      declaration.initializer !== undefined
+      ? followConstAlias(declaration.initializer, depth + 1)
+      : current;
   }
 
   function declaredInSymbol(symbol) {

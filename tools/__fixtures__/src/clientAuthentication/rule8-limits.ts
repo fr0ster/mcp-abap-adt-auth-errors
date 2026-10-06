@@ -20,3 +20,10 @@ export function letNeverReassigned(clientSecret: string): string {
   let encoder = crypto.createHash('sha256').update(clientSecret);
   return encoder.digest().toString('base64');
 }
+
+/** A `let` alias of a crypto function is reported: only a `const` is followed. */
+export function letAlias(clientSecret: string): string {
+  // biome-ignore lint/style/useConst: the fixture is a `let` never reassigned
+  let make = crypto.createHash;
+  return make('sha256').update(clientSecret).digest().toString('base64');
+}
