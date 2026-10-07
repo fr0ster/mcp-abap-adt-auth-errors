@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0]
+## [2.0.0] - 2026-10-07
 
 A major: the contract package moves to `@mcp-abap-adt/interfaces-auth` 7.0.0,
 which removes an interactive outcome and renames an operation. The new kind
