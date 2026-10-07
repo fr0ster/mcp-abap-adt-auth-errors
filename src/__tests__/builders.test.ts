@@ -68,6 +68,8 @@ const ONE_PER_KIND: Record<string, () => IAuthProviderError> = {
     authError['system-refused']({ verdict: 'unknown', at: 'logon' }),
   'renewal-unchanged': () =>
     authError['renewal-unchanged']({ source: 'token-source' }),
+  'renewal-declined': () =>
+    authError['renewal-declined']({ trigger: 'expired' }),
   'token-binding': () =>
     authError['token-binding']({ problem: 'bound-to-unpinned' }),
   'not-prepared': () => authError['not-prepared']({ provider: 'snc' }),

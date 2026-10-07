@@ -69,6 +69,7 @@ function recordingHandlers(seen: IAuthProviderError[]): Handlers {
     'credential-refused': kindOnly,
     'system-refused': kindOnly,
     'renewal-unchanged': kindOnly,
+    'renewal-declined': kindOnly,
     'token-binding': kindOnly,
     'not-prepared': kindOnly,
     'logon-target': kindOnly,
@@ -170,6 +171,7 @@ describe('unreachableKind — version skew (§9)', () => {
       case 'credential-refused':
       case 'system-refused':
       case 'renewal-unchanged':
+      case 'renewal-declined':
       case 'token-binding':
       case 'not-prepared':
       case 'logon-target':

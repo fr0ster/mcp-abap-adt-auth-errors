@@ -34,6 +34,7 @@ const GUARDS: ReadonlyArray<[string, string]> = [
   ['isRejectionMoment', 'REJECTION_MOMENTS'],
   ['isSystemRefusedVerdict', 'SYSTEM_REFUSED_VERDICTS'],
   ['isRenewalUnchangedSource', 'RENEWAL_UNCHANGED_SOURCES'],
+  ['isRenewalTrigger', 'RENEWAL_TRIGGERS'],
   ['isTokenBindingProblem', 'TOKEN_BINDING_PROBLEMS'],
   ['isNotPreparedProvider', 'NOT_PREPARED_PROVIDERS'],
   ['isLogonTargetWire', 'LOGON_TARGET_WIRES'],
@@ -44,10 +45,14 @@ const GUARDS: ReadonlyArray<[string, string]> = [
 
 /**
  * Arrays of interfaces-auth that are not allowlists of the error contract:
- * `REFRESH_TOKEN_DISPOSITIONS` belongs to the token store contract.
+ * the renewal strategy's moments, steps and readings belong to the token
+ * renewal contract (`RENEWAL_TRIGGERS` is the exception: `renewal-declined`
+ * carries it).
  */
 const NOT_ALLOWLISTS: ReadonlySet<string> = new Set([
-  'REFRESH_TOKEN_DISPOSITIONS',
+  'RENEWAL_MOMENTS',
+  'RENEWAL_STEPS',
+  'REJECTION_READINGS',
 ]);
 
 /** The runtime exports of interfaces-auth, read by name. */

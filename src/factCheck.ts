@@ -58,6 +58,7 @@ import {
   isOAuthErrorCode,
   isOperation,
   isRejectionMoment,
+  isRenewalTrigger,
   isRenewalUnchangedSource,
   isRequestProblem,
   isRfcKey,
@@ -247,9 +248,6 @@ function interactiveLogin(input: object, out: Out): void {
     case 'identity-provider-refused':
       may(out, input, 'oauthError', oauthError);
       return;
-    case 'browser-launch-failed':
-      may(out, input, 'code', systemCode);
-      return;
     case 'failed':
       may(out, input, 'code', systemCode);
       may(out, input, 'status', httpStatus);
@@ -391,6 +389,9 @@ const CHECKERS = Object.freeze({
   'system-refused': systemRefused,
   'renewal-unchanged': (input: object, out: Out) => {
     need(out, input, 'source', by(isRenewalUnchangedSource));
+  },
+  'renewal-declined': (input: object, out: Out) => {
+    need(out, input, 'trigger', by(isRenewalTrigger));
   },
   'token-binding': (input: object, out: Out) => {
     need(out, input, 'problem', by(isTokenBindingProblem));

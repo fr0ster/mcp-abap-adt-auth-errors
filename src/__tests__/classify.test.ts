@@ -68,6 +68,7 @@ const SAMPLES: { readonly [K in AuthProviderErrorKind]: object } = {
   'credential-refused': { credential: 'token', at: 'request' },
   'system-refused': { verdict: 'not-authorized', status: 403, at: 'logon' },
   'renewal-unchanged': { source: 'token-provider' },
+  'renewal-declined': { trigger: 'expired' },
   'token-binding': { problem: 'bound-to-unpinned' },
   'not-prepared': { provider: 'snc' },
   'logon-target': { wire: 'http', refused: 'tls-material' },

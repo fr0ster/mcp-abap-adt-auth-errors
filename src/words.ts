@@ -122,7 +122,8 @@ function joined(values: readonly string[], separator: string): string {
 const OPERATION_PHRASE = Object.freeze({
   'token-request': 'the token request',
   refresh: 'the refresh',
-  'on-tokens-hook': 'onTokens',
+  'persisting-tokens': 'persisting the tokens',
+  'renewal-strategy': 'the renewal strategy',
   'presenting-token': 'presenting the token',
   'presenting-certificate': 'presenting the certificate',
   'loading-certificate': 'loading the certificate',
@@ -286,6 +287,14 @@ function configurationWords(
           ? 'required configuration is missing'
           : `required configuration is missing: ${fields}`,
         CHECK_CONFIGURATION,
+      );
+    }
+    case 'invalid-value': {
+      const fields = joined(facts.fields, ', ');
+      return say(
+        fields === ''
+          ? 'a configured value cannot be used'
+          : `a configured value cannot be used: ${fields}`,
       );
     }
     case 'client-secret-beside-client-authentication':
@@ -549,13 +558,6 @@ function interactiveLoginWords(
     case 'busy':
       return say(
         'BrowserCallbackStrategy is already authorizing; it holds a single port',
-      );
-    case 'browser-launch-failed':
-      return say(
-        facts.code === undefined
-          ? 'the browser could not be opened'
-          : `the browser could not be opened (${facts.code})`,
-        'open the authorization URL from the log by hand',
       );
     case 'callback-closed':
       return say('the callback server closed before a result arrived');
@@ -1037,6 +1039,11 @@ function renewalUnchangedWords(
   }
 }
 
+/** The trigger is checked against its allowlist and named in no word. */
+function renewalDeclinedWords(): Words {
+  return say('the renewal strategy declined to renew the credential');
+}
+
 function tokenBindingWords(
   facts: AuthProviderErrorFacts['token-binding'],
 ): Words {
@@ -1151,6 +1158,7 @@ const WORDS_BY_KIND = {
   'credential-refused': credentialRefusedWords,
   'system-refused': systemRefusedWords,
   'renewal-unchanged': renewalUnchangedWords,
+  'renewal-declined': renewalDeclinedWords,
   'token-binding': tokenBindingWords,
   'not-prepared': notPreparedWords,
   'logon-target': logonTargetWords,
@@ -1208,6 +1216,7 @@ const BLAME = Object.freeze({
   'credential-refused': () => true,
   'system-refused': () => false,
   'renewal-unchanged': () => true,
+  'renewal-declined': () => false,
   'token-binding': () => false,
   'not-prepared': () => false,
   'logon-target': () => false,

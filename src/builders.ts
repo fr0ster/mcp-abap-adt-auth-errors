@@ -262,6 +262,8 @@ export const authError: AuthErrorBuilders = Object.freeze({
     plain('system-refused', facts),
   'renewal-unchanged': (facts: AuthProviderErrorFacts['renewal-unchanged']) =>
     plain('renewal-unchanged', facts),
+  'renewal-declined': (facts: AuthProviderErrorFacts['renewal-declined']) =>
+    plain('renewal-declined', facts),
   'token-binding': (facts: AuthProviderErrorFacts['token-binding']) =>
     plain('token-binding', facts),
   'not-prepared': (facts: AuthProviderErrorFacts['not-prepared']) =>
