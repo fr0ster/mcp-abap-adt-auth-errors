@@ -16,7 +16,7 @@ own data `error` of the value, and nothing else.
 
 - [Install](#install)
 - [What an error is](#what-an-error-is)
-- [The sixteen kinds](#the-sixteen-kinds) and [their words](#the-words)
+- [The seventeen kinds](#the-seventeen-kinds) and [their words](#the-words)
 - [Building an error](#building-an-error)
 - [Diagnostics and their admission](#diagnostics-and-their-admission)
 - [Catching: `classify` and `readFailure`, never `instanceof`](#catching-classify-and-readfailure-never-instanceof)
@@ -50,7 +50,7 @@ Every failure of authentication is an `IAuthProviderError`, a frozen object:
 
 | Property | What it is |
 |---|---|
-| `kind` | one of sixteen, from the closed list `AUTH_PROVIDER_ERROR_KINDS` |
+| `kind` | one of seventeen, from the closed list `AUTH_PROVIDER_ERROR_KINDS` |
 | `variant` | for `saml-assertion`, `snc` and `configuration` only: the rule, problem or case — the same value as in `facts`, lifted so that `e.kind === 'snc' && e.variant === 'library-not-found'` narrows the whole object, `diagnostics` included |
 | `facts` | what happened, drawn only from allowlists (the `as const` arrays of interfaces-auth) and branded integer ranges — nothing free-form |
 | `reason`, `hint?` | the default words, rendered from `kind` and `facts` at minting — never from a diagnostic, never from anything a thrown value said |
@@ -63,7 +63,7 @@ an `AuthProviderFailure`, an `Error` holding one error.
 The type carries a brand no code can write, so an error can only be
 **minted** — and this package is the only place that mints one.
 
-## The sixteen kinds
+## The seventeen kinds
 
 Each kind's facts, as `interfaces-auth` declares them (`?` optional; every
 other fact key is `?: never`, so the fact types are closed):
@@ -75,12 +75,13 @@ other fact key is `?: never`, so the fact types are closed):
 | `client-authentication` | `problem`: `signing-key-unusable`, `result-unsendable`, `basic-client-id-colon` |
 | `request-failed` | `operation` (`OPERATIONS`), `grant?` (an `OAuth2GrantType`), `problem` (`REQUEST_PROBLEMS`), `status?` (`HttpStatus`), `oauthError?` (`OAUTH_ERROR_CODES`), `code?` (`SYSTEM_CODES`) |
 | `tls` | `operation`, `grant?`, `code` (`TLS_FAILURE_CODES`) |
-| `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `browser-launch-failed` `code?`; `failed` `status?`, `oauthError?`, `code?` |
+| `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `failed` `status?`, `oauthError?`, `code?` |
 | `saml-assertion` | `rule` (`ASSERTION_RULES`, 56), `check` (the rule's `AssertionCheck`), and by rule: a "several …" rule `count?` (at least 2); `declined` `statusCode?` (`SAML_STATUS_CODES`); `no-bearer-qualifies` `candidates?` (each a `BEARER_CANDIDATE_REASONS` reason, with `count?` — at least 2 — only for `several-confirmation-data`; at most 5), `moreCandidates?` |
 | `snc` | `problem` (`SNC_PROBLEMS`), and by problem: `no-credential` `secureLoginClient?`, `libraryArchs?`; `library-init-failed` `libraryArchs?`; `logon-refused` `rfcKey?` (`RFC_KEYS`); `library-not-found` `searched?`, `candidates?` (`source`, `reason`, `archs?`; at most 8), `processArch?` |
 | `credential-refused` | `credential` (`CREDENTIAL_KINDS`), `at?` (`logon` / `request`) |
 | `system-refused` | `verdict` (`SYSTEM_REFUSED_VERDICTS`), `at`; a status verdict `status`; `rfc-failure` `rfcKey` |
 | `renewal-unchanged` | `source`: `token-source`, `token-provider` |
+| `renewal-declined` | `trigger` (`RENEWAL_TRIGGERS`): `no-token`, `expired`, `bound-elsewhere`, `explicit`, `rejected` |
 | `token-binding` | `problem`: `bound-to-unpinned`, `renewed-bound-elsewhere` |
 | `not-prepared` | `provider`: `certificate`, `snc` |
 | `logon-target` | `wire` (`http`, `rfc`, `unknown`), `refused` (`tls-material`, `logon-parameters`) |
@@ -114,6 +115,7 @@ builder was given (as the error holds them) and the words it rendered.
 | facts | reason | hint |
 |---|---|---|
 | `{"case":"required-fields-missing","fields":["clientId"]}` | `required configuration is missing: clientId` | `check the provider configuration` |
+| `{"case":"invalid-value","fields":[]}` | `a configured value cannot be used` | — |
 | `{"case":"client-secret-beside-client-authentication","fields":[]}` | `clientSecret cannot be given beside clientAuthentication` | `give the secret to the clientAuthentication strategy, or drop the strategy` |
 | `{"case":"saml-acs-required-with-authorization-url","fields":[]}` | `acsUrl is required when authorizationUrl is set: the ACS inside a pre-built SAML request cannot be read, so it must be declared` | `check the provider configuration` |
 | `{"case":"saml-idp-initiated-with-request-id","fields":[]}` | `SAML idpInitiated is true, but a request ID was also configured or minted: an IdP-initiated login sends no request` | `remove one of them` |
@@ -198,7 +200,6 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"outcome":"aborted"}` | `the authorization was aborted` | — |
 | `{"outcome":"disposed","strategy":"browser"}` | `BrowserCallbackStrategy has been disposed` | — |
 | `{"outcome":"busy"}` | `BrowserCallbackStrategy is already authorizing; it holds a single port` | — |
-| `{"outcome":"browser-launch-failed"}` | `the browser could not be opened` | `open the authorization URL from the log by hand` |
 | `{"outcome":"callback-closed"}` | `the callback server closed before a result arrived` | — |
 | `{"outcome":"identity-provider-refused"}` | `the identity provider refused the login (an unregistered error code)` | `check the identity provider: the user, the client and the scopes it allows` |
 | `{"outcome":"input-abandoned"}` | `the manual input was abandoned before it began` | — |
@@ -211,7 +212,6 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"outcome":"aborted","strategy":"manual"}` | `the manual login was aborted` | — |
 | `{"outcome":"disposed","strategy":"manual"}` | `the manual strategy was disposed` | — |
 | `{"outcome":"identity-provider-refused","oauthError":"access_denied"}` | `the identity provider refused the login (access_denied)` | `check the identity provider: the user, the client and the scopes it allows` |
-| `{"outcome":"browser-launch-failed","code":"ENOENT"}` | `the browser could not be opened (ENOENT)` | `open the authorization URL from the log by hand` |
 | `{"outcome":"failed","status":400,"oauthError":"invalid_grant"}` | `the browser login failed (HTTP 400, invalid_grant)` | `complete the login, or abort it` |
 
 #### `saml-assertion`
@@ -321,6 +321,16 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"source":"token-source"}` | `the renewal returned the credential that was refused` | `the token source must issue a new token` |
 | `{"source":"token-provider"}` | `the renewal returned the credential that was refused` | `the token source must issue a new token; log in again` |
 
+#### `renewal-declined`
+
+| facts | reason | hint |
+|---|---|---|
+| `{"trigger":"no-token"}` | `the renewal strategy declined to renew the credential` | — |
+| `{"trigger":"expired"}` | `the renewal strategy declined to renew the credential` | — |
+| `{"trigger":"bound-elsewhere"}` | `the renewal strategy declined to renew the credential` | — |
+| `{"trigger":"explicit"}` | `the renewal strategy declined to renew the credential` | — |
+| `{"trigger":"rejected"}` | `the renewal strategy declined to renew the credential` | — |
+
 #### `token-binding`
 
 | facts | reason | hint |
@@ -361,7 +371,8 @@ builder was given (as the error holds them) and the words it rendered.
 |---|---|---|
 | `{"operation":"token-request"}` | `the token request failed (unknown error)` | — |
 | `{"operation":"refresh"}` | `the refresh failed (unknown error)` | — |
-| `{"operation":"on-tokens-hook"}` | `onTokens failed (unknown error)` | — |
+| `{"operation":"persisting-tokens"}` | `persisting the tokens failed (unknown error)` | — |
+| `{"operation":"renewal-strategy"}` | `the renewal strategy failed (unknown error)` | — |
 | `{"operation":"presenting-token"}` | `presenting the token failed (unknown error)` | — |
 | `{"operation":"presenting-certificate"}` | `presenting the certificate failed (unknown error)` | — |
 | `{"operation":"loading-certificate"}` | `loading the certificate failed (unknown error)` | — |
