@@ -208,7 +208,7 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"outcome":"no-terminal"}` | `` Manual input needs an interactive terminal. Supply `read` to source the value elsewhere. `` | — |
 | `{"outcome":"device-code-not-shown"}` | `showing the device code failed` | — |
 | `{"outcome":"failed"}` | `the browser login failed (unknown error)` | `complete the login, or abort it` |
-| `{"outcome":"aborted","strategy":"browser","ignoredCallbacks":2}` | `the browser login was aborted; 2 incomplete request(s) reached /callback and were ignored` | — |
+| `{"outcome":"aborted","strategy":"browser","ignoredCallbacks":2}` | `the browser login was aborted; 2 request(s) to the callback server were refused and ignored` | — |
 | `{"outcome":"aborted","strategy":"manual"}` | `the manual login was aborted` | — |
 | `{"outcome":"disposed","strategy":"manual"}` | `the manual strategy was disposed` | — |
 | `{"outcome":"identity-provider-refused","oauthError":"access_denied"}` | `the identity provider refused the login (access_denied)` | `check the identity provider: the user, the client and the scopes it allows` |
