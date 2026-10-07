@@ -40,9 +40,11 @@ import {
   OPERATIONS,
   type Operation,
   REJECTION_MOMENTS,
+  RENEWAL_TRIGGERS,
   RENEWAL_UNCHANGED_SOURCES,
   REQUEST_PROBLEMS,
   type RejectionMoment,
+  type RenewalTrigger,
   type RenewalUnchangedSource,
   type RequestProblem,
   RFC_KEYS,
@@ -152,6 +154,9 @@ const REJECTION_MOMENT_SET: ReadonlySet<string> = new Set<string>(
 );
 const SYSTEM_REFUSED_VERDICT_SET: ReadonlySet<string> = new Set<string>(
   SYSTEM_REFUSED_VERDICTS,
+);
+const RENEWAL_TRIGGER_SET: ReadonlySet<string> = new Set<string>(
+  RENEWAL_TRIGGERS,
 );
 const RENEWAL_UNCHANGED_SOURCE_SET: ReadonlySet<string> = new Set<string>(
   RENEWAL_UNCHANGED_SOURCES,
@@ -326,6 +331,11 @@ export function isSystemRefusedVerdict(
   value: unknown,
 ): value is SystemRefusedVerdict {
   return member(SYSTEM_REFUSED_VERDICT_SET, value);
+}
+
+/** Whether `value` is a member of `RENEWAL_TRIGGERS`. */
+export function isRenewalTrigger(value: unknown): value is RenewalTrigger {
+  return member(RENEWAL_TRIGGER_SET, value);
 }
 
 /** Whether `value` is a member of `RENEWAL_UNCHANGED_SOURCES`. */

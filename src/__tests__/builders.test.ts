@@ -68,6 +68,8 @@ const ONE_PER_KIND: Record<string, () => IAuthProviderError> = {
     authError['system-refused']({ verdict: 'unknown', at: 'logon' }),
   'renewal-unchanged': () =>
     authError['renewal-unchanged']({ source: 'token-source' }),
+  'renewal-declined': () =>
+    authError['renewal-declined']({ trigger: 'expired' }),
   'token-binding': () =>
     authError['token-binding']({ problem: 'bound-to-unpinned' }),
   'not-prepared': () => authError['not-prepared']({ provider: 'snc' }),
@@ -812,6 +814,8 @@ describe('F1: every fact value is read own and checked, in builders and render',
       'tls',
       { operation: 'refresh', code: 'ECONNRESET' },
     ],
+    ['a foreign renewal trigger', 'renewal-declined', { trigger: 'MARKER' }],
+    ['a foreign renewal source', 'renewal-unchanged', { source: 'MARKER' }],
     [
       'fields not an array',
       'configuration',

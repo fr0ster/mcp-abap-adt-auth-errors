@@ -11,6 +11,7 @@ import {
   LOGON_TARGET_WIRES,
   NOT_PREPARED_PROVIDERS,
   OPERATIONS,
+  RENEWAL_TRIGGERS,
   RENEWAL_UNCHANGED_SOURCES,
   REQUEST_PROBLEMS,
   SNC_PROBLEMS,
@@ -135,6 +136,10 @@ const SAMPLES: readonly (readonly [string, string, unknown])[] = [
   ...RENEWAL_UNCHANGED_SOURCES.map(
     (s) =>
       [`renewal-unchanged ${s}`, 'renewal-unchanged', { source: s }] as const,
+  ),
+  ...RENEWAL_TRIGGERS.map(
+    (t) =>
+      [`renewal-declined ${t}`, 'renewal-declined', { trigger: t }] as const,
   ),
   ...TOKEN_BINDING_PROBLEMS.map(
     (p) => [`token-binding ${p}`, 'token-binding', { problem: p }] as const,
@@ -388,12 +393,19 @@ const VERBATIM: readonly (readonly [
     'A16 all facts',
     'unknown',
     {
-      operation: 'on-tokens-hook',
+      operation: 'persisting-tokens',
       status: httpStatus(400),
       oauthError: 'invalid_grant',
       code: 'EPROTO',
     },
-    'onTokens failed (HTTP 400, invalid_grant, EPROTO)',
+    'persisting the tokens failed (HTTP 400, invalid_grant, EPROTO)',
+    undefined,
+  ],
+  [
+    'renewal-strategy operation',
+    'unknown',
+    { operation: 'renewal-strategy', status: httpStatus(500) },
+    'the renewal strategy failed (HTTP 500)',
     undefined,
   ],
   [
@@ -536,6 +548,13 @@ const VERBATIM: readonly (readonly [
     { source: 'token-provider' },
     'the renewal returned the credential that was refused',
     'the token source must issue a new token; log in again',
+  ],
+  [
+    'renewal-declined',
+    'renewal-declined',
+    { trigger: 'rejected' },
+    'the renewal strategy declined to renew the credential',
+    undefined,
   ],
   [
     'B14',
@@ -882,7 +901,7 @@ const CONFIGURATION: readonly (readonly [
   string,
   readonly string[],
   string,
-  string,
+  string | undefined,
 ])[] = [
   [
     'required-fields-missing',
@@ -895,6 +914,12 @@ const CONFIGURATION: readonly (readonly [
     ['clientSecret'],
     'clientSecret cannot be given beside clientAuthentication',
     'give the secret to the clientAuthentication strategy, or drop the strategy',
+  ],
+  [
+    'invalid-value',
+    ['authorizationUrl'],
+    'a configured value cannot be used: authorizationUrl',
+    undefined,
   ],
   [
     'saml-acs-required-with-authorization-url',
@@ -1153,22 +1178,6 @@ describe('interactive-login words', () => {
       expect(error.facts).toStrictEqual({ outcome: 'failed', status: 400 });
       expect(error.reason).toBe('the browser login failed (HTTP 400)');
     }
-  });
-
-  it('browser-launch-failed, with and without a code', () => {
-    const plain = build('interactive-login', {
-      outcome: 'browser-launch-failed',
-    });
-    expect(words(plain)).toStrictEqual({
-      reason: 'the browser could not be opened',
-      hint: 'open the authorization URL from the log by hand',
-    });
-    expect(
-      build('interactive-login', {
-        outcome: 'browser-launch-failed',
-        code: 'ENOENT',
-      }).reason,
-    ).toBe('the browser could not be opened (ENOENT)');
   });
 
   it('callback-closed and no-input', () => {
@@ -1520,6 +1529,7 @@ describe('anything this build does not know renders the unfamiliar words whole',
       'credential-refused',
       'system-refused',
       'renewal-unchanged',
+      'renewal-declined',
       'token-binding',
       'not-prepared',
       'logon-target',
@@ -1708,6 +1718,7 @@ describe('blamesCredential (spec §3.1)', () => {
           true,
         ] as const,
     ),
+    ['renewal-declined', 'renewal-declined', { trigger: 'rejected' }, false],
     ['token-binding', 'token-binding', { problem: 'bound-to-unpinned' }, false],
     ['not-prepared', 'not-prepared', { provider: 'snc' }, false],
     [

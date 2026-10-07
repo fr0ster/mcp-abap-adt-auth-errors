@@ -55,6 +55,8 @@ export function matchKind<R>(
       return handlers['system-refused'](known);
     case 'renewal-unchanged':
       return handlers['renewal-unchanged'](known);
+    case 'renewal-declined':
+      return handlers['renewal-declined'](known);
     case 'token-binding':
       return handlers['token-binding'](known);
     case 'not-prepared':

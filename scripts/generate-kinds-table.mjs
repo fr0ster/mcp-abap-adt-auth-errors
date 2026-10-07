@@ -35,7 +35,12 @@ function samples(kind) {
       return [
         ...contract.CONFIG_CASES.map((c) => ({
           case: c,
-          fields: c === 'required-fields-missing' ? ['clientId'] : [],
+          fields:
+            c === 'required-fields-missing'
+              ? ['clientId']
+              : c === 'invalid-value'
+                ? ['authorizationUrl']
+                : [],
         })),
         {
           case: 'required-fields-missing',
@@ -94,7 +99,6 @@ function samples(kind) {
         { outcome: 'aborted', strategy: 'manual' },
         { outcome: 'disposed', strategy: 'manual' },
         { outcome: 'identity-provider-refused', oauthError: 'access_denied' },
-        { outcome: 'browser-launch-failed', code: 'ENOENT' },
         {
           outcome: 'failed',
           status: httpStatus(400),
@@ -169,6 +173,8 @@ function samples(kind) {
       );
     case 'renewal-unchanged':
       return contract.RENEWAL_UNCHANGED_SOURCES.map((source) => ({ source }));
+    case 'renewal-declined':
+      return contract.RENEWAL_TRIGGERS.map((trigger) => ({ trigger }));
     case 'token-binding':
       return contract.TOKEN_BINDING_PROBLEMS.map((problem) => ({ problem }));
     case 'not-prepared':

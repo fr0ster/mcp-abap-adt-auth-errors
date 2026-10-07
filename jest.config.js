@@ -13,17 +13,17 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
-      tsconfig: {
-        esModuleInterop: true,
+    '^.+\\.ts$': [
+      'ts-jest',
+      {
+        tsconfig: {
+          esModuleInterop: true,
+        },
       },
-    }],
+    ],
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(.*\\.mjs$))',
-  ],
+  transformIgnorePatterns: ['node_modules/(?!(.*\\.mjs$))'],
   verbose: true,
   maxWorkers: '50%',
   maxConcurrency: 5,
 };
-

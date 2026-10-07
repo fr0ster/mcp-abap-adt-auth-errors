@@ -39,6 +39,7 @@ const all: KindHandlers<string> = {
   'credential-refused': (e) => e.facts.credential,
   'system-refused': (e) => e.facts.verdict,
   'renewal-unchanged': (e) => e.facts.source,
+  'renewal-declined': (e) => e.facts.trigger,
   'token-binding': (e) => e.facts.problem,
   'not-prepared': (e) => e.facts.provider,
   'logon-target': (e) => e.facts.refused,
@@ -74,6 +75,7 @@ export function described(e: IAuthProviderError): string {
     case 'credential-refused':
     case 'system-refused':
     case 'renewal-unchanged':
+    case 'renewal-declined':
     case 'token-binding':
     case 'not-prepared':
     case 'logon-target':
@@ -99,6 +101,7 @@ export function missingOne(e: IAuthProviderError): string {
     case 'credential-refused':
     case 'system-refused':
     case 'renewal-unchanged':
+    case 'renewal-declined':
     case 'token-binding':
     case 'not-prepared':
     case 'logon-target':

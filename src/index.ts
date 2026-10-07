@@ -20,6 +20,7 @@ export {
   isOAuthErrorCode,
   isOperation,
   isRejectionMoment,
+  isRenewalTrigger,
   isRenewalUnchangedSource,
   isRequestProblem,
   isRfcKey,

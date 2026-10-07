@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-07
+
+A major: the contract package moves to `@mcp-abap-adt/interfaces-auth` 7.0.0,
+which removes an interactive outcome and renames an operation. The new kind
+`renewal-declined` is also breaking for a consumer that handles every kind:
+a `matchKind` table or an exhaustive `switch` over `error.kind` no longer
+compiles until it handles it.
+
+### Dependencies
+
+- `@mcp-abap-adt/interfaces-auth` `^7.0.0` (was `^6.0.0`), resolved from the
+  registry.
+
+### Added
+
+- Kind `renewal-declined`, facts `{ trigger }` (`RENEWAL_TRIGGERS`: `no-token`,
+  `expired`, `bound-elsewhere`, `explicit`, `rejected`): the builder
+  `authError['renewal-declined']`, `matchKind` and `classify` handle it, and
+  `isRenewalTrigger` guards the array. Reason "the renewal strategy declined
+  to renew the credential", no hint; the trigger is checked and named in no
+  word. It does not blame the credential (`blamesCredential` is `false`).
+- Configuration case `invalid-value` (facts as `required-fields-missing`):
+  reason "a configured value cannot be used: <fields>", no hint.
+- Operation phrases for `renewal-strategy` ("the renewal strategy") and
+  `persisting-tokens` ("persisting the tokens"), the subject of
+  "<phrase> failed (...)".
+
+### Removed
+
+- Interactive outcome `browser-launch-failed`, with its words and hint ("the
+  browser could not be opened", "open the authorization URL from the log by
+  hand"): interfaces-auth 7.0.0 no longer has it, so `authError['interactive-login']`
+  no longer accepts it and `render` answers the unfamiliar words for it.
+
+### Changed
+
+- Operation `on-tokens-hook` is renamed `persisting-tokens`; its phrase was
+  `onTokens` and is now "persisting the tokens", so a `request-failed` or
+  `unknown` error of that operation reads "persisting the tokens failed (...)".
+
+### Migration
+
+A consumer on 1.x of this package and `interfaces-auth` 6: move both to
+`^7.0.0` / `^2.0.0` together; replace `on-tokens-hook` with `persisting-tokens`
+and stop producing or matching `browser-launch-failed` (a launcher that fails
+is no longer an error of the login). A `matchKind` handler table must gain a
+`renewal-declined` handler, and a `switch` over `error.kind` a case for it.
+The shape-check script is unchanged.
+
 ## [1.0.1] - 2026-10-07
 
 ### Fixed

@@ -68,6 +68,7 @@ const SAMPLES: { readonly [K in AuthProviderErrorKind]: object } = {
   'credential-refused': { credential: 'token', at: 'request' },
   'system-refused': { verdict: 'not-authorized', status: 403, at: 'logon' },
   'renewal-unchanged': { source: 'token-provider' },
+  'renewal-declined': { trigger: 'expired' },
   'token-binding': { problem: 'bound-to-unpinned' },
   'not-prepared': { provider: 'snc' },
   'logon-target': { wire: 'http', refused: 'tls-material' },
@@ -257,6 +258,8 @@ describe('classify — step 3: structural rebuild', () => {
     ['system-refused', { verdict: 'not-authorized', status: 99, at: 'logon' }],
     ['snc', { problem: 'library-not-found', candidates: [{ source: 'x' }] }],
     ['configuration', { case: 'required-fields-missing' }],
+    ['renewal-declined', { trigger: 'MARKER' }],
+    ['renewal-unchanged', { source: 'MARKER' }],
   ])('facts out of their sets fall through (%s %j)', (kind, facts) => {
     const result = classify({ kind, facts }, 'refresh', 'password');
     expect(shape(result)).toStrictEqual(

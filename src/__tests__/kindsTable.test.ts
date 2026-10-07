@@ -27,7 +27,7 @@ describe('README kinds table', () => {
   it('the generator prints one section per kind between two markers', () => {
     expect(begin).toMatch(/^<!-- BEGIN GENERATED: kinds table/);
     expect(end).toMatch(/^<!-- END GENERATED: kinds table/);
-    expect(lines.filter((line) => line.startsWith('#### ')).length).toBe(16);
+    expect(lines.filter((line) => line.startsWith('#### ')).length).toBe(17);
   });
 
   it('README.md holds exactly the generated table', () => {
