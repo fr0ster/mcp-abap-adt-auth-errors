@@ -512,10 +512,14 @@ function tlsWords(facts: AuthProviderErrorFacts['tls']): Words {
 const IDENTITY_PROVIDER_HINT =
   'check the identity provider: the user, the client and the scopes it allows';
 
-/** `; <k> incomplete request(s) reached /callback and were ignored`, k > 0. */
+/**
+ * `; <k> request(s) to the callback server were refused and ignored`, k > 0:
+ * every request the transport refused while the login waited — no payload, a
+ * foreign `state`, a foreign `Host`, a forged paste.
+ */
 function ignoredClause(ignored: Count | undefined): string {
   return ignored !== undefined && ignored > 0
-    ? `; ${ignored} incomplete request(s) reached /callback and were ignored`
+    ? `; ${ignored} request(s) to the callback server were refused and ignored`
     : '';
 }
 

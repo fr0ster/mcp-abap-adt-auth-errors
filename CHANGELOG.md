@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-08
+
+### Changed
+- `interactive-login` `aborted`: the count of ignored requests reads
+  "N request(s) to the callback server were refused and ignored". Since
+  auth-providers 6.0.0 the callback transport refuses more than incomplete
+  callbacks — a foreign `state`, a foreign `Host`, a forged paste — and the
+  count includes them; "incomplete request(s) reached /callback" said less
+  than it counted. The facts (`ignoredCallbacks`) are unchanged.
+
 ## [2.0.0] - 2026-10-07
 
 A major: the contract package moves to `@mcp-abap-adt/interfaces-auth` 7.0.0,

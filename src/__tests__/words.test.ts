@@ -609,7 +609,7 @@ const VERBATIM: readonly (readonly [
     'K4 browser, ignored callbacks',
     'interactive-login',
     { outcome: 'aborted', strategy: 'browser', ignoredCallbacks: count(2) },
-    'the browser login was aborted; 2 incomplete request(s) reached /callback and were ignored',
+    'the browser login was aborted; 2 request(s) to the callback server were refused and ignored',
     undefined,
   ],
   [
@@ -1108,7 +1108,7 @@ describe('interactive-login words', () => {
         ignoredCallbacks: count(3),
       }).reason,
     ).toBe(
-      'the authorization was aborted; 3 incomplete request(s) reached /callback and were ignored',
+      'the authorization was aborted; 3 request(s) to the callback server were refused and ignored',
     );
     expect(
       build('interactive-login', {
@@ -1130,7 +1130,7 @@ describe('interactive-login words', () => {
         ignoredCallbacks: count(3),
       }).reason,
     ).toBe(
-      'the browser login was aborted; 3 incomplete request(s) reached /callback and were ignored',
+      'the browser login was aborted; 3 request(s) to the callback server were refused and ignored',
     );
     expect(
       build('interactive-login', {
@@ -1163,7 +1163,7 @@ describe('interactive-login words', () => {
         ignoredCallbacks: 3,
       });
       expect(error.reason).toBe(
-        'the authorization was aborted; 3 incomplete request(s) reached /callback and were ignored',
+        'the authorization was aborted; 3 request(s) to the callback server were refused and ignored',
       );
     }
   });
