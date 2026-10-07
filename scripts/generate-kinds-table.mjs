@@ -35,7 +35,12 @@ function samples(kind) {
       return [
         ...contract.CONFIG_CASES.map((c) => ({
           case: c,
-          fields: c === 'required-fields-missing' ? ['clientId'] : [],
+          fields:
+            c === 'required-fields-missing'
+              ? ['clientId']
+              : c === 'invalid-value'
+                ? ['authorizationUrl']
+                : [],
         })),
         {
           case: 'required-fields-missing',

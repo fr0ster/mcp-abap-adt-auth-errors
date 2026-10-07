@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
  */
 const entry = resolve(__dirname, '../../dist/index.js');
 
-const SCENARIOS = String.raw`
+const SCENARIOS = `
 const { createParties, sharedAttempt } = require(process.argv[1]);
 const name = process.argv[2];
 const keep = [];

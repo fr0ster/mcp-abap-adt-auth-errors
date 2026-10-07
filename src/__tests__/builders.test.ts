@@ -814,6 +814,8 @@ describe('F1: every fact value is read own and checked, in builders and render',
       'tls',
       { operation: 'refresh', code: 'ECONNRESET' },
     ],
+    ['a foreign renewal trigger', 'renewal-declined', { trigger: 'MARKER' }],
+    ['a foreign renewal source', 'renewal-unchanged', { source: 'MARKER' }],
     [
       'fields not an array',
       'configuration',
