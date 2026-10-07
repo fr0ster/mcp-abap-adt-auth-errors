@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0]
 
 A major: the contract package moves to `@mcp-abap-adt/interfaces-auth` 7.0.0,
-which removes an interactive outcome and renames an operation. Nothing else
-in the API changes shape.
+which removes an interactive outcome and renames an operation. The new kind
+`renewal-declined` is also breaking for a consumer that handles every kind:
+a `matchKind` table or an exhaustive `switch` over `error.kind` no longer
+compiles until it handles it.
 
 ### Dependencies
 

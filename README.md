@@ -115,7 +115,7 @@ builder was given (as the error holds them) and the words it rendered.
 | facts | reason | hint |
 |---|---|---|
 | `{"case":"required-fields-missing","fields":["clientId"]}` | `required configuration is missing: clientId` | `check the provider configuration` |
-| `{"case":"invalid-value","fields":[]}` | `a configured value cannot be used` | — |
+| `{"case":"invalid-value","fields":["authorizationUrl"]}` | `a configured value cannot be used: authorizationUrl` | — |
 | `{"case":"client-secret-beside-client-authentication","fields":[]}` | `clientSecret cannot be given beside clientAuthentication` | `give the secret to the clientAuthentication strategy, or drop the strategy` |
 | `{"case":"saml-acs-required-with-authorization-url","fields":[]}` | `acsUrl is required when authorizationUrl is set: the ACS inside a pre-built SAML request cannot be read, so it must be declared` | `check the provider configuration` |
 | `{"case":"saml-idp-initiated-with-request-id","fields":[]}` | `SAML idpInitiated is true, but a request ID was also configured or minted: an IdP-initiated login sends no request` | `remove one of them` |
@@ -665,9 +665,11 @@ Rules for the caller:
 
 One membership guard per allowlist array of the error contract in
 interfaces-auth — `isSystemCode`, `isTlsFailureCode`, `isOAuthErrorCode`,
-`isRfcKey`, `isConfigField`, `isOperation`, `isAssertionRule`, … (34) — each
-narrowing `unknown` to the array's union. `REFRESH_TOKEN_DISPOSITIONS` (the
-token store's, not the error contract's) has none.
+`isRfcKey`, `isConfigField`, `isOperation`, `isAssertionRule`, … (35) — each
+narrowing `unknown` to the array's union. `RENEWAL_MOMENTS`, `RENEWAL_STEPS`
+and `REJECTION_READINGS` (the token renewal contract's, not the error
+contract's) have none; `RENEWAL_TRIGGERS` has one, since `renewal-declined`
+carries it.
 
 The sets behind them cannot be widened. They are module-private, copied from
 the frozen arrays at load, and read through a `Set.prototype.has` captured at
