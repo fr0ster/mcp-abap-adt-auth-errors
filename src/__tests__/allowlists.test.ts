@@ -47,9 +47,11 @@ const GUARDS: ReadonlyArray<[string, string]> = [
  * Arrays of interfaces-auth that are not allowlists of the error contract:
  * the renewal strategy's moments, steps and readings belong to the token
  * renewal contract (`RENEWAL_TRIGGERS` is the exception: `renewal-declined`
- * carries it).
+ * carries it). `ANSWER_REFUSALS` is the part contract's: the provider's
+ * listener words each refused answer itself, in fixed words (spec §6d.8).
  */
 const NOT_ALLOWLISTS: ReadonlySet<string> = new Set([
+  'ANSWER_REFUSALS',
   'RENEWAL_MOMENTS',
   'RENEWAL_STEPS',
   'REJECTION_READINGS',

@@ -137,6 +137,7 @@ export function everyAbortStrategy(
     case 'browser':
       return words();
     case 'manual':
+    case 'consumer':
       return words();
     default:
       return unreachable(strategy);
