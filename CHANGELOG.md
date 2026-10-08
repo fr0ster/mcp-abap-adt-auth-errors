@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-08
+
+### Changed
+- `interactive-login` words no longer name a class auth-providers 6.0.0
+  removed: `busy` reads "an authorization is already in progress with this
+  strategy" (it covers every composition, the manual ones included — not
+  only one holding a port); `disposed` with `strategy: 'browser'` reads "the
+  browser authorization strategy was disposed". Facts unchanged.
+
 ## [2.1.0] - 2026-10-08
 
 Words for the values `@mcp-abap-adt/interfaces-auth` 7.4.0 added (dependency
