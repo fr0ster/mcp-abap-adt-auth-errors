@@ -595,14 +595,14 @@ const VERBATIM: readonly (readonly [
     'K2',
     'interactive-login',
     { outcome: 'disposed', strategy: 'browser' },
-    'BrowserCallbackStrategy has been disposed',
+    'the browser authorization strategy was disposed',
     undefined,
   ],
   [
     'K3',
     'interactive-login',
     { outcome: 'busy' },
-    'BrowserCallbackStrategy is already authorizing; it holds a single port',
+    'an authorization is already in progress with this strategy',
     undefined,
   ],
   [

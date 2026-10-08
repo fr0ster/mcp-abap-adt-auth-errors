@@ -198,8 +198,8 @@ builder was given (as the error holds them) and the words it rendered.
 |---|---|---|
 | `{"outcome":"port-in-use","port":61001}` | `Port 61001 is already in use. Please specify a different port or free the port.` | — |
 | `{"outcome":"aborted"}` | `the authorization was aborted` | — |
-| `{"outcome":"disposed","strategy":"browser"}` | `BrowserCallbackStrategy has been disposed` | — |
-| `{"outcome":"busy"}` | `BrowserCallbackStrategy is already authorizing; it holds a single port` | — |
+| `{"outcome":"disposed","strategy":"browser"}` | `the browser authorization strategy was disposed` | — |
+| `{"outcome":"busy"}` | `an authorization is already in progress with this strategy` | — |
 | `{"outcome":"callback-closed"}` | `the callback server closed before a result arrived` | — |
 | `{"outcome":"identity-provider-refused"}` | `the identity provider refused the login (an unregistered error code)` | `check the identity provider: the user, the client and the scopes it allows` |
 | `{"outcome":"input-abandoned"}` | `the manual input was abandoned before it began` | — |

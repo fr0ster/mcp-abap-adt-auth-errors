@@ -556,7 +556,7 @@ function interactiveLoginWords(
       const strategy = facts.strategy;
       switch (strategy) {
         case 'browser':
-          return say('BrowserCallbackStrategy has been disposed');
+          return say('the browser authorization strategy was disposed');
         case 'manual':
           return say('the manual strategy was disposed');
         case 'consumer':
@@ -566,9 +566,7 @@ function interactiveLoginWords(
       }
     }
     case 'busy':
-      return say(
-        'BrowserCallbackStrategy is already authorizing; it holds a single port',
-      );
+      return say('an authorization is already in progress with this strategy');
     case 'callback-closed':
       return say('the callback server closed before a result arrived');
     case 'identity-provider-refused':
