@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-08
+
+Words for the values `@mcp-abap-adt/interfaces-auth` 7.4.0 added (dependency
+`^7.4.0`). A minor: nothing existing changes.
+
+### Added
+- `interactive-login` with `strategy: 'consumer'` (the consumer's own
+  authorization channel): `aborted` reads "the login was aborted" (no
+  ignored-callbacks clause), `disposed` reads "the authorization strategy was
+  disposed".
+- Operations `presenting-authorization-url` ("presenting the authorization URL
+  failed (...)") and `judging-answer` ("judging an answer failed (...)").
+- The new `CONFIG_FIELDS` values render through the existing field list;
+  `ANSWER_REFUSALS` has no words here (the provider's listener words each
+  refused answer itself).
+
 ## [2.0.1] - 2026-10-08
 
 ### Changed

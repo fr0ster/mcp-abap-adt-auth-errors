@@ -142,6 +142,8 @@ const OPERATION_PHRASE = Object.freeze({
   'saml-token-refresh': 'the SAML token refresh',
   'browser-login': 'the browser login',
   'opening-browser': 'opening the browser',
+  'presenting-authorization-url': 'presenting the authorization URL',
+  'judging-answer': 'judging an answer',
   'passcode-exchange': 'the passcode exchange',
   'device-authorization': 'the OIDC device authorization',
   'password-grant': 'the OIDC password grant',
@@ -544,6 +546,8 @@ function interactiveLoginWords(
           );
         case 'manual':
           return say('the manual login was aborted');
+        case 'consumer':
+          return say('the login was aborted');
         default:
           return unreachable(strategy);
       }
@@ -555,6 +559,8 @@ function interactiveLoginWords(
           return say('BrowserCallbackStrategy has been disposed');
         case 'manual':
           return say('the manual strategy was disposed');
+        case 'consumer':
+          return say('the authorization strategy was disposed');
         default:
           return unreachable(strategy);
       }

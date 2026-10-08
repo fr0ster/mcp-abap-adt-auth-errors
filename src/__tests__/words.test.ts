@@ -420,6 +420,20 @@ const VERBATIM: readonly (readonly [
     undefined,
   ],
   [
+    'operation presenting-authorization-url',
+    'unknown',
+    { operation: 'presenting-authorization-url' },
+    'presenting the authorization URL failed (unknown error)',
+    undefined,
+  ],
+  [
+    'operation judging-answer',
+    'unknown',
+    { operation: 'judging-answer', code: 'ECONNRESET' },
+    'judging an answer failed (unknown error, ECONNRESET)',
+    undefined,
+  ],
+  [
     'A1',
     'unknown',
     { operation: 'loading-certificate' },
@@ -617,6 +631,20 @@ const VERBATIM: readonly (readonly [
     'interactive-login',
     { outcome: 'aborted', strategy: 'manual' },
     'the manual login was aborted',
+    undefined,
+  ],
+  [
+    'K4 consumer',
+    'interactive-login',
+    { outcome: 'aborted', strategy: 'consumer' },
+    'the login was aborted',
+    undefined,
+  ],
+  [
+    'K4 consumer disposed',
+    'interactive-login',
+    { outcome: 'disposed', strategy: 'consumer' },
+    'the authorization strategy was disposed',
     undefined,
   ],
   [

@@ -75,7 +75,7 @@ other fact key is `?: never`, so the fact types are closed):
 | `client-authentication` | `problem`: `signing-key-unusable`, `result-unsendable`, `basic-client-id-colon` |
 | `request-failed` | `operation` (`OPERATIONS`), `grant?` (an `OAuth2GrantType`), `problem` (`REQUEST_PROBLEMS`), `status?` (`HttpStatus`), `oauthError?` (`OAUTH_ERROR_CODES`), `code?` (`SYSTEM_CODES`) |
 | `tls` | `operation`, `grant?`, `code` (`TLS_FAILURE_CODES`) |
-| `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `failed` `status?`, `oauthError?`, `code?` |
+| `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual` / `consumer`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `failed` `status?`, `oauthError?`, `code?` |
 | `saml-assertion` | `rule` (`ASSERTION_RULES`, 56), `check` (the rule's `AssertionCheck`), and by rule: a "several …" rule `count?` (at least 2); `declined` `statusCode?` (`SAML_STATUS_CODES`); `no-bearer-qualifies` `candidates?` (each a `BEARER_CANDIDATE_REASONS` reason, with `count?` — at least 2 — only for `several-confirmation-data`; at most 5), `moreCandidates?` |
 | `snc` | `problem` (`SNC_PROBLEMS`), and by problem: `no-credential` `secureLoginClient?`, `libraryArchs?`; `library-init-failed` `libraryArchs?`; `logon-refused` `rfcKey?` (`RFC_KEYS`); `library-not-found` `searched?`, `candidates?` (`source`, `reason`, `archs?`; at most 8), `processArch?` |
 | `credential-refused` | `credential` (`CREDENTIAL_KINDS`), `at?` (`logon` / `request`) |
@@ -391,6 +391,8 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"operation":"saml-token-refresh"}` | `the SAML token refresh failed (unknown error)` | — |
 | `{"operation":"browser-login"}` | `the browser login failed (unknown error)` | — |
 | `{"operation":"opening-browser"}` | `opening the browser failed (unknown error)` | — |
+| `{"operation":"presenting-authorization-url"}` | `presenting the authorization URL failed (unknown error)` | — |
+| `{"operation":"judging-answer"}` | `judging an answer failed (unknown error)` | — |
 | `{"operation":"passcode-exchange"}` | `the passcode exchange failed (unknown error)` | — |
 | `{"operation":"device-authorization"}` | `the OIDC device authorization failed (unknown error)` | — |
 | `{"operation":"password-grant"}` | `the OIDC password grant failed (unknown error)` | — |
