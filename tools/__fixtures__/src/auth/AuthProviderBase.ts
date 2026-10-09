@@ -1,5 +1,5 @@
 /**
- * Support for the fixtures: a base as auth-providers writes it (spec §8.1).
+ * Support for the fixtures: a base as auth-providers writes it.
  * It obeys every rule — rule 1 exempts the class of this name in this file.
  */
 import type {

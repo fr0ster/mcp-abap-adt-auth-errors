@@ -1,4 +1,4 @@
-/** Obeys every rule of §8.2: the check reports nothing here. */
+/** Obeys every rule of the shape check: it reports nothing here. */
 import type {
   AuthOutcome,
   AuthProviderErrorFacts,
