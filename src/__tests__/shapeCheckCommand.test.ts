@@ -2,6 +2,7 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -356,5 +357,47 @@ describe('the published command: a report it does not know', () => {
       stdout: '',
       stderr: 'the shape check answered a report this command does not know\n',
     });
+  });
+});
+
+describe('the command holds no rule logic of its own', () => {
+  const sources: Record<string, string> = {
+    'tools/check-provider-shape.mjs': join(
+      repo,
+      'tools',
+      'check-provider-shape.mjs',
+    ),
+  };
+
+  it.each(Object.keys(sources))(
+    '%s imports the module by package name and implements nothing',
+    (name) => {
+      const source = readFileSync(sources[name] as string, 'utf8');
+      expect(source).toContain("from '@mcp-abap-adt/auth-errors/shape-check'");
+      // No import of a relative or built path: the module is found by name.
+      for (const line of source.split('\n')) {
+        if (!line.startsWith('import ')) continue;
+        expect(line).not.toContain("from '.");
+        expect(line).not.toContain("from '/");
+        expect(line).not.toContain('dist/');
+      }
+      // None of the machinery a rule needs belongs to the command.
+      for (const marker of [
+        'createProgram',
+        'getTypeChecker',
+        'SyntaxKind',
+        'forEachChild',
+        'readFileSync',
+      ]) {
+        expect(source).not.toContain(marker);
+      }
+      expect(source.split('\n').length).toBeLessThan(150);
+    },
+  );
+
+  it('the packed command is the same file', () => {
+    expect(readFileSync(installed().command, 'utf8')).toBe(
+      readFileSync(sources['tools/check-provider-shape.mjs'] as string, 'utf8'),
+    );
   });
 });
