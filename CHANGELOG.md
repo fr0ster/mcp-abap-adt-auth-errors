@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0]
+
+The shape check and the README tables become modules a repository runs from
+its own tests. A minor: two subpath exports, a module and a command whose
+arguments, output and exit statuses are unchanged; no export removed, no type
+narrowed, no dependency added.
+
+### Added
+- `@mcp-abap-adt/auth-errors/shape-check`: `checkProviderShape(options)`,
+  `reportLines(report)` and `formatFinding(finding)`. The caller passes its own
+  `typescript` (the package declares no dependency on it and loads none), the
+  rules, and absolute `root`, `project` (or `null`), `sites` (or `null`) and,
+  for rules 1–3, `base`. The report is `checked` with the findings,
+  `usage-error` or `type-errors`; nothing is thrown for those, written to a
+  stream or defaulted. Tested with TypeScript `^5.9.0`.
+- `@mcp-abap-adt/auth-errors/tables`: `render`, `contract`, `rowsFor`,
+  `markdownCell`, `withRegions` and `tableWriteMode`, the pieces for keeping a
+  README table equal to what the package renders.
+- `typesVersions` for both subpaths, so `moduleResolution: "node"` consumers
+  type them. The main entry loads nothing of either.
+- `npm run test:shape` runs the shape-check test alone; `prepublishOnly` runs
+  it after the build.
+
+### Changed
+- `tools/check-provider-shape.mjs` is a thin command over the module: the same
+  arguments, the same lines on stdout and the same exit statuses (`0`, `1`,
+  `2`), and it fails closed (exit `2`) on a report it does not know.
+- The README kinds table is checked by `kindsTable.test.ts`, which writes it
+  when run with `WRITE_README_TABLES=1` (`npm run docs:kinds`; refused when
+  `CI` is set). `scripts/` is gone.
+- `lint:check` is Biome alone; the shape check runs as a test.
+- The README names all five importable paths and the `^7.4.0` range of
+  interfaces-auth (it still said `^6.0.0`); source comments no longer cite a
+  design document.
+
+### Migration
+Nothing breaks. A repository that keeps a byte-identical copy of
+`tools/check-provider-shape.mjs` must re-copy it once (its comparison test
+fails until then); the copy then runs the installed module. Recommended: keep
+no copy — call `checkProviderShape` from a Jest test with the repository's
+`typescript`, rules, root, project, sites and base, and stop calling the
+command from `lint:check`. See the README, "The shape check".
+
 ## [2.1.1] - 2026-10-08
 
 ### Changed
