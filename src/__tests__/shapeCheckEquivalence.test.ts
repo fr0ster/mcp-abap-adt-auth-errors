@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
@@ -343,38 +343,31 @@ describe('the module refuses as the 2.1.1 script does', () => {
   });
 });
 
-/** The commit before the module: the own tree's file set the script knew. */
-const BEFORE_THE_MODULE = '3cbf6a4';
-const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
-const TEST_DIRECTORIES = [
-  '__tests__',
-  '__typechecks__',
-  '__fixtures__',
-  '__mocks__',
+/**
+ * The own tree's files the 2.1.1 script selected by itself, as they stood in
+ * the last commit before the module: every source under `src/` outside tests
+ * and declarations. Written out, so the comparison needs no git history.
+ */
+const OWN_FILES_BEFORE_THE_MODULE = [
+  'src/admission.ts',
+  'src/allowlists.ts',
+  'src/builders.ts',
+  'src/classify.ts',
+  'src/diagnostics.ts',
+  'src/exhaustive.ts',
+  'src/factCheck.ts',
+  'src/failure.ts',
+  'src/guard.ts',
+  'src/index.ts',
+  'src/mint.ts',
+  'src/numbers.ts',
+  'src/sharedAttempt.ts',
+  'src/words.ts',
 ];
-
-/** Whether the command would select `path` (relative to the repo) itself. */
-function selectedByDefault(path: string): boolean {
-  if (!path.startsWith('src/')) return false;
-  if (!SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext))) return false;
-  if (path.split('/').some((part) => TEST_DIRECTORIES.includes(part)))
-    return false;
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  if (name.includes('.test.') || name.includes('.spec.')) return false;
-  if (name.includes('.d.')) return false;
-  return true;
-}
 
 /** The own tree's files as of the commit before the module, absolute. */
 function ownFilesBefore(): string[] {
-  return execFileSync(
-    'git',
-    ['ls-tree', '-r', '--name-only', BEFORE_THE_MODULE, '--', 'src'],
-    { cwd: repo, encoding: 'utf8' },
-  )
-    .split('\n')
-    .filter((path) => path.length > 0 && selectedByDefault(path))
-    .map((path) => join(repo, path));
+  return OWN_FILES_BEFORE_THE_MODULE.map((path) => join(repo, path));
 }
 
 function fixtureSources(dir: string): string[] {
