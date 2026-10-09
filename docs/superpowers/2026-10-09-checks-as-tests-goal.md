@@ -10,7 +10,8 @@ The auth chain's own checks are tests. Today the shape check is a script:
 byte for byte into auth-providers, connection and auth-broker. The README
 tables are kept current by hand-run generator scripts. Instead:
 
-- auth-errors ships the shape check and the table rendering as a module;
+- auth-errors ships the shape check, and the rendering of error words into
+  tables, as a module;
 - each repository runs them from Jest, under its own `npm test` and CI.
 
 **Success:**
@@ -27,12 +28,31 @@ tables are kept current by hand-run generator scripts. Instead:
   - `npm test` runs it, and so does CI.
   - No `lint:check`, `check` or `check:shape` script calls a checking script
     of its own any more.
+  - What each repository checks is the same as today. Before and after, the
+    check finds the same findings on the same tree for the same files:
+    - auth-errors, auth-providers and connection;
+    - both of auth-broker's package roots;
+    - each fixture.
+- **The published command keeps working.** `@mcp-abap-adt/auth-errors`
+  exports `./tools/check-provider-shape.mjs` today. That path stays, as a
+  thin command over the one implementation, and keeps its arguments, its
+  output lines and its exit statuses. A test of the packed package proves
+  it. The release is therefore a minor one.
 - **Generated tables are checked, and regenerated without a hand-run script.**
   These are the tables a README carries: auth-errors' kinds table and
-  auth-providers' refusal tables.
-  - A test fails when the committed README differs from what the module
-    renders.
-  - The same module produces the table a person writes back.
+  auth-providers' five refusal tables.
+  - A test fails when the committed README differs from what is rendered.
+  - The same code produces the table a person writes back.
+  - **Who owns what in a table.** auth-errors owns rendering a row's words
+    from a kind and its facts. The repository whose README carries a table
+    owns its rows and descriptions: auth-providers' configuration conditions
+    and renewal behaviour stay in auth-providers. A change in a provider
+    therefore never needs an auth-errors release to keep its README true.
+  - **Words and values come from one place.** The allowlists a row's values
+    are checked against come from the same auth-errors instance that renders
+    its words.
+  - **Unknown values still fail.** An unknown value fails the table as it does
+    today. The prose around each table is kept.
 - **Nothing gets weaker.**
   - Every rule decides exactly what it decides today, on the same code.
   - Every fixture is still refused by its own rule alone.
@@ -63,8 +83,11 @@ tables are kept current by hand-run generator scripts. Instead:
 3. **The rules do not change here.** This moves where the rules run, not what
    they decide. A defect found in a rule is recorded and fixed in its own
    change, not folded into this one.
-4. **No guessing.** A repository states every option the check needs: rules,
-   base, roots, sites. The module assumes no repository layout of its own.
+4. **No guessing about a repository.** A repository states how its tree is
+   found: rules, base, root, project, sites and any explicit files. The
+   module guesses none of them. What a rule defines stays the rule's own and
+   unchanged: the `src/` selection, the test exclusions, rule 8's scopes and
+   exemptions. A repository cannot widen it.
 5. **No regex over the checked source.** The module keeps deciding through
    the TypeScript compiler API and plain code.
 
@@ -89,7 +112,7 @@ tables are kept current by hand-run generator scripts. Instead:
    test prints them.
 3. **Writing a table back.** A test run in a write mode, or a small entry the
    test also uses, and what that entry may be.
-4. **Release and order.** auth-errors' version for the module (a minor), then
+4. **Release and order.** auth-errors' minor release for the module, then
    one development-only PR in each of auth-providers, connection and
    auth-broker that removes the copy and its comparison test and adds the
    test.
