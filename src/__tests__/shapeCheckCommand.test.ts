@@ -332,3 +332,29 @@ describe('the published command: copied into another repository', () => {
     }
   });
 });
+
+describe('the published command: a report it does not know', () => {
+  it('fails closed: one line on stderr, exit 2, nothing on stdout', () => {
+    const root = tree({
+      'node_modules/@mcp-abap-adt/auth-errors/package.json': JSON.stringify({
+        name: '@mcp-abap-adt/auth-errors',
+        exports: { './shape-check': './shape-check.js' },
+      }),
+      'node_modules/@mcp-abap-adt/auth-errors/shape-check.js':
+        "module.exports = { checkProviderShape: () => ({ status: 'later' }), formatFinding: () => 'never' };\n",
+    });
+    symlinkSync(
+      join(repo, 'node_modules', 'typescript'),
+      join(root, 'node_modules', 'typescript'),
+      'dir',
+    );
+    const copy = join(root, 'tools', 'check-provider-shape.mjs');
+    mkdirSync(dirname(copy), { recursive: true });
+    copyFileSync(installed().command, copy);
+    expect(installed().runCommand(['--rules', '4'], root, copy)).toEqual({
+      status: 2,
+      stdout: '',
+      stderr: 'the shape check answered a report this command does not know\n',
+    });
+  });
+});

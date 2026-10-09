@@ -22,8 +22,9 @@
  *
  * Each finding is one line on stdout, `<file>:<line>:<column>: rule <n>:
  * <what>`, the file relative to the root. Exit 0: nothing found; 1: findings;
- * 2, reported on stderr: a usage error (with the usage line), or a program
- * that does not type-check (with its diagnostics).
+ * 2, reported on stderr: a usage error (with the usage line), a program
+ * that does not type-check (with its diagnostics), or a report this command
+ * does not know.
  *
  * It finds the module by name: from the installed package, from the
  * auth-errors repository itself after a build, and from a copy in another
@@ -103,4 +104,11 @@ switch (report.status) {
       process.stdout.write(`${formatFinding(finding)}\n`);
     }
     process.exit(report.findings.length > 0 ? 1 : 0);
+    break;
+  default:
+    // A report this command does not know is not a pass.
+    process.stderr.write(
+      'the shape check answered a report this command does not know\n',
+    );
+    process.exit(2);
 }
