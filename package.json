@@ -74,7 +74,8 @@
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:check": "npx tsc --noEmit",
     "docs:kinds": "npm run build && WRITE_README_TABLES=1 npm test -- src/__tests__/kindsTable.test.ts",
-    "prepublishOnly": "npm run build"
+    "test:shape": "npm test -- src/__tests__/shapeCheck.test.ts",
+    "prepublishOnly": "npm run build && npm run test:shape"
   },
   "engines": {
     "node": "^22 || ^24 || ^26"

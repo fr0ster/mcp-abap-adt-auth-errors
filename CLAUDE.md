@@ -93,7 +93,8 @@ no `"link": true` and every package resolves from `registry.npmjs.org`.
 npm run build        # clean + Biome errors + tsc -p tsconfig.build.json
 npm run build:fast   # tsc -p tsconfig.build.json
 npm run test:check   # tsc --noEmit over sources, tests and __typechecks__
-npm run lint:check   # Biome, --error-on-warnings, then the shape check (rules 4, 6)
+npm run lint:check   # Biome, --error-on-warnings, alone
+npm run test:shape   # the shape check (shapeCheck.test.ts); the publishing gate runs it after the build
 npm run lint         # Biome with --write
 npm run docs:kinds   # build, then rewrite the README kinds table (its test in write mode)
 npm test             # Jest (needs a build: tests load dist/ as a consumer would)

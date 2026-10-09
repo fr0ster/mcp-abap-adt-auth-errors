@@ -662,3 +662,25 @@ describe('the shape check: the published command', () => {
     expect(tools).toEqual(['tools/check-provider-shape.mjs']);
   });
 });
+
+describe('the shape check: the publishing gate', () => {
+  const scripts = (
+    JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')) as {
+      readonly scripts: Readonly<Record<string, string>>;
+    }
+  ).scripts;
+
+  it('test:shape runs this file', () => {
+    expect(scripts['test:shape']).toBe(
+      'npm test -- src/__tests__/shapeCheck.test.ts',
+    );
+  });
+
+  it('prepublishOnly names npm run test:shape', () => {
+    expect(scripts.prepublishOnly).toContain('npm run test:shape');
+  });
+
+  it('lint:check is Biome alone: it runs no other command', () => {
+    expect(scripts['lint:check']).toMatch(/^npx biome check [^&;|]*$/);
+  });
+});
