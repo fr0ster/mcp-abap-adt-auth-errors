@@ -43,7 +43,7 @@ Beyond the five questions: **the shape check stays a publishing gate** (D18,
 Jest test by path. Every path that publishes to npm — `prepublishOnly`, and
 the broker's `check`, which `release:publish` runs before publishing with
 `--ignore-scripts` — runs `test:shape`, so a type-correct rule violation still
-blocks a publish. Open for the user (§15): reading invariant 5 as allowing the
+blocks a publish. Confirmed by the user (§15): reading invariant 5 as allowing the
 script's existing regexes over strings the compiler extracted.
 
 ## 1. What is there today
@@ -731,9 +731,9 @@ from a gate, and with it removed the planted construct passes the gate.
 
 ## 15. Not decided here
 
-**Open for the user:**
+**Decided by the user:**
 
-- **Reading of invariant 5.** The script already applies regular expressions
+- **Reading of invariant 5 — confirmed.** The script already applies regular expressions
   in places (`tools/check-provider-shape.mjs`): the test-path filter
   (`:273-275`), the base's extension (`:368`), rule 8's `Basic` value
   (`:1367-1375`), its secret names (`:1401-1403`), its encoding argument
@@ -745,6 +745,8 @@ from a gate, and with it removed the planted construct passes the gate.
   changing what a rule decides here. If the user reads invariant 5 as
   covering them, replacing them with plain code is a separate change that
   must prove the same decisions on every fixture — not part of this one.
+  The user confirmed this reading: the six regular expressions stay as they
+  are.
 
 **Left to the plan:**
 
