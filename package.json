@@ -8,6 +8,9 @@
     "*": {
       "shape-check": [
         "dist/shapeCheck/index.d.ts"
+      ],
+      "tables": [
+        "dist/tables.d.ts"
       ]
     }
   },
@@ -21,6 +24,11 @@
       "types": "./dist/shapeCheck/index.d.ts",
       "require": "./dist/shapeCheck/index.js",
       "default": "./dist/shapeCheck/index.js"
+    },
+    "./tables": {
+      "types": "./dist/tables.d.ts",
+      "require": "./dist/tables.js",
+      "default": "./dist/tables.js"
     },
     "./package.json": "./package.json",
     "./tools/check-provider-shape.mjs": "./tools/check-provider-shape.mjs"

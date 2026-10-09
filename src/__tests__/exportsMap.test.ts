@@ -57,6 +57,8 @@ describe('the exports map', () => {
       '@mcp-abap-adt/auth-errors/dist/index.js',
       '@mcp-abap-adt/auth-errors/dist/shapeCheck',
       '@mcp-abap-adt/auth-errors/dist/shapeCheck/index.js',
+      '@mcp-abap-adt/auth-errors/dist/tables',
+      '@mcp-abap-adt/auth-errors/dist/tables.js',
     ]) {
       expect([
         deep,
@@ -84,12 +86,20 @@ describe('the exports map', () => {
     ).toBe('function,function,function');
   });
 
+  it('the tables module resolves by name and loads', () => {
+    expect(
+      inConsumer(
+        "const m = require('@mcp-abap-adt/auth-errors/tables'); console.log([typeof m.render, typeof m.contract, typeof m.rowsFor, typeof m.markdownCell, typeof m.withRegions, typeof m.tableWriteMode].join())",
+      ),
+    ).toBe('function,object,function,function,function,function');
+  });
+
   it.each([
     ['node', { module: 'commonjs', moduleResolution: 'node' }],
     ['node16', { module: 'node16', moduleResolution: 'node16' }],
     ['bundler', { module: 'esnext', moduleResolution: 'bundler' }],
   ])(
-    'a consumer on moduleResolution %s type-checks an import of the entry and of the shape check',
+    'a consumer on moduleResolution %s type-checks an import of the entry, the shape check and the tables',
     (mode, resolution) => {
       if (consumer === undefined) throw new Error('no consumer');
       const project = join(consumer.dir, `typed-${mode}`);
@@ -115,11 +125,14 @@ describe('the exports map', () => {
           '  checkProviderShape,',
           '  type ShapeCheckReport,',
           "} from '@mcp-abap-adt/auth-errors/shape-check';",
+          "import { markdownCell, rowsFor } from '@mcp-abap-adt/auth-errors/tables';",
           '',
           'export const check: (',
           '  options: Parameters<typeof checkProviderShape>[0],',
           ') => ShapeCheckReport = checkProviderShape;',
           'export const read = classify;',
+          'export const cell: (text: string) => string = markdownCell;',
+          'export const rows = rowsFor;',
           '',
         ].join('\n'),
       );
