@@ -29,7 +29,6 @@ const count = built.count as (n: number) => unknown;
 const port = built.port as (n: number) => unknown;
 
 /** Facts per discriminant value, then the samples of optional facts. */
-/** Facts per discriminant value, then the samples of optional facts. */
 function defaultSamples(kind: string): Facts[] {
   switch (kind) {
     case 'configuration':
