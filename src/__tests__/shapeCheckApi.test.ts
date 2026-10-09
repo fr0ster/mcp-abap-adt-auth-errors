@@ -418,6 +418,7 @@ describe('the shape check API: refusals of its own, naming the option', () => {
     ['a typescript that is not the module', 'typescript', { typescript: {} }],
     ['an empty rule list', 'rules', { rules: [] }],
     ['rules that are not a list', 'rules', { rules: '4' }],
+    ['a rule that is not a number', 'rules', { rules: [4, '6'] }],
     ['a relative root', 'root', { root: 'tools/__fixtures__' }],
     ['a root not given', 'root', { root: undefined }],
     ['a relative project', 'project', { project: 'tsconfig.json' }],
@@ -500,6 +501,23 @@ describe('the shape check API: no project', () => {
     expect(strict.status === 'type-errors' && strict.diagnostics).toMatch(
       /^src\/implicit\.ts\(1,19\): error TS7006: /,
     );
+  });
+
+  it('finds global types in the root’s own @types, wherever the process runs', () => {
+    const root = tree({
+      'node_modules/@types/foo/index.d.ts': 'declare var fooGlobal: number;\n',
+      'src/a.ts': 'export const a: number = fooGlobal;\n',
+    });
+    expect(process.cwd()).not.toBe(root);
+    expect(
+      checkProviderShape({
+        typescript,
+        rules: [6],
+        root,
+        project: null,
+        sites: null,
+      }),
+    ).toEqual({ status: 'checked', findings: [] });
   });
 
   it('without files, checks every file under <root>/src', () => {

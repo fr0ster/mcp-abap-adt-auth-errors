@@ -80,6 +80,9 @@ function checkedRules(value: unknown): ReadonlySet<ShapeRule> {
   if (value.length === 0) fail('rules: at least one rule, 1 to 8, is required');
   const rules = new Set<ShapeRule>();
   for (const rule of value as readonly unknown[]) {
+    if (typeof rule !== 'number') {
+      fail(`rules: rule numbers, 1 to 8, are required, not ${typeof rule}`);
+    }
     if (!KNOWN_RULES.has(rule)) fail(`unknown rule ${String(rule)}`);
     rules.add(rule as ShapeRule);
   }
