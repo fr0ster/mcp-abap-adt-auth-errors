@@ -45,7 +45,7 @@ each gets a test in the owning task.
 
 | # | Implied by | Input / failure mode | Test, owning task |
 |---|---|---|---|
-| RF1 | D5 "duplicates count once" | `rules: [4, 4, 6]` and `rules: [6, 4]` give the same report as `[4, 6]` | API usage suite, Task 1 |
+| RF1 | D5 "duplicates count once" | `rules: [4, 4, 6]` and `rules: [6, 4]` give the same report as `[4, 6]` | `shapeCheck.test.ts`, Task 2 (needs a rule that reports) |
 | RF2 | D5 "inside a stated `sites` directory a missing list is still an empty one" | a stated `sites` directory holding only `assertion-sites.json` checks (no usage error), while a stated directory that does not exist is a usage error | API usage suite, Task 1 |
 | RF3 | D5 / §5 "`project` / `sites` passed as `null` when the file / directory does not exist" | the command run with `--root` at a tree with no `tsconfig.json` and no `tools/`, and with `--project` naming a missing file, reports what the API reports with `project: null`, `sites: null` | packed command test, Task 3 |
 | RF4 | D14 "from a copy in another repository's `tools/`" | the installed command copied into the temporary consumer's own `tools/` and run from there resolves the installed module and gives the same output as the installed one | packed command test, Task 3 |
@@ -84,16 +84,14 @@ Repository: auth-errors, worktree `.worktrees/checks-as-tests`, PR #7.
 
 **Steps:**
 - [ ] Copy the script; add to the equivalence test a first case asserting the held file's sha256 is `681d8cbd…70715603`.
-- [ ] Write `shapeCheckApi.test.ts`, failing: each `fail` path of the script, by its message, through the API (no rules, unknown rule, malformed base, base not resolving, missing file, nothing to check, rules 4/5 without the brands, interfaces-auth missing, a file not in the program, a bad site list) → `usage-error` with today's text; a program that does not type-check → `type-errors` with diagnostics relative to `root`; API-only refusals (relative `root`/`project`/`sites`/`files`, empty `rules`, no `typescript`, a stated missing `project`, a stated missing `sites`) → `usage-error` naming the option; RF1 (duplicates and order); RF2 (a stated `sites` directory with one list only checks; a stated missing one is refused); `project: null` with `files` given checks those files under the strict defaults; no state between calls (two calls, the root's `package.json` name changed between them, the second decides on the new name); `reportLines` for each status (`cannot check: <message>`; `cannot check: the program does not type-check` then the diagnostic lines; one `formatFinding` line per finding); no stream written, no environment variable read (spy on `process.stdout.write`, `process.stderr.write`, a Proxy over `process.env` reporting reads).
+- [ ] Write `shapeCheckApi.test.ts`, failing: each `fail` path of the script, by its message, through the API (no rules, unknown rule, malformed base, base not resolving, missing file, nothing to check, rules 4/5 without the brands, interfaces-auth missing, a file not in the program, a bad site list) → `usage-error` with today's text; a program that does not type-check → `type-errors` with diagnostics relative to `root`; API-only refusals (relative `root`/`project`/`sites`/`files`, empty `rules`, no `typescript`, a stated missing `project`, a stated missing `sites`) → `usage-error` naming the option; RF2 (a stated `sites` directory with one list only checks; a stated missing one is refused); `project: null` with `files` given checks those files under the strict defaults; `reportLines` for each status (`cannot check: <message>`; `cannot check: the program does not type-check` then the diagnostic lines; for `checked`, one `formatFinding` line per finding, tested on a hand-built report since no rule reports yet); no stream written, no environment variable read (spy on `process.stdout.write`, `process.stderr.write`, a Proxy over `process.env` reporting reads).
 - [ ] Write the equivalence test's usage/type-error matrix (every usage and type-error case of today's `shapeCheck.test.ts`): the held script as a child (`node tools/previous/check-provider-shape.mjs …`) against the API with the same options resolved; exit 2 ↔ `usage-error` whose `message + '\n' + USAGE + '\n'` is the script's stderr, or `type-errors` whose diagnostics follow the script's sentence; stdout empty on both sides.
 - [ ] Run both files: red (no module).
 - [ ] Implement the port of `parseArguments`-independent parts: options validation, program loading with the fallback, file selection (the rules' own exclusions, the existing test-path regex unchanged), site lists, base resolution, brands, interfaces-auth lookup, the type-error formatting; `fail` becomes a returned `usage-error`; `packageCache` per call; no rule yet (every `checked` has no findings). Strict-option guards keep every outcome for a present value; each place where the script would have thrown is noted for the PR's "Found defects".
 - [ ] Run green: `npm test -- src/__tests__/shapeCheckApi.test.ts src/__tests__/shapeCheckEquivalence.test.ts`.
 - [ ] [break] return `checked` with no findings for a missing base → the base usage case red; restore.
-- [ ] [break] move the package cache back to module level → the no-state case red; restore.
 - [ ] [break] drop the `cannot check:` line for a usage error in `reportLines` → its case red; restore.
-- [ ] [break] collapse duplicate handling (count `[4,4,6]` as given) — if it changes nothing observable, RF1 is weak: strengthen it with a rule whose findings would double, then confirm red; restore.
-- [ ] Gates: `npm run build`, `npm run test:check`, `npm run lint:check`, `npm test` (today's tests untouched and green, the original command still in place); no `§`, `Decision D`, `C1`… in `src/shapeCheck/` (`grep`).
+- [ ] Gates (CI's own sequence, each green for the reason given in the pre-flight's per-commit table): `npm run build`, `npm run test:check`, `npm run lint:check` (still Biome plus the original 2.1.1 command with `--rules 4,6` over the own tree, which now includes `src/shapeCheck/` — the new files must be clean under it), `npm test` (today's tests untouched and green, the original command still in place); no `§`, `Decision D`, `C1`… in `src/shapeCheck/` (`grep`).
 - [ ] Self-check of this task's text: every refusal listed in the test is one of §1's `fail` sites or D6's API-only list.
 - [ ] Commit: `feat(shape-check): the API and program loading as a module; hold the 2.1.1 script`.
 
@@ -113,13 +111,18 @@ Repository: auth-errors, worktree `.worktrees/checks-as-tests`, PR #7.
 
 **Steps:**
 - [ ] Rewrite `shapeCheck.test.ts`, failing: the fixture table (every breaking fixture under `tools/__fixtures__/src` reported for its rule only, with its count; every obeying file clean), the base by declaration, the impostor pair, the rewriting base, `ParameterBase`, the four trusted sites with empty lists, the base's own file scanned, rule 5 only, given files, the three `bases/`, `prose.ts` with `RewritingBase`, `obeys.ts` with either base; the own tree with `{ rules: [4, 6], root, project: <root>/tsconfig.json, sites: <root>/tools }` → `reportLines` equals `[]`. No citation in the file.
+- [ ] Add to `shapeCheck.test.ts` the two cases moved here from Task 1 because they need a rule that reports, failing:
+  - **RF1, duplicates count once.** On the fixtures root with its base and sites, `rules: [4, 4, 6]` and `rules: [6, 4]` each give `reportLines` equal to that of `rules: [4, 6]` — baseline: the fixtures' rule-4 and rule-6 findings, each line once, sorted. The fixture set must make that baseline non-empty for rule 4 (it does: the rule-4 breaking fixtures).
+  - **No state between calls.** A temporary tree (scratch dir under `os.tmpdir()`): `src/forged.ts` holding `export const forged = {} as IAuthProviderError;` imported from `@mcp-abap-adt/interfaces-auth`; `node_modules/@mcp-abap-adt/interfaces-auth/` a real copy (not a symlink) of the installed package; `project: null`, `sites: null`, `rules: [4]`. Call 1, baseline: `checked` with exactly one rule-4 finding at `src/forged.ts` (the brands are found in the package named `@mcp-abap-adt/interfaces-auth`). Between the calls, change the copy's `package.json` `name` to `@example/not-interfaces-auth`. Call 2, expected: `usage-error` whose message is the brands refusal (`rules 4 and 5 need the brands of @mcp-abap-adt/interfaces-auth 6.0.0 or later; not found: …`) — the package is identified by its name, read afresh. Mutated outcome under the break below: call 2 answers call 1's report again (the cached name says interfaces-auth), so the case is red.
 - [ ] Extend the equivalence matrix with every findings entry of §7's auth-errors row: own tree `4,6`; own tree `4` with an empty sites dir; own tree 1–8 with the fixtures' base; the fixtures root with every rule, fixture sites and base; every narrowed run of today's test; each fixture file alone with every rule. Each: the script's stdout lines equal `reportLines`, in order; exit 0 ↔ none, 1 ↔ some. The comparison runs on today's file set: entries over the own tree pass, to both sides, `files` listing the selected `src/` files of the base commit `3cbf6a4` (from `git ls-tree`, filtered by the rules' own exclusions), so the new module's files are not part of the comparison; the own-tree test of `shapeCheck.test.ts` covers them.
 - [ ] Run red.
 - [ ] Port each rule in the script's order, changing syntax and adding types only; the six regexes copied as they are; the rule-8 comment names `src/auth/`, `src/providers/`, `src/clientAuthentication/`; comments say what a rule decides and why, citing nothing.
 - [ ] Run green: `npm test -- src/__tests__/shapeCheck.test.ts src/__tests__/shapeCheckEquivalence.test.ts src/__tests__/shapeCheckApi.test.ts`.
 - [ ] [break] for each rule 1–8, delete the `report` call of one of its checks → that rule's fixture row red (eight separate breaks, each restored before the next).
+- [ ] [break] run each listed rule once per occurrence (no de-duplication of `rules`) → with `[4, 4, 6]` every rule-4 line appears twice, RF1 red; restore.
+- [ ] [break] move the package cache back to module level → the no-state case's call 2 answers one rule-4 finding instead of the brands refusal, red; restore.
 - [ ] [break] sort findings by file and line only → an equivalence entry with two findings on one line red (if none exists, add a fixture-alone entry that has one); restore.
-- [ ] Gates: `npm run build`, `npm run test:check`, `npm run lint:check`, the three test files by path; `grep` that `src/shapeCheck` has no `import … from 'typescript'` other than `import type`, and no regex literal or `RegExp` beyond the six (count them).
+- [ ] Gates: `npm run build`, `npm run test:check`, `npm run lint:check` (still runs the original command over the own tree, now including the rule files — they must be clean under `--rules 4,6`), `npm test`; `grep` that `src/shapeCheck` has no `import … from 'typescript'` other than `import type`, and no regex literal or `RegExp` beyond the six (count them).
 - [ ] Record in the PR description draft: each found defect (rule, script line, input, outcome kept).
 - [ ] Commit: `feat(shape-check): the eight rules as a module, the fixtures run in-process`.
 
@@ -330,19 +333,25 @@ Repository: `/home/okyslytsia/prj/mcp-abap-adt-auth-providers`, worktree `.workt
 
 **Steps:**
 - [ ] Precondition: `npm view @mcp-abap-adt/auth-errors@2.2.0 version` answers `2.2.0`; no other PR open in this repository (`gh pr list --state open`); create the worktree from `master`.
-- [ ] Bump to `^2.2.0`, `npm install`; lockfile: auth-errors 2.2.0 from registry.npmjs.org, no `"link": true`.
-- [ ] Transitional commit, test first: delete the byte-comparison case; write `shapeCheckEquivalence.test.ts` over §7's auth-providers matrix (own tree as configured; own tree `6` with an empty sites dir; own tree 1–8 with an empty sites dir; `rule1.ts`…`rule7.ts`, `clean.ts` with the configuration; the rule-8 tree with `8`), comparing the repository's own `tools/check-provider-shape.mjs` (2.1.1, sha256 asserted) with `reportLines` of the module and with the installed thin command (status, stdout, stderr byte for byte); rewrite `shapeCheck.test.ts` per §6 (own tree; assertion list empty; diagnostic list names exactly the approved sites; empty sites → rule 6 reports each listed site and nothing else; each fixture refused with its count by its own rule; `rule2.ts` names `establish`; `clean.ts` passes; the rule-8 tree reports two; every fixture's rule is in `SHAPE_CHECK.rules`, rule 8 included). Run red, adjust only the test wiring, run green (by path). Gates: `npm run build`, `npm run test:check`, `npm run lint:check` (still the old one at this commit), both test files by path. Commit `test(shape-check): run the shape check through auth-errors 2.2.0; prove it equal to 2.1.1`; push; CI green on it; record the run in the PR.
-- [ ] Removal commit: delete `tools/check-provider-shape.mjs` and the equivalence test; `lint:check` Biome only.
-- [ ] Tables, test first: `readmeRefusalTables.test.ts` rewritten — README equals `withRegions(readme, refusalTableRegions())`, three hand-edited rows each fail, write mode per D13 in a temporary copy, title `the README tables equal the rendered ones (regenerate: npm run docs:tables)`. Run red; move the five builders and their row texts into the helper (TypeScript; `contract` replaces the `createRequire` lookup; `rowsFor` replaces `each`; branded facts through the main entry's makers); delete `scripts/`. Run green; the README's sha256 unchanged.
-- [ ] Gate, test first: the shape-check test asserts `prepublishOnly` and `release.yml` name `npm run test:shape`; run red; edit `package.json` and `release.yml`; run green.
-- [ ] [break] add `as IAuthProviderError` in `src/` → own-tree red; restore.
-- [ ] [break] remove one rule from `SHAPE_CHECK.rules` → that rule's fixture red; restore. [break] remove `base` → usage error, red; restore. [break] remove `8` → the "every fixture's rule" case red; restore.
-- [ ] [break] `sites: null` in the constant → the own tree reports 15, red; restore.
-- [ ] [break] edit one row text in the helper → the README test red; `npm run docs:tables` rewrites it; revert both.
-- [ ] Planted-construct proof: plant `export const forged = {} as IAuthProviderError;` in `src/`; `npm run prepublishOnly` exits non-zero with the finding; revert; it passes. [break] remove `test:shape` from `prepublishOnly` → the gate assertion red, and the plant passes the gate; restore. Record both runs in the PR.
-- [ ] Docs: CLAUDE.md Build Commands (`lint:check` Biome only, `test:shape`), the Testing paragraph (no copy, no byte comparison, the rule-8 fixture tree, rule-8 scope = `src/auth/`, `src/providers/`, `src/clientAuthentication/`), the SAML and Error-classes paragraphs (`docs:tables` is the test run; no script); README and AGENTS.md wherever they name the script or the copy. `grep -rn "check-provider-shape\|generate-refusal-tables\|byte-identical\|byte for byte"` answers nothing stale.
-- [ ] Gates: `npm run build`, `npm run test:check`, `npm run lint:check`, the shape-check and README tests by path, `npm run test:shape`, then the full `npm test` under the live-systems constraint; lockfile check again.
-- [ ] Commit(s): `chore: the shape check runs from auth-errors; no copy`, `test(readme): the refusal tables are checked and written by their test`, `build: test:shape in prepublishOnly and release`, `docs: …`. Push; PR description lists the transitional run, the breaks, the gate runs; review (Codex approve or the user's word), CI green, merge. No tag, no release.
+Three commits, each green on the repository's CI (`build`, `test:check`, `lint:check`, `npm test`) for the reason stated in the pre-flight's per-commit table. The bump is never a commit of its own: installing 2.2.0 replaces the installed command with the thin one, so the byte-comparison case in `shapeCheck.test.ts` would fail on a bump alone.
+
+- [ ] **Commit P1 — transitional.** Test first, in this one commit:
+  - bump `@mcp-abap-adt/auth-errors` to `^2.2.0`, `npm install`; lockfile: auth-errors 2.2.0 from registry.npmjs.org, no `"link": true`;
+  - rewrite `shapeCheck.test.ts` per §6 — the byte-comparison case and the "lint:check runs it after Biome" case are deleted here, in the same commit as the bump; the rewritten cases: own tree; assertion list empty; diagnostic list names exactly the approved sites; empty sites → rule 6 reports each listed site and nothing else; each fixture refused with its count by its own rule; `rule2.ts` names `establish`; `clean.ts` passes; the rule-8 tree reports two; every fixture's rule is in `SHAPE_CHECK.rules`, rule 8 included;
+  - write `shapeCheckEquivalence.test.ts` over §7's auth-providers matrix (own tree as configured; own tree `6` with an empty sites dir; own tree 1–8 with an empty sites dir; `rule1.ts`…`rule7.ts`, `clean.ts` with the configuration; the rule-8 tree with `8`): the repository's own `tools/check-provider-shape.mjs` (2.1.1, sha256 asserted; self-contained, so it still runs with 2.2.0 installed) against `reportLines` of the module and against the installed thin command (status, stdout, stderr byte for byte).
+  - `lint:check` is untouched in P1 (Biome, then the 2.1.1 copy); `prepublishOnly` untouched.
+  - Run red (before the bump the subpath does not resolve), bump, run green by path. Gates: `npm run build`, `npm run test:check`, `npm run lint:check`, `npm test -- src/__tests__/shapeCheck.test.ts src/__tests__/shapeCheckEquivalence.test.ts src/__tests__/readmeRefusalTables.test.ts` (the old generator still runs against 2.2.0: its `render` and interfaces-auth lookup are unchanged), then the full `npm test` under the live-systems constraint. Commit `test(shape-check): run the shape check through auth-errors 2.2.0; prove it equal to 2.1.1`; push; CI green on it; record the run in the PR.
+- [ ] **Commit P2 — removal and gate, atomically.** Test first: add to `shapeCheck.test.ts` the gate assertion (`prepublishOnly` and `release.yml` name `npm run test:shape`; `lint:check` names no checking script); run red. Then, in the same commit: add `test:shape`; `prepublishOnly` = `npm run build && npm run test:shape`; a `test:shape` step after `build` in `release.yml`; `lint:check` Biome only; delete `tools/check-provider-shape.mjs` and `shapeCheckEquivalence.test.ts`. Run green. No commit exists in which the copy is gone and the gate is not yet there.
+  - [break] add `as IAuthProviderError` in `src/` → own-tree red; restore.
+  - [break] remove one rule from `SHAPE_CHECK.rules` → that rule's fixture red; restore. [break] remove `base` → usage error, red; restore. [break] remove `8` → the "every fixture's rule" case red; restore.
+  - [break] `sites: null` in the constant → the own tree reports 15, red; restore.
+  - Planted-construct proof: plant `export const forged = {} as IAuthProviderError;` in `src/`; `npm run prepublishOnly` exits non-zero with the finding; revert; it passes. [break] remove `test:shape` from `prepublishOnly` → the gate assertion red, and the plant passes the gate; restore both. Record the runs in the PR.
+  - Gates: `npm run build`, `npm run test:check`, `npm run lint:check`, `npm run test:shape`, the full `npm test` under the live-systems constraint. Commit `chore: the shape check runs from auth-errors through test:shape; no copy`.
+- [ ] **Commit P3 — the refusal tables.** Test first: `readmeRefusalTables.test.ts` rewritten — README equals `withRegions(readme, refusalTableRegions())`, three hand-edited rows each fail, write mode per D13 in a temporary copy, title `the README tables equal the rendered ones (regenerate: npm run docs:tables)`. Run red; move the five builders and their row texts into the helper (TypeScript; `contract` replaces the `createRequire` lookup; `rowsFor` replaces `each`; branded facts through the main entry's makers); delete `scripts/`; `docs:tables` = the test run. Run green; the README's sha256 unchanged.
+  - [break] edit one row text in the helper → the README test red; `npm run docs:tables` rewrites it; revert both.
+  - Gates as P2. Commit `test(readme): the refusal tables are checked and written by their test`.
+- [ ] **Commit P4 — docs.** CLAUDE.md Build Commands (`lint:check` Biome only, `test:shape`), the Testing paragraph (no copy, no byte comparison, the rule-8 fixture tree, rule-8 scope = `src/auth/`, `src/providers/`, `src/clientAuthentication/`), the SAML and Error-classes paragraphs (`docs:tables` is the test run; no script); README and AGENTS.md wherever they name the script or the copy — outside the generated regions, so the README test stays green. `grep -rn "check-provider-shape\|generate-refusal-tables\|byte-identical\|byte for byte"` answers nothing stale. Gates as P2; lockfile check again. Commit `docs: the shape check and the refusal tables as tests`.
+- [ ] Push; PR description lists the transitional run, the breaks, the gate runs; review (Codex approve or the user's word), CI green, merge. No tag, no release.
 
 ### Task 14 — connection: the shape check as a test (development-only PR)
 
@@ -356,15 +365,15 @@ Repository: `/home/okyslytsia/prj/mcp-abap-connection`, worktree `.worktrees/che
 
 **Steps:**
 - [ ] Precondition: `npm view @mcp-abap-adt/auth-errors@2.2.0 version` answers `2.2.0`; no other PR open here; worktree from `master`.
-- [ ] Bump, install, lockfile check.
-- [ ] Transitional commit, test first: equivalence over §7's connection matrix (own tree `4,5,6`; own tree 4–8 with an empty sites dir; each fixture with `4,5,6`) — own 2.1.1 copy (sha256 asserted) vs module vs installed thin command; rewritten `shapeCheck.test.ts` (both site lists empty; `rule4.ts`, `rule5.ts`, `rule6.ts` each by its rule alone; `clean.ts` passes; own tree passes); `R1` removed. Red, green, gates (`npm run build`, `npm run lint:check`, `npm test`), commit, push, CI green, record.
-- [ ] Removal commit: delete the copy and the equivalence test; `lint:check` Biome only.
-- [ ] Gate, test first: the shape-check test asserts `prepublishOnly` names `npm run test:shape`; red; edit; green.
-- [ ] [break] `as IAuthProviderError` in `src/` → own tree red; restore. [break] remove each rule from the constant in turn → its fixture red; restore. [break] add an entry to a site list → the empty-lists case red; restore.
-- [ ] Planted-construct proof with `npm run prepublishOnly` (non-zero with the finding, then pass); [break] remove `test:shape` from it → assertion red, plant passes; restore. Record.
-- [ ] Docs: CLAUDE.md Build Commands and the shape-check paragraph; any doc naming the copy; `npm run check:docs` green.
-- [ ] Gates: `npm run build`, `npm run lint:check`, `npm test`, `npm run test:shape`, `npm run check:pack`; lockfile check.
-- [ ] Commits, push, PR description, review, CI green, merge. No release.
+Three commits, each green on connection's CI (`lint:check`, `build`, `npx jest --no-cache`, `check:docs`, `check:pack`) for the reason in the pre-flight's per-commit table.
+
+- [ ] **Commit N1 — transitional.** Test first, in this one commit: bump to `^2.2.0`, `npm install`, lockfile check; rewrite `shapeCheck.test.ts` (both site lists empty; `rule4.ts`, `rule5.ts`, `rule6.ts` each by its rule alone; `clean.ts` passes; own tree passes) with `R1`, the byte comparison against the installed command, deleted in this same commit; equivalence over §7's connection matrix (own tree `4,5,6`; own tree 4–8 with an empty sites dir; each fixture with `4,5,6`) — own 2.1.1 copy (sha256 asserted) vs module vs installed thin command. `lint:check` and `prepublishOnly` untouched (Biome, then the 2.1.1 copy). Red, green; gates in CI's order: `npm run lint:check`, `npm run build` (`tsconfig.json` excludes `src/__tests__`, so the new tests do not enter the build), `npm test`, `npm run check:docs`, `npm run check:pack` (`files` does not publish `tools/`). Commit, push, CI green, record.
+- [ ] **Commit N2 — removal and gate, atomically.** Test first: the shape-check test asserts `prepublishOnly` names `npm run test:shape` and `lint:check` names no checking script; red. Same commit: add `test:shape`; `prepublishOnly` = `npm run build && npm run lint:check && npm run test:shape && npm run check:docs && npm run --silent check:pack`; `lint:check` Biome only; delete the copy and the equivalence test. Green.
+  - [break] `as IAuthProviderError` in `src/` → own tree red; restore. [break] remove each rule from the constant in turn → its fixture red; restore. [break] add an entry to a site list → the empty-lists case red; restore.
+  - Planted-construct proof with `npm run prepublishOnly` (non-zero with the finding, then pass); [break] remove `test:shape` from it → assertion red, plant passes; restore. Record.
+  - Gates: CI's order as N1, plus `npm run test:shape`. `check:docs` checks only `.md` link targets, so the deleted `.mjs` still named in CLAUDE.md does not fail it until N3 fixes the wording. Commit `chore: the shape check runs from auth-errors through test:shape; no copy`.
+- [ ] **Commit N3 — docs.** CLAUDE.md Build Commands and the shape-check paragraph; any doc naming the copy. Gates as N2; lockfile check. Commit `docs: the shape check as a test`.
+- [ ] Push, PR description, review, CI green, merge. No release.
 
 ### Task 15 — auth-broker: the shape check as tests in both packages (development-only PR)
 
@@ -373,7 +382,7 @@ Repository: `/home/okyslytsia/prj/mcp-abap-adt-auth-broker`, worktree `.worktree
 **Implements:** §6 (auth-broker, two roots, three fixtures each), §6a / D18 (broker row, `check`, `release.yml`), D17 (broker matrix), §9 (README, CLAUDE.md, AGENTS.md, `docs/architecture/ARCHITECTURE.md`, `docs/development/TESTING.md`), §11, §13 (broker), the fixture placement ruling, invariant 1 (workspace siblings the only links).
 
 **Files:**
-- `packages/auth-broker/package.json`, `packages/auth-broker-cli/package.json` (`^2.2.0`; `test:shape` = `cross-env NODE_OPTIONS=--experimental-vm-modules jest <its shape-check test>`); root `package.json` (`test:shape` = `npm run test:shape --workspaces`; `check:shape` deleted; `check` names `npm run test:shape` in its place); lockfile
+- `packages/auth-broker/package.json` (also `typescript` `^5.9.2` in `devDependencies`), `packages/auth-broker-cli/package.json` (`^2.2.0`; `test:shape` = `cross-env NODE_OPTIONS=--experimental-vm-modules jest <its shape-check test>`); root `package.json` (`test:shape` = `npm run test:shape --workspaces`; `check:shape` deleted; `check` names `npm run test:shape` in its place); lockfile
 - delete `tools/check-provider-shape.mjs`, `packages/auth-broker/src/__tests__/tools/shapeCheckCopy.test.ts`
 - create `packages/auth-broker/src/__tests__/tools/shapeCheck.test.ts`, `packages/auth-broker-cli/src/__tests__/shapeCheck.test.ts`
 - create `packages/auth-broker/tools/__fixtures__/{rule4,rule5,rule6}.ts`, `packages/auth-broker-cli/tools/__fixtures__/{rule4,rule5,rule6}.ts`
@@ -386,15 +395,22 @@ Repository: `/home/okyslytsia/prj/mcp-abap-adt-auth-broker`, worktree `.worktree
 
 **Steps:**
 - [ ] Precondition: `npm view @mcp-abap-adt/auth-errors@2.2.0 version` answers `2.2.0`; no other PR open here; worktree from `main`.
-- [ ] Bump both packages, `npm install`; lockfile: auth-errors 2.2.0 from the registry; the only `"link": true` entries are the two workspace packages.
-- [ ] Transitional commit, test first: fixtures written (each breaking one rule, type-correct under the package's strict options); equivalence over §7's broker matrix (each root `4,5,6`; each root 4–8) plus each fixture with its package's options — own 2.1.1 copy (sha256 asserted) vs module vs installed thin command; the two shape-check tests (own root clean; each fixture refused by its rule alone). Confirm with the 2.1.1 copy that each fixture is accepted as a file argument under the package's `tsconfig.json` (as connection's are). Red, green, gates (`npm run build`, `npm run test:check`, `npm run lint:check`, both tests by path), commit, push, CI green, record.
-- [ ] Removal commit: delete the copy, `shapeCheckCopy.test.ts`, the equivalence test, `check:shape`.
-- [ ] Gate, test first: each package's shape-check test asserts root `check` names `npm run test:shape`, its own `prepublishOnly` runs `check`, `release.yml` names `npm run test:shape`; red; edit root `package.json`, `release.yml`; green.
-- [ ] [break] a cast `as IAuthProviderError` in each package's `src/` in turn → that package's own-root case red; restore. [break] remove each rule from each package's constant in turn → that fixture red; restore.
-- [ ] Planted-construct proof with `npm run check` (non-zero with the finding, then pass); [break] remove `test:shape` from `check` → assertion red, plant passes `check`; restore. Record.
-- [ ] Docs: README (`check` list, `check:shape` row), CLAUDE.md, AGENTS.md, `docs/architecture/ARCHITECTURE.md`, `docs/development/TESTING.md`; `grep -rn "check:shape\|check-provider-shape\|shapeCheckCopy"` answers nothing stale.
-- [ ] Gates: `npm run check`, `npm test`, `npm run test:shape`; lockfile check.
-- [ ] Commits, push, PR description, review, CI green, merge. No release.
+Three commits, each green on the broker's CI (`npm run check` — build, test:check, lint:check, check:graph, then the shape gate, check:packed, check:publish — and `npm test`) for the reason in the pre-flight's per-commit table.
+
+- [ ] **Commit B1 — transitional.** Test first, in this one commit:
+  - bump both packages to `^2.2.0`, `npm install`; lockfile: auth-errors 2.2.0 from the registry; the only `"link": true` entries are the two workspace packages;
+  - delete `packages/auth-broker/src/__tests__/tools/shapeCheckCopy.test.ts` here — with 2.2.0 installed, its byte comparison against the installed command can never pass;
+  - add `typescript` (`^5.9.2`, the root's range) to `packages/auth-broker`'s `devDependencies` — `check:graph` refuses a test import declared in neither `dependencies` nor `devDependencies`, and that package declares none today (auth-broker-cli has `^5.9.3`);
+  - `biome.json` gains `!!packages/*/tools/__fixtures__`, in this commit, since `build` and `lint:check` run Biome over `packages`;
+  - the fixtures (each breaking one rule, type-correct under the package's strict options); the two shape-check tests (own root clean; each fixture refused by its rule alone); equivalence over §7's broker matrix (each root `4,5,6`; each root 4–8) plus each fixture with its package's options — the root's own 2.1.1 copy (sha256 asserted) vs module vs installed thin command. Confirm with the 2.1.1 copy that each fixture is accepted as a file argument under the package's `tsconfig.json`.
+  - `check:shape` and `check` untouched: they still run the 2.1.1 copy over both roots, whose `src` selection does not reach `tools/__fixtures__`, and whose default `<root>/tools` now exists but holds no site list (two empty lists, as before).
+  - Red, green; gates: `npm run check`, `npm test`. Commit, push, CI green, record.
+- [ ] **Commit B2 — removal and gate, atomically.** Test first: each package's shape-check test asserts root `check` names `npm run test:shape`, its own `prepublishOnly` runs `check`, `release.yml` names `npm run test:shape`; red. Then, in this one commit: add `test:shape` to both packages; root `test:shape` = `npm run test:shape --workspaces`; in root `check`, `npm run check:shape` replaced by `npm run test:shape`; a `test:shape` step after `build` in `release.yml`; delete the `check:shape` script, `tools/check-provider-shape.mjs` and the equivalence test. Green. No commit exists in which `check` names a deleted script or the gate is missing.
+  - [break] a cast `as IAuthProviderError` in each package's `src/` in turn → that package's own-root case red; restore. [break] remove each rule from each package's constant in turn → that fixture red; restore.
+  - Planted-construct proof with `npm run check` (non-zero with the finding, then pass); [break] remove `test:shape` from `check` → assertion red, plant passes `check`; restore. Record.
+  - Gates: `npm run check`, `npm test`, `npm run test:shape`. Commit `chore: the shape check runs from auth-errors through test:shape; no copy`.
+- [ ] **Commit B3 — docs.** README (`check` list, `check:shape` row), CLAUDE.md, AGENTS.md, `docs/architecture/ARCHITECTURE.md`, `docs/development/TESTING.md`; `grep -rn "check:shape\|check-provider-shape\|shapeCheckCopy"` answers nothing stale. Gates as B2; lockfile check. Commit `docs: the shape check as tests`.
+- [ ] Push, PR description, review, CI green, merge. No release.
 
 ### Task 16 — the cross-repository check
 
@@ -437,11 +453,57 @@ Repository: `/home/okyslytsia/prj/mcp-abap-adt-auth-broker`, worktree `.worktree
 | T12 → T13, T14, T15 | `@mcp-abap-adt/auth-errors@2.2.0` on the registry | each consumer's precondition `npm view` | yes |
 | T13/T14/T15 → T16 | merged consumer trees | the cross-repo sweep | yes |
 
+### Every commit against its repository's CI and gates
+
+What each commit's CI runs, and why it is green. "Gate" is the publishing path of §6a as it stands at that commit; no commit leaves it weaker than at the base commit.
+
+**auth-errors** — CI: `build` (Biome errors over `src`, `tsc -p tsconfig.build.json`), `test:check`, `lint:check`, `npm test`; gate: `prepublishOnly`.
+
+| Commit | `lint:check` runs | `npm test` runs | Green because | Gate |
+|---|---|---|---|---|
+| T1 | Biome over `src scripts tools/check-provider-shape.mjs`; the original 2.1.1 command `--rules 4,6` over the own tree | today's suite untouched (child-process `shapeCheck.test.ts` on the original command; `exportsMap` pack test, `tools/` = the command alone, `tools/previous/` outside `files`); `shapeCheckApi`; equivalence (usage/type-error rows) | the original command is in place; `src/shapeCheck/` uses `import type` only, compiles under the build; it must be clean under the 2.1.1 command's rules 4 and 6 (a T1 gate) | `build`, as at the base |
+| T2 | same; the rule files now also checked by the 2.1.1 command | `shapeCheck.test.ts` in-process; RF1 and no-state cases; full equivalence | as T1; findings equal by the equivalence test | as base |
+| T3 | Biome over `src scripts tools/check-provider-shape.mjs` only — no command call | own tree in `shapeCheck.test.ts`; `shapeCheckCommand`; `exportsMap` with `./shape-check`; equivalence with the thin column | CI builds before testing, so the thin command's self-reference finds `dist/shapeCheck`; the own-tree check moved into `npm test` in the same commit that dropped it from `lint:check` | as base (`build`; the check was never in auth-errors' `prepublishOnly`) |
+| T4 | as T3 | as T3 minus equivalence | nothing references `tools/previous/` (`grep` step) | as base |
+| T5 | as T3 | + `tables.test.ts`, `exportsMap` with `./tables` | pure module; old kinds generator untouched | as base |
+| T6 | Biome over `src tools/check-provider-shape.mjs` | kinds table in-process from `dist` | CI builds first; README bytes unchanged; CI never sets `WRITE_README_TABLES` | as base |
+| T7 | as T6 | + `mainEntryLoadsNothing` | the property already holds; breaks prove it | as base |
+| T8 | as T6 | + gate assertion | `prepublishOnly` = `build && test:shape` in the same commit as its assertion | **strengthened**: `build && test:shape` |
+| T9 | as T6 | + `readme.test.ts` | README edited in the same commit | as T8 |
+| T10 | as T6 | as T9 | version only; no test reads `CHANGELOG.md` or the version (checked: `grep` over `src/__tests__`) | as T8 |
+| T11 | as T6 | as T9 | no test reads `docs/superpowers` (same `grep`) | as T8 |
+| T12 | review-fix commits, if any, rerun the gates of the task they touch; the tag's `release.yml` runs `build`, `test:check`, `lint:check`, `npm test` | — | tag equals `package.json` version 2.2.0 | the user's `npm publish` runs `prepublishOnly` |
+
+**auth-providers** — CI: `build`, `test:check`, `lint:check`, `npm test` (and the stand job); gate: `prepublishOnly`, `release.yml`.
+
+| Commit | `lint:check` runs | `npm test` runs | Green because | Gate |
+|---|---|---|---|---|
+| P1 | Biome; the 2.1.1 copy with today's arguments | rewritten `shapeCheck.test.ts` (no byte comparison, deleted in this commit), equivalence, old `readmeRefusalTables` via the generator | the copy is self-contained (its own `import ts from 'typescript'`), so 2.2.0's thin command in `node_modules` does not affect it; the generator's `render` and allowlists are unchanged in 2.2.0 | `build`, as at the base (the check never was in it) |
+| P2 | Biome only | `shapeCheck.test.ts` with the gate assertion | `test:shape`, `prepublishOnly`, `release.yml` and the assertion land with the deletion | **strengthened**: `build && test:shape`; `release.yml` runs `test:shape` |
+| P3 | Biome only | rewritten README test | README bytes unchanged; CI never sets `WRITE_README_TABLES` | as P2 |
+| P4 | Biome only | as P3 | docs outside the generated regions | as P2 |
+
+**connection** — CI: `lint:check`, `build`, `npx jest --no-cache`, `check:docs`, `check:pack`; gate: `prepublishOnly`.
+
+| Commit | `lint:check` runs | Jest runs | Green because | Gate |
+|---|---|---|---|---|
+| N1 | Biome; the 2.1.1 copy `--rules 4,5,6` | rewritten `shapeCheck.test.ts` (`R1` deleted in this commit), equivalence | the copy is self-contained; the build excludes `src/__tests__`; `files` does not publish `tools/` | as base: `lint:check` still runs the copy |
+| N2 | Biome only | shape-check test with the gate assertion | `test:shape` enters `prepublishOnly` in the same commit `lint:check` loses the copy; `check:docs` checks only `.md` links | equal to the base: the shape check moved from `lint:check` to `test:shape` within `prepublishOnly` |
+| N3 | Biome only | as N2 | docs only; `check:docs` green | as N2 |
+
+**auth-broker** — CI: `npm run check`, `npm test` (and the stand job); gate: `check` (`release:publish`, each package's `prepublishOnly`), `release.yml`.
+
+| Commit | `check` runs | `npm test` runs | Green because | Gate |
+|---|---|---|---|---|
+| B1 | build and lint with Biome ignoring `packages/*/tools/__fixtures__`; `check:graph` with `typescript` declared in `packages/auth-broker`; `check:shape` (2.1.1 copy) over both roots; `check:packed`; `check:publish` | both packages' shape-check tests, equivalence; `shapeCheckCopy.test.ts` deleted in this commit | fixtures outside every `src` selection and every `tsconfig` `include`; the copy is self-contained | as base: `check:shape` |
+| B2 | `test:shape` in `check:shape`'s place | shape-check tests with gate assertions | the old script, its call in `check` and the copy are replaced in one commit | equal to the base, now through Jest; `release.yml` **strengthened** |
+| B3 | as B2 | as B2 | docs only | as B2 |
+
 ### Each task against itself
 
 | Task | Consistent? | Note |
 |---|---|---|
-| T1 | yes | the original command stays in place, so `lint:check`, the pack test and today's `shapeCheck.test.ts` are green; T3 replaces the command and removes `lint:check`'s call |
+| T1 | yes | the original command stays in place, so `lint:check`, the pack test and today's `shapeCheck.test.ts` are green; T3 replaces the command and removes `lint:check`'s call; the cases needing a reporting rule (RF1, no state) are in T2 |
 | T2 | yes | the own-tree comparison uses 2.1.1's file set; the own-tree test uses the whole tree, new files included |
 | T3 | yes | the transitional commit; push and CI before T4 |
 | T4 | yes | precondition stated |
@@ -453,7 +515,7 @@ Repository: `/home/okyslytsia/prj/mcp-abap-adt-auth-broker`, worktree `.worktree
 | T10 | yes | |
 | T11 | yes | this plan deletes itself here |
 | T12 | yes | publishing is the user's |
-| T13 | yes | one task, one PR, several commits; the transitional commit comes first, CI green before removal |
-| T14 | yes | `test:shape` uses plain `jest` as connection's `test` does |
-| T15 | yes | per-package fixtures; Biome ignores them; tsconfig `include` does not reach them |
+| T13 | yes | four commits P1–P4; the bump and the byte-comparison deletion share P1; the copy's deletion and the gate share P2 |
+| T14 | yes | three commits N1–N3; `R1` goes with the bump; `lint:check`'s shape run and `test:shape` swap in one commit |
+| T15 | yes | three commits B1–B3; `shapeCheckCopy.test.ts` goes with the bump; `check:shape` and `test:shape` swap in one commit; `typescript` declared for `check:graph` |
 | T16 | yes | read-only |
