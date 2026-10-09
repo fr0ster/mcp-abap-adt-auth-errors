@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type PackedConsumer,
@@ -26,6 +26,15 @@ function inConsumer(script: string): string {
 
 beforeAll(() => {
   consumer = packedConsumer({ withTypescript: true });
+  // The typed consumers check every declaration, interfaces-auth's included,
+  // which names Node's types: the repository's @types/node (and the
+  // undici-types it holds) are linked in, as a consumer has them installed.
+  mkdirSync(join(consumer.dir, 'node_modules/@types'));
+  symlinkSync(
+    join(root, 'node_modules/@types/node'),
+    join(consumer.dir, 'node_modules/@types/node'),
+    'dir',
+  );
 }, 60_000);
 
 afterAll(() => {
@@ -93,8 +102,7 @@ describe('the exports map', () => {
             target: 'ES2022',
             strict: true,
             noEmit: true,
-            skipLibCheck: true,
-            types: [],
+            types: ['node'],
           },
           files: ['consumer.ts'],
         }),
