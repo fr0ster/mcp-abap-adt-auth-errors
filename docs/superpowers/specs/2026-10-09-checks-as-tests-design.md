@@ -38,6 +38,14 @@ The goal's "Open — for the spec", answered:
    repository's own tests: auth-errors' under `tools/__fixtures__`, the
    consumers' under theirs. The package ships none.
 
+Beyond the five questions: **the shape check stays a publishing gate** (D18,
+§6a). Each repository gets a `test:shape` script that runs its shape-check
+Jest test by path. Every path that publishes to npm — `prepublishOnly`, and
+the broker's `check`, which `release:publish` runs before publishing with
+`--ignore-scripts` — runs `test:shape`, so a type-correct rule violation still
+blocks a publish. Open for the user (§15): reading invariant 5 as allowing the
+script's existing regexes over strings the compiler extracted.
+
 ## 1. What is there today
 
 - **The script.** `tools/check-provider-shape.mjs`, 1804 lines of ESM, `import
@@ -458,6 +466,53 @@ longer names it. `npm test` (and CI, which runs `npm test` or `npx jest`)
 runs the new tests. auth-broker-cli's Jest config needs no change: the test
 lives under its `src/__tests__`.
 
+## 6a. The publishing gate
+
+Today the shape check reaches publication only through scripts that this
+change removes it from:
+
+| Repository | What publishes to npm | What runs the shape check before it today |
+|---|---|---|
+| auth-errors | the user's `npm publish`; `prepublishOnly` = `build` | nothing in `prepublishOnly`; the tag workflow (`release.yml`) runs `lint:check` and `npm test` and builds a GitHub release, but does not publish to npm |
+| auth-providers | the user's `npm publish`; `prepublishOnly` = `build` | nothing: `release.yml` runs `build` and `npm pack` only; the check runs only in branch CI (`lint:check`) |
+| connection | the user's `npm publish`; `prepublishOnly` = `build && lint:check && check:docs && check:pack` | `lint:check` in `prepublishOnly`; `release.yml` runs `lint:check` and `npx jest` |
+| auth-broker | `release:publish` (`tools/publish-changed.js`): runs `npm run check` once, then `npm publish --workspace … --ignore-scripts`; each package's `prepublishOnly` = `npm run --prefix ../.. check` | `check` → `check:shape`; `check` never runs `npm test`; `release.yml` runs `build` and `npm pack` only |
+
+Once `lint:check` is Biome only and `check:shape` is deleted, connection's
+`prepublishOnly` and the broker's `check` would publish without the shape
+check, and auth-errors' and auth-providers' gates would still have none.
+
+**D18 — Every publishing path runs the shape-check test.** Each repository
+gets one script, `test:shape`, that runs its shape-check Jest test(s) by path
+through the repository's own Jest invocation (with the flags `npm test`
+supplies there):
+
+| Repository | `test:shape` runs | Added to |
+|---|---|---|
+| auth-errors | `src/__tests__/shapeCheck.test.ts` (fixtures and own tree, in-process) | `prepublishOnly` (`build && test:shape`); `release.yml` already runs `npm test` |
+| auth-providers | `src/__tests__/shapeCheck.test.ts` | `prepublishOnly` (`build && test:shape`); `release.yml` gains a `test:shape` step after `build` |
+| connection | `src/__tests__/shapeCheck.test.ts` | `prepublishOnly`, in the place `lint:check`'s shape run had; `release.yml` already runs `npx jest` |
+| auth-broker | each package's shape-check test; the root `test:shape` = `npm run test:shape --workspaces` | `check`, in the place of `check:shape` — so `prepublishOnly` and `release:publish` both run it; `release.yml` gains a `test:shape` step after `build` |
+
+`test:shape` runs Jest, not a checking script, so the goal's "no `lint:check`,
+`check` or `check:shape` calls a checking script of its own" still holds.
+*Reason:* moving the check into the test suite must not move it out of the
+gates; running the one test by path keeps the gates as fast as today and
+needs none of the live configuration the full suites skip without.
+
+**Proving the gate.** In each repository's PR, with a type-correct prohibited
+construct planted in `src/` — `export const forged = {} as
+IAuthProviderError;` (rule 4, compiles under the strict options) — the
+publishing gate is run as it runs at publication: auth-errors, auth-providers
+and connection `npm run prepublishOnly`, auth-broker `npm run check`. It must
+exit non-zero with the finding listed; with the plant reverted it must pass.
+The PR records both runs. The load-bearing break: remove `test:shape` from the
+gate, and the planted construct passes the gate. To keep that break caught
+after the PR, each repository's shape-check test file also asserts, by reading
+its `package.json`, that every gate in the table above names
+`npm run test:shape` (for the broker: `check` does, and both packages'
+`prepublishOnly` run `check`); removing it turns that test red.
+
 ## 7. Before and after: the same findings
 
 **D17 — The equivalence is proven in each PR by a transitional commit,
@@ -589,6 +644,8 @@ Listed for their own change, not touched here:
   `shapeCheckCopy.test.ts`; deletes `check:shape` and its place in `check`;
   the two tests and three fixtures; docs. No release.
 
+Each of the four also gets `test:shape` and the gate changes of §6a.
+
 In every consumer the lockfile resolves auth-errors 2.2.0 from
 `registry.npmjs.org`; after the install, no `"link": true` other than a
 workspace sibling (the broker), and every package from the registry.
@@ -645,6 +702,12 @@ its rule (remove the rule from the constant); site lists empty (add an entry).
 by its rule with each package's constant (remove the rule from that
 constant).
 
+**Every repository — the publishing gate (§6a).** A planted
+`{} as IAuthProviderError` in `src/` makes the gate (`prepublishOnly`, or the
+broker's `check`) exit non-zero; the gate assertion in the shape-check test
+(each gate names `npm run test:shape`) goes red when `test:shape` is removed
+from a gate, and with it removed the planted construct passes the gate.
+
 ## 14. How the goal is met
 
 | Goal | Where |
@@ -658,15 +721,32 @@ constant).
 | Who owns what in a table | D9, D11, D12 |
 | Words and values from one place | D10 (`contract`, `render`) |
 | Unknown values still fail; prose kept | D10 (`rowsFor`), D12, D13 (`withRegions` touches only the bodies) |
-| Nothing gets weaker: rules, fixtures by their rule alone, load-bearing breaks | D2, §6, §13 |
+| Nothing gets weaker: rules, fixtures by their rule alone, load-bearing breaks | D2, §6, §13; the shape check stays in every publishing gate, and is added where it was missing (D18, §6a) |
 | Nothing cites a deleted document | D8 |
 | **1 Registry only** | §11, §12: consumers bump to `^2.2.0` after the publish; lockfiles from the registry |
 | **2 Nothing extra at run time** | D1, D3, §3 |
 | **3 The rules do not change here** | D2, §7; a defect found is recorded in the PR and fixed in its own change |
 | **4 No guessing about a repository** | D5: every path stated, absolute; no option for a rule's own scope |
-| **5 No regex over the checked source** | D2: decisions stay on the compiler API and plain code; the port adds no regular expression. The script's existing ones test a file path, an encoding argument, a string literal's value or an identifier's name that the compiler API extracted — never the text of a source file — and stay as they are |
+| **5 No regex over the checked source** | D2: decisions stay on the compiler API and plain code; the port adds no regular expression. The existing regexes are kept as they are under invariant 3; whether that reading of invariant 5 holds is the user's call (§15) |
 
 ## 15. Not decided here
+
+**Open for the user:**
+
+- **Reading of invariant 5.** The script already applies regular expressions
+  in places (`tools/check-provider-shape.mjs`): the test-path filter
+  (`:273-275`), the base's extension (`:368`), rule 8's `Basic` value
+  (`:1367-1375`), its secret names (`:1401-1403`), its encoding argument
+  (`:1419`) and the `@types/node` crypto path (`:1508`). Each runs over a
+  file path, or over a string the compiler API has already extracted (a
+  literal's value, an identifier's name) — never over the text of a source
+  file. This spec reads invariant 5 ("no regex over the checked source") as
+  not covering these, and keeps them unchanged, because invariant 3 forbids
+  changing what a rule decides here. If the user reads invariant 5 as
+  covering them, replacing them with plain code is a separate change that
+  must prove the same decisions on every fixture — not part of this one.
+
+**Left to the plan:**
 
 - Where exactly the broker's three new fixtures sit (one shared set or one
   per package) is the plan's choice, within §6's constraints.
