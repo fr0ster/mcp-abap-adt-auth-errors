@@ -66,14 +66,14 @@
   },
   "scripts": {
     "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
-    "lint": "npx biome check --write src scripts tools/check-provider-shape.mjs",
-    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs",
+    "lint": "npx biome check --write src tools/check-provider-shape.mjs",
+    "lint:check": "npx biome check --error-on-warnings src tools/check-provider-shape.mjs",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:check": "npx tsc --noEmit",
-    "docs:kinds": "node scripts/generate-kinds-table.mjs --write",
+    "docs:kinds": "npm run build && WRITE_README_TABLES=1 npm test -- src/__tests__/kindsTable.test.ts",
     "prepublishOnly": "npm run build"
   },
   "engines": {

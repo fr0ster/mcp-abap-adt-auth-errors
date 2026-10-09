@@ -71,9 +71,10 @@ package). A change that departs from it changes the spec first.
 
 9. **Words in the README are generated, never copied.** The kinds table
    between the `BEGIN GENERATED` / `END GENERATED` markers is what
-   `scripts/generate-kinds-table.mjs` prints from the built builders;
-   `kindsTable.test.ts` fails when they differ. After changing a word or a
-   list: `npm run build && npm run docs:kinds`. Prose quotes no word.
+   `kindsTable.test.ts` renders from the built builders; it fails when they
+   differ. After changing a word or a list: `npm run docs:kinds` (builds, then
+   runs that test with `WRITE_README_TABLES=1`; refused when `CI` is set).
+   Prose quotes no word.
 10. **The shape check is canonical here.** `tools/check-provider-shape.mjs` is
    published (`files`); connection, auth-providers and the broker keep
    byte-identical copies with a test comparing them. A change to it is a
@@ -94,7 +95,7 @@ npm run build:fast   # tsc -p tsconfig.build.json
 npm run test:check   # tsc --noEmit over sources, tests and __typechecks__
 npm run lint:check   # Biome, --error-on-warnings, then the shape check (rules 4, 6)
 npm run lint         # Biome with --write
-npm run docs:kinds   # regenerate the README kinds table (after a build)
+npm run docs:kinds   # build, then rewrite the README kinds table (its test in write mode)
 npm test             # Jest (needs a build: tests load dist/ as a consumer would)
 ```
 
@@ -121,11 +122,9 @@ src/
 ├── sharedAttempt.ts  # the waiter rules of a shared attempt (§6b)
 ├── __tests__/        # Jest; built-package tests require dist/ by path
 │                     #   widening.test.ts — §11.1 "allowlists cannot be widened"
-│                     #   kindsTable.test.ts — README table equals the generated one
+│                     #   kindsTable.test.ts — README table equals the rendered one; write mode
 │                     #   exportsMap.test.ts — packed package: three paths by name, deep paths refused
 └── __typechecks__/   # compiled by test:check only, never built or run
-scripts/
-└── generate-kinds-table.mjs  # the README kinds table from dist/ (§11.4); not published
 tools/
 ├── check-provider-shape.mjs  # the shape check (§8.2), published; other repos copy it byte for byte
 ├── assertion-sites.json      # rule 4's sites: mint and the three integer makers

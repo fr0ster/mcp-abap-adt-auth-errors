@@ -103,9 +103,10 @@ a whole the words of the `unknown` row with operation `unfamiliar-error`
 below — never a sentence with a piece of them spliced in. No word mentions a
 login timeout: there is none built in.
 
-The table is generated from the built package's builders by
-`scripts/generate-kinds-table.mjs` (`npm run docs:kinds`), and a test fails
-when it differs from what the builders render. Each row gives the facts the
+The table is rendered from the built package's builders by
+`src/__tests__/kindsTable.test.ts`, which fails when it differs from what the
+builders render; `npm run docs:kinds` runs that test in write mode and
+rewrites it. Each row gives the facts the
 builder was given (as the error holds them) and the words it rendered.
 
 <!-- BEGIN GENERATED: kinds table (npm run docs:kinds) — do not edit by hand -->
@@ -856,7 +857,7 @@ npm run build        # clean build: Biome errors, then tsc
 npm run test:check   # type check: sources, tests and type tests
 npm run lint:check   # Biome (warnings fail), then the shape check, rules 4 and 6
 npm test             # Jest; needs a build first (tests load dist/)
-npm run docs:kinds   # regenerate the README kinds table (needs a build)
+npm run docs:kinds   # rewrite the README kinds table (builds, then runs its test in write mode)
 ```
 
 ## License
