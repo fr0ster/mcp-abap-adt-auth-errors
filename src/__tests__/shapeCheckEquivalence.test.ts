@@ -21,12 +21,14 @@ import {
 } from '../shapeCheck';
 
 /**
- * Transitional: the 2.1.1 script, held under `tools/previous/`, and the
- * module, run on the same arguments, decide the same. Removed together with
- * the held script once the command is the module's.
+ * Transitional: the 2.1.1 script, held under `tools/previous/`, the module
+ * and the command over it (`npm run build` first: the command loads the
+ * built module by name), run on the same arguments, decide the same — the
+ * command byte for byte. Removed together with the held script.
  */
 const repo = join(__dirname, '..', '..');
 const previous = join(repo, 'tools', 'previous', 'check-provider-shape.mjs');
+const command = join(repo, 'tools', 'check-provider-shape.mjs');
 const fixtures = join(repo, 'tools', '__fixtures__');
 const fixtureSites = join(fixtures, 'sites');
 const FIXTURE_BASE = './src/auth/AuthProviderBase#AuthProviderBase';
@@ -42,8 +44,8 @@ interface ScriptRun {
   readonly stderr: string;
 }
 
-function runPrevious(args: readonly string[]): ScriptRun {
-  const result = spawnSync(process.execPath, [previous, ...args], {
+function run(file: string, args: readonly string[]): ScriptRun {
+  const result = spawnSync(process.execPath, [file, ...args], {
     cwd: repo,
     encoding: 'utf8',
   });
@@ -86,7 +88,8 @@ function resolved(args: readonly string[]): ShapeCheckOptions {
 }
 
 function expectSame(args: readonly string[]): ShapeCheckReport {
-  const script = runPrevious(args);
+  const script = run(previous, args);
+  expect(run(command, args)).toEqual(script);
   const report = checkProviderShape(resolved(args));
   switch (report.status) {
     case 'usage-error':
@@ -133,6 +136,10 @@ describe('the held 2.1.1 script', () => {
     expect(
       createHash('sha256').update(readFileSync(previous)).digest('hex'),
     ).toBe('681d8cbdc6177d2436955e172d9aded58ea67e8b9a604d1fbaf1f81c70715603');
+  });
+
+  it('is not the command compared with it', () => {
+    expect(readFileSync(command)).not.toEqual(readFileSync(previous));
   });
 });
 

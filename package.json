@@ -4,11 +4,23 @@
   "description": "The runtime half of the MCP ABAP ADT authentication error contract: builders, renderers, allowlist guards and classification for IAuthProviderError",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "shape-check": [
+        "dist/shapeCheck/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./shape-check": {
+      "types": "./dist/shapeCheck/index.d.ts",
+      "require": "./dist/shapeCheck/index.js",
+      "default": "./dist/shapeCheck/index.js"
     },
     "./package.json": "./package.json",
     "./tools/check-provider-shape.mjs": "./tools/check-provider-shape.mjs"
@@ -47,7 +59,7 @@
   "scripts": {
     "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
     "lint": "npx biome check --write src scripts tools/check-provider-shape.mjs",
-    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
+    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
