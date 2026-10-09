@@ -5,7 +5,7 @@ import type {
 import { loadBuilt } from './builtPackage';
 
 /**
- * `renderDiagnostics` and `logFields` (spec §5.6, §3.3): one JSON-quoted line
+ * `renderDiagnostics` and `logFields`: one JSON-quoted line
  * per diagnostic field of an error this copy minted; `undefined` for any
  * other; never invoked by `render`; total, and no getter or trap of the
  * input runs.

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 /**
- * What a finished handle keeps reachable (spec §6b): a handle the consumer
+ * What a finished handle keeps reachable: a handle the consumer
  * keeps — a used or stale `detach`, a released or self-ended
  * `MomentWaiter`, an `AttemptContext`, a waiter's promise — must keep no
  * consumer signal alive: neither the finished member's nor, through the

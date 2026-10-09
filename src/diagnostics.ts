@@ -1,5 +1,5 @@
 /**
- * The diagnostics renderer and the log fields (spec §5.6, §3.3).
+ * The diagnostics renderer and the log fields.
  *
  * Diagnostics are kept only on an error this copy minted (`isMinted`): the
  * builder admitted each field and froze the error, so these functions render

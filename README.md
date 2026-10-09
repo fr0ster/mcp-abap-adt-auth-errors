@@ -35,14 +35,17 @@ own data `error` of the value, and nothing else.
 npm install @mcp-abap-adt/auth-errors
 ```
 
-It depends on `@mcp-abap-adt/interfaces-auth` `^6.0.0` and nothing else.
+It depends on `@mcp-abap-adt/interfaces-auth` `^7.4.0` and nothing else.
 Node.js 22, 24 or 26.
 
-The package's `exports` map exposes three paths by name: the entry
-(`@mcp-abap-adt/auth-errors`), `@mcp-abap-adt/auth-errors/package.json` and
-`@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs`. A deep path such as
-`@mcp-abap-adt/auth-errors/dist/allowlists` fails with
-`ERR_PACKAGE_PATH_NOT_EXPORTED`: the internal modules are not an API.
+The package's `exports` map exposes five paths by name: the entry
+(`@mcp-abap-adt/auth-errors`), `@mcp-abap-adt/auth-errors/package.json`,
+`@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs` (the shape check as
+a command), `@mcp-abap-adt/auth-errors/shape-check` (the shape check as a
+module) and `@mcp-abap-adt/auth-errors/tables` (rendering for README tables).
+A deep path such as `@mcp-abap-adt/auth-errors/dist/allowlists` fails with
+`ERR_PACKAGE_PATH_NOT_EXPORTED`: the internal modules are not an API. The main
+entry loads nothing of the check or the tables.
 
 ## What an error is
 
@@ -714,47 +717,81 @@ either: `isMinted` is, and classification re-mints whatever it did not mint.
 
 ## The shape check
 
-`tools/check-provider-shape.mjs` is published with the package: the rules of
-the contract TypeScript cannot express, decided on the TypeScript compiler
-API. It needs only `typescript`.
-
-**Copy it byte for byte.** A repository that runs it keeps an identical copy
-in its own `tools/`, and a test that compares the two:
-
-```bash
-cp node_modules/@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs tools/
-```
+`@mcp-abap-adt/auth-errors/shape-check` is the rules of the contract
+TypeScript cannot express, decided on the TypeScript compiler API. It is a
+module: a repository runs it from its own Jest suite, so a finding fails
+`npm test` and CI with the file, line, column, rule and what was found. It
+declares no dependency on TypeScript and loads none: the caller hands it its
+own `typescript`, so the repository states which compiler decides its rules.
+It is tested with TypeScript `^5.9.0`; another version is not refused.
 
 ```ts
-const canonical = readFileSync(
-  require.resolve('@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs'),
-  'utf8',
-);
-expect(readFileSync('tools/check-provider-shape.mjs', 'utf8')).toBe(canonical);
+import ts from 'typescript';
+import {
+  checkProviderShape,
+  reportLines,
+} from '@mcp-abap-adt/auth-errors/shape-check';
+
+const SHAPE_CHECK = {
+  typescript: ts,
+  rules: [4, 5, 6],
+  root: resolve(__dirname, '../..'),
+  project: resolve(__dirname, '../../tsconfig.json'),
+  sites: resolve(__dirname, '../../tools'),
+} as const;
+
+it('the shape check finds nothing in this repository', () => {
+  expect(reportLines(checkProviderShape(SHAPE_CHECK))).toEqual([]);
+}, 120_000);
 ```
 
-When an upgrade of `@mcp-abap-adt/auth-errors` changes the script, that test
-fails until the copy is refreshed — the copy cannot drift.
+**Options.** All are stated; nothing is read from the working directory and
+nothing is defaulted. Every path is absolute (a relative one is a usage
+error).
 
-**Run it** in `lint:check`, after Biome, with the rules the repository needs:
+| Option | What it is |
+|---|---|
+| `typescript` | the caller's `typescript` module |
+| `rules` | the rule numbers to run, 1 to 8; at least one, duplicates count once |
+| `root` | the repository root |
+| `project` | its `tsconfig.json`, or `null` for none: the compiler's strict defaults. A stated file that does not exist is a usage error |
+| `sites` | the directory of the site lists, or `null` for none: two empty lists. A stated directory that does not exist is a usage error; inside it, a missing list is empty |
+| `base?` | rules 1–3 only, required by them: the repository's `AuthProviderBase` by declaration, `<module>#<export>` |
+| `files?` | check these files instead of the project's |
 
-```bash
-node tools/check-provider-shape.mjs --rules 4,5,6
-  [--base <module>#AuthProviderBase] [--root <dir>] [--project <tsconfig>]
-  [--sites <dir>] [files…]
-```
+Without `files` it checks every file of the project under `<root>/src`,
+outside tests (`__tests__`, `__typechecks__`, `__fixtures__`, `__mocks__`,
+`*.test.ts`, `*.spec.ts`) and declarations; with `project: null`, every file
+under `<root>/src`.
 
-**Rules 1–3 need the base, by declaration:** `--base` names the repository's
+**The report.** `checkProviderShape(options)` answers, and never throws for
+these, writes to no stream and keeps nothing between calls:
+
+- `{ status: 'checked', findings }` — each finding `{ file, line, column,
+  rule, what }`, the file relative to the root, sorted;
+- `{ status: 'usage-error', message }` — it cannot check: a bad option, a file
+  that does not exist, nothing to check, a base that does not resolve to an
+  exported class, rules 4 / 5 asked for while the brands of interfaces-auth
+  6.0.0 or later are not found;
+- `{ status: 'type-errors', diagnostics }` — the program does not type-check,
+  and the rules read types.
+
+`reportLines(report)` turns any report into the lines a test compares with
+`[]`: one `<file>:<line>:<column>: rule <n>: <what>` per finding, or `cannot
+check: …` with the reason. It never passes in silence. `formatFinding`
+renders one finding.
+
+**Rules 1–3 need the base, by declaration:** `base` names the repository's
 `AuthProviderBase` — a path relative to the root
-(`--base ./src/auth/AuthProviderBase#AuthProviderBase` in auth-providers) or
-a package specifier resolved as the compiler resolves it
-(`--base @mcp-abap-adt/auth-providers#AuthProviderBase` elsewhere). A class
-reaches the base only if the declaration it extends is that one: a class of
-the same name elsewhere, in a file of the same name too, exempts nothing. The
-base itself is verified (reported as rule 1): each of its four moments must
-be one method whose body is only `return guard(this.#moments.<moment>,
-() => …, () => …)`, with auth-errors' `guard`; no constructor parameter
-property may be named after a moment; and nothing may replace a moment —
+(`./src/auth/AuthProviderBase#AuthProviderBase` in auth-providers) or a
+package specifier resolved as the compiler resolves it
+(`@mcp-abap-adt/auth-providers#AuthProviderBase` elsewhere). A class reaches
+the base only if the declaration it extends is that one: a class of the same
+name elsewhere, in a file of the same name too, exempts nothing. The base
+itself is verified (reported as rule 1): each of its four moments must be one
+method whose body is only `return guard(this.#moments.<moment>, () => …, () =>
+…)`, with auth-errors' `guard`; no constructor parameter property may be
+named after a moment; and nothing may replace a moment —
 `this.<moment> = …` in the base, `AuthProviderBase.prototype.<moment> = …`,
 `Object.assign` / `Object.defineProperty` of a moment onto its `this` or
 prototype, in any checked file and in the base's own file whatever files
@@ -777,29 +814,21 @@ Rule 8's crypto boundary (a digest or signature of a secret is not the
 secret) is recognised only for direct calls resolving to `@types/node`'s
 `crypto` declarations. A destructured function (`const { createHash } =
 crypto`) and WebCrypto `subtle.digest` are reported: rewrite the call as a
-direct import, or list the site. The boundary holds only for the closed grammar `createHash|createHmac(…)
-[.update(…)]* .digest(…)`, `createSign(…) [.update(…)]* .sign(…)` and
-`crypto.sign(…)`; any other member in the chain (`pipe`, `copy`, `write`)
-keeps secret tracking. It is granted only to a name rooted at an import from `crypto` /
-`node:crypto` (or a `const` alias of one): an injected adapter (a parameter
-typed from `crypto`), a reassigned `let` or a property is reported whatever
-its type. A crypto object held in a `let`, `var`, parameter
-or property keeps secret tracking (only a `const` is trusted), so a `let`
-never reassigned is reported too. A method replaced on a crypto object is
-not detected; the check's threat model is a well-meaning developer's mistake,
-not hostile code.
+direct import, or list the site. The boundary holds only for the closed
+grammar `createHash|createHmac(…) [.update(…)]* .digest(…)`, `createSign(…)
+[.update(…)]* .sign(…)` and `crypto.sign(…)`; any other member in the chain
+(`pipe`, `copy`, `write`) keeps secret tracking. It is granted only to a name
+rooted at an import from `crypto` / `node:crypto` (or a `const` alias of
+one): an injected adapter (a parameter typed from `crypto`), a reassigned
+`let` or a property is reported whatever its type. A crypto object held in a
+`let`, `var`, parameter or property keeps secret tracking (only a `const` is
+trusted), so a `let` never reassigned is reported too. A method replaced on a
+crypto object is not detected; the check's threat model is a well-meaning
+developer's mistake, not hostile code.
 
-Site lists live in the repository's `tools/` (or `--sites`): an
-`assertion-sites.json` of `{ file, function }` and a `diagnostic-sites.json`
-of `{ file, function, field }`; a missing list is empty.
-
-Each finding is one line on stdout,
-`<file>:<line>:<column>: rule <n>: <what>`. **Exit codes:** `0` nothing found;
-`1` findings; `2` it cannot check, reported on stderr — a usage error, a file
-given that does not exist, nothing to check, a program that does not
-type-check, rules 4 / 5 asked for while the brands of interfaces-auth 6.0.0
-or later are not found, or rules 1–3 asked for without a `--base` that
-resolves to an exported class. It never passes in silence.
+Site lists live in the `sites` directory: an `assertion-sites.json` of `{
+file, function }` and a `diagnostic-sites.json` of `{ file, function, field
+}`, `file` relative to the root; a missing list is empty.
 
 **Limits.** It decides on syntax and types, without data flow, so it does not
 see, among others: a provider built by a mixin returning an anonymous class;
@@ -808,10 +837,51 @@ writes through an alias of `this`, of a prototype, of `Object.assign` or of
 type `any` assigned without an assertion; `structuredClone` of an error;
 `Reflect.apply` of a builder or of `guard`; a provider property read into a
 local before a `guard` call; a `Basic ` value assembled from pieces, or a
-secret under a name the heuristic does not know. The full list is in the
-script's header.
+secret under a name the heuristic does not know. The same list is the
+description of `checkProviderShape` in its declaration file.
 
-This repository runs rules 4 and 6.
+**The command, as an alternative.** `@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs`
+is a thin command over the module, for a repository that prefers a script in
+`lint:check`:
+
+```bash
+node node_modules/@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs --rules 4,5,6
+  [--base <module>#AuthProviderBase] [--root <dir>] [--project <tsconfig>]
+  [--sites <dir>] [files…]
+```
+
+Relative paths are resolved against the working directory; `--root` defaults
+to it, `--project` to `<root>/tsconfig.json` and `--sites` to `<root>/tools`,
+and a project file or sites directory that does not exist is none. Each
+finding is one line on stdout, `<file>:<line>:<column>: rule <n>: <what>`.
+**Exit statuses:** `0` nothing found; `1` findings; `2` it cannot check,
+reported on stderr — a usage error with the usage line, a program that does
+not type-check with its diagnostics, or a report the command does not know.
+It resolves `typescript` from its own location.
+
+**Migration (2.2.0).** Nothing breaks: the command takes the same arguments,
+prints the same lines and exits with the same statuses. It now finds the
+module by name, so a repository that keeps a byte-identical copy of the file
+in its `tools/` must re-copy it once (its comparison test fails until then),
+and the copy then runs the installed module. The recommended use is no copy:
+a Jest test like the one above, with `lint:check` no longer calling the
+command.
+
+This repository runs rules 4 and 6 in `src/__tests__/shapeCheck.test.ts`,
+and `npm run test:shape` runs that test alone — `prepublishOnly` runs it after
+the build, so a type-correct rule violation still blocks a publish.
+
+### Tables for a README
+
+`@mcp-abap-adt/auth-errors/tables` holds the pieces a repository needs to
+keep a README table equal to what the package renders, with no compiler
+involved: `render` (the default words), `contract` (interfaces-auth as this
+package resolves it), `rowsFor(values, rows, table)` (the row of each value,
+throwing when one is missing), `markdownCell`, `withRegions(text, regions)`
+(rewrite what lies between `open` and `close` markers) and
+`tableWriteMode(env)` (`WRITE_README_TABLES=1`, refused when `CI` is set).
+The kinds table above is checked, and written on request, by
+`src/__tests__/kindsTable.test.ts` this way.
 
 ## Exported types
 
@@ -841,7 +911,7 @@ interfaces-auth's rule decides most of this package's versions:
 
 What it means here:
 
-- This package depends on `^6.0.0`. A major of interfaces-auth needs a major
+- This package depends on `^7.4.0`. A major of interfaces-auth needs a major
   of auth-errors that moves its range: the builders, words and fact checks are
   written against one shape. Upgrade the two together, so that a process holds
   one interfaces-auth major (`npm ls @mcp-abap-adt/interfaces-auth`).
@@ -855,7 +925,8 @@ What it means here:
 ```bash
 npm run build        # clean build: Biome errors, then tsc
 npm run test:check   # type check: sources, tests and type tests
-npm run lint:check   # Biome (warnings fail), then the shape check, rules 4 and 6
+npm run lint:check   # Biome alone (warnings fail)
+npm run test:shape   # the shape check, rules 4 and 6 (shapeCheck.test.ts); prepublishOnly runs it
 npm test             # Jest; needs a build first (tests load dist/)
 npm run docs:kinds   # rewrite the README kinds table (builds, then runs its test in write mode)
 ```

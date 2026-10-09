@@ -6,7 +6,7 @@ import type { matchKind as MatchKind } from '../exhaustive';
 import { loadBuilt, loadSecondCopy, type SecondCopy } from './builtPackage';
 
 /**
- * `matchKind` and `unreachableKind` (spec §9, version skew), run against the
+ * `matchKind` and `unreachableKind`, run against the
  * built package.
  */
 type Builder = (facts: unknown, diagnostics?: unknown) => IAuthProviderError;
@@ -81,7 +81,7 @@ function recordingHandlers(seen: IAuthProviderError[]): Handlers {
   };
 }
 
-describe('matchKind — version skew (§9)', () => {
+describe('matchKind — version skew', () => {
   it.each(SKEWED)(
     '%s: no handler throws, the unknown handler receives operation unfamiliar-error',
     (_label, value) => {
@@ -158,7 +158,7 @@ describe('matchKind — version skew (§9)', () => {
   });
 });
 
-describe('unreachableKind — version skew (§9)', () => {
+describe('unreachableKind — version skew', () => {
   /** A switch over every kind, the default handing the rest to unreachableKind. */
   function describeError(e: IAuthProviderError): string {
     switch (e.kind) {

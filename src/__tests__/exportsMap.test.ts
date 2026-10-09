@@ -11,10 +11,11 @@ import {
  * The `exports` map (hygiene, not a security boundary: code in the process
  * that requires `dist/` by absolute path is outside the threat model). The
  * packed package, installed into a temporary `node_modules`, resolves by
- * name only its entry, `package.json`, the shape-check module and the shape
- * check's command; a deep path by name is `ERR_PACKAGE_PATH_NOT_EXPORTED`.
- * Consumers compiling with `moduleResolution` `node`, `node16` and `bundler`
- * type-check an import of the entry and of the shape-check module.
+ * name only its entry, `package.json`, the shape-check module, the tables
+ * module and the shape check's command; a deep path by name is
+ * `ERR_PACKAGE_PATH_NOT_EXPORTED`. Consumers compiling with
+ * `moduleResolution` `node`, `node16` and `bundler` type-check an import of
+ * the entry, the shape-check module and the tables module.
  */
 let consumer: PackedConsumer | undefined;
 

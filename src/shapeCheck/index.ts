@@ -38,6 +38,20 @@ function sortFindings(findings: readonly ShapeFinding[]): ShapeFinding[] {
  * command's exit-2 refusal, in its words; a program that does not
  * type-check is not checked. Any other exception is a defect of a rule and
  * propagates.
+ *
+ * Limits: it decides on syntax and types, without data flow, so it does not
+ * see, among others: a provider built by a mixin returning an anonymous
+ * class; writes through an alias of `this`, of a prototype, of
+ * `Object.assign` or of `Object.defineProperties`; an unconstrained generic
+ * cast helper, or a value of type `any` assigned without an assertion;
+ * `structuredClone` of an error; `Reflect.apply` of a builder or of `guard`;
+ * a provider property read into a local before a `guard` call; a `Basic `
+ * value assembled from pieces, or a secret under a name the heuristic does
+ * not know. Rule 8's crypto boundary is recognised only for direct calls
+ * resolving to `@types/node`'s `crypto` declarations, in a closed grammar;
+ * a method replaced on a crypto object is not detected. The threat model is
+ * a well-meaning developer's mistake, not hostile code. Tested with
+ * TypeScript `^5.9.0`.
  */
 export function checkProviderShape(
   options: ShapeCheckOptions,

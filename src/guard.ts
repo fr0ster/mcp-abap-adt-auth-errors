@@ -1,5 +1,5 @@
 /**
- * Rule 1 held structurally (spec §7, §8.1): `guard`, the one boundary every
+ * Rule 1 held structurally: `guard`, the one boundary every
  * moment of a provider runs inside — a throw becomes a refusal, an answer is
  * classified — and `relayOutcome`, how a provider hands
  * on what a logon target answered without ever returning the target's object.
@@ -81,7 +81,7 @@ function unknownFacts(
 }
 
 /**
- * Runs one moment of a provider (spec §8.1). `operation` is a value its
+ * Runs one moment of a provider. `operation` is a value its
  * caller already validated; `grant`, when given, is read inside the
  * boundary and kept only when it is an `OAuth2GrantType`. A throw — from
  * `grant`, from `body`, from a thenable `body` answers — becomes
@@ -120,7 +120,7 @@ export async function guard(
   }
 }
 
-/** What a logon target's call came to, as a provider decides on it (§7). */
+/** What a logon target's call came to, as a provider decides on it. */
 export interface RelayedOutcome {
   readonly outcome: AuthOutcome;
   /** The call threw (a broken target), as opposed to answering. */
@@ -129,7 +129,7 @@ export interface RelayedOutcome {
 
 /**
  * Calls a logon target (`logon.tlsMaterial(…)`, `logon.logonParameters(…)`)
- * and answers what it came to, never the target's own object (spec §7): a
+ * and answers what it came to, never the target's own object: a
  * throw is `classify(thrown, operation)` with `thrown: true`; an answer goes
  * through `classifyOutcome` — this copy's minted refusal as it is, another
  * copy's rebuilt without diagnostics, anything else the `logon-target`

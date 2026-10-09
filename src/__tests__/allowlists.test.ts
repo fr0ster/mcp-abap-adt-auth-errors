@@ -2,8 +2,7 @@ import * as contract from '@mcp-abap-adt/interfaces-auth';
 import { builtFunction, loadBuilt } from './builtPackage';
 
 /**
- * One membership guard per allowlist array of interfaces-auth (spec §4.3,
- * §5.5): the arrays come from the published contract, never redefined here.
+ * One membership guard per allowlist array of interfaces-auth: the arrays come from the published contract, never redefined here.
  */
 const GUARDS: ReadonlyArray<[string, string]> = [
   ['isAuthProviderErrorKind', 'AUTH_PROVIDER_ERROR_KINDS'],
@@ -48,7 +47,7 @@ const GUARDS: ReadonlyArray<[string, string]> = [
  * the renewal strategy's moments, steps and readings belong to the token
  * renewal contract (`RENEWAL_TRIGGERS` is the exception: `renewal-declined`
  * carries it). `ANSWER_REFUSALS` is the part contract's: the provider's
- * listener words each refused answer itself, in fixed words (spec §6d.8).
+ * listener words each refused answer itself, in fixed words.
  */
 const NOT_ALLOWLISTS: ReadonlySet<string> = new Set([
   'ANSWER_REFUSALS',

@@ -13,9 +13,9 @@ integers — and holds no logic. This package holds the code: every producer
 (auth-providers, connection's logon targets, the broker) obtains its errors
 here, and every reader classifies what it caught here.
 
-The binding design is the error-contract spec (auth-providers,
-`docs/superpowers/specs/2026-10-05-error-contract-design.md`, §5 for this
-package). A change that departs from it changes the spec first.
+A change to a word, a list or a rule is made here and in the test that
+protects it; the consumers (auth-providers, connection, the broker) take it
+with their next dependency bump.
 
 ## Rules
 
@@ -54,7 +54,7 @@ package). A change that departs from it changes the spec first.
    `Set.prototype.has` captured at load. Tables (`WORDS`, the diagnostics and
    blame tables) are module-private or exported only deeply frozen. `OK` is
    frozen. A consumer that needs a list uses the frozen `as const` array from
-   `interfaces-auth`. `widening.test.ts` runs the attacks of spec §11.1 on
+   `interfaces-auth`. `widening.test.ts` runs the attacks on
    every export (one level down) and every allowlist array, and sweeps the
    namespace for a `Set` / `Map`: a new export that is one fails there.
 6. **Exhaustive by construction.** `WORDS` `satisfies` a mapped type over
@@ -73,13 +73,20 @@ package). A change that departs from it changes the spec first.
    between the `BEGIN GENERATED` / `END GENERATED` markers is what
    `kindsTable.test.ts` renders from the built builders; it fails when they
    differ. After changing a word or a list: `npm run docs:kinds` (builds, then
-   runs that test with `WRITE_README_TABLES=1`; refused when `CI` is set).
-   Prose quotes no word.
-10. **The shape check is canonical here.** `tools/check-provider-shape.mjs` is
-   published (`files`); connection, auth-providers and the broker keep
-   byte-identical copies with a test comparing them. A change to it is a
-   change for every repository: keep its header's rules and Limits current,
-   and the README's summary with them.
+   runs that test with `WRITE_README_TABLES=1`; refused when `CI` is set). The
+   pieces a repository needs for a table of its own are the `./tables`
+   subpath (`src/tables.ts`). Prose quotes no word.
+10. **The shape check is a module, run as a test.** `src/shapeCheck/` is
+    published as `@mcp-abap-adt/auth-errors/shape-check`
+    (`checkProviderShape`, `reportLines`): the caller hands it its own
+    `typescript`, and the package declares no dependency on TypeScript and
+    loads none (`import type` only). Each repository runs it from a Jest test
+    with its own options constant — no copy of a script. A change to a rule is
+    a change for every repository: keep the module's description (its limits)
+    and the README's summary current. `tools/check-provider-shape.mjs` stays as
+    a thin command over the module, with the same arguments, lines and exit
+    statuses; it holds no rule. `npm run test:shape` runs the shape-check test
+    alone, and `prepublishOnly` runs it after the build.
 
 ## Dependencies
 
@@ -108,29 +115,33 @@ Run one file: `npm test -- src/__tests__/ok.test.ts`. Never invoke
 ```
 src/
 ├── index.ts          # public surface
-├── allowlists.ts     # module-private sets, membership guards (§5.5)
-├── numbers.ts        # branded integer makers (§4.3)
-├── admission.ts      # diagnostics admission (§5.3)
+├── allowlists.ts     # module-private sets, membership guards
+├── numbers.ts        # branded integer makers
+├── admission.ts      # diagnostics admission
 ├── mint.ts           # the one assertion, the WeakSet
 ├── factCheck.ts      # each kind's facts read own and checked (builders, render)
-├── builders.ts       # one builder per kind (§5.2)
-├── words.ts          # WORDS, render (§5.6)
-├── diagnostics.ts    # renderDiagnostics (§5.6)
-├── classify.ts       # classify, classifyOutcome (§5.4)
-├── failure.ts        # AuthProviderFailure, readFailure (§6)
-├── guard.ts          # guard, relayOutcome (§7, §8.1)
-├── exhaustive.ts     # matchKind, unreachableKind (§9)
-├── sharedAttempt.ts  # the waiter rules of a shared attempt (§6b)
+├── builders.ts       # one builder per kind
+├── words.ts          # WORDS, render
+├── diagnostics.ts    # renderDiagnostics
+├── classify.ts       # classify, classifyOutcome
+├── failure.ts        # AuthProviderFailure, readFailure
+├── guard.ts          # guard, relayOutcome
+├── exhaustive.ts     # matchKind, unreachableKind
+├── sharedAttempt.ts  # the waiter rules of a shared attempt
+├── shapeCheck/       # the shape check: index.ts (API), options.ts, program.ts, rules/, types.ts
+├── tables.ts         # the ./tables subpath: render, contract, rowsFor, markdownCell, withRegions, tableWriteMode
 ├── __tests__/        # Jest; built-package tests require dist/ by path
-│                     #   widening.test.ts — §11.1 "allowlists cannot be widened"
+│                     #   widening.test.ts — allowlists cannot be widened
 │                     #   kindsTable.test.ts — README table equals the rendered one; write mode
-│                     #   exportsMap.test.ts — packed package: three paths by name, deep paths refused
+│                     #   exportsMap.test.ts — packed package: five paths by name, deep paths refused
+│                     #   readme.test.ts — Install names the five paths and package.json's interfaces-auth range
+│                     #   shapeCheck*.test.ts — the module, its fixtures, the packed command; mainEntryLoadsNothing.test.ts
 └── __typechecks__/   # compiled by test:check only, never built or run
 tools/
-├── check-provider-shape.mjs  # the shape check (§8.2), published; other repos copy it byte for byte
+├── check-provider-shape.mjs  # the published command: a thin wrapper over the shape-check module, no rule
 ├── assertion-sites.json      # rule 4's sites: mint and the three integer makers
 ├── diagnostic-sites.json     # rule 6's sites: none
-└── __fixtures__/             # one file per rule breaking it, the obeying ones; shapeCheck.test.ts
+└── __fixtures__/             # one file per rule breaking it, the obeying ones; the module's tests run them
 ```
 
 ## Testing

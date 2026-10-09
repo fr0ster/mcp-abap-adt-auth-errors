@@ -3,7 +3,7 @@ import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt, loadBuiltModule } from './builtPackage';
 
 /**
- * `sharedAttempt` (spec §6b), run against the built package: the waiter
+ * `sharedAttempt`, run against the built package: the waiter
  * rules, the doomed-join window and the drain handoff. Every wait is a
  * controllable promise; no test sleeps.
  */

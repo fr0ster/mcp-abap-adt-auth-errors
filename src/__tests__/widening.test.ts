@@ -2,7 +2,7 @@ import * as contract from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt } from './builtPackage';
 
 /**
- * Exported allowlists cannot be widened (spec §11.1): whatever a consumer
+ * Exported allowlists cannot be widened: whatever a consumer
  * does to an export of this package or to an allowlist array of
  * interfaces-auth after load — push through a cast, assign an index,
  * `Object.defineProperty` an index or `length`, `splice`, call a `Set` or
@@ -167,7 +167,7 @@ function attempt(attack: () => unknown): void {
   }
 }
 
-/** Every attack of §11.1 on one value (an array, an object or a function). */
+/** Every attack on one value (an array, an object or a function). */
 function attackValue(value: unknown, markers: readonly string[]): void {
   if (
     value === null ||

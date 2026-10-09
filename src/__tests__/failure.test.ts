@@ -7,9 +7,7 @@ import type {
 import { loadBuilt, loadSecondCopy, type SecondCopy } from './builtPackage';
 
 /**
- * `AuthProviderFailure`, `readFailure`, `isAuthProviderFailure` (spec §6,
- * §11.1 "Carriers from another copy", "Forged diagnostics", "Re-mint across
- * copies", §12's pino item), run against the built package. Completes the
+ * `AuthProviderFailure`, `readFailure`, `isAuthProviderFailure`, run against the built package. Completes the
  * forged-diagnostics matrix at the `readFailure` boundary and its case (d),
  * a second copy's `AuthProviderFailure`, through `classify` and
  * `classifyOutcome`.
@@ -85,10 +83,10 @@ const sample = (kind: AuthProviderErrorKind): IAuthProviderError =>
 
 const shape = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
 
-/** The fixed error an unminted constructor argument becomes (spec §6). */
+/** The fixed error an unminted constructor argument becomes. */
 const UNFAMILIAR = () => authError.unknown({ operation: 'unfamiliar-error' });
 
-/** The message the spec fixes: `reason`, or `reason — hint`. */
+/** The message the contract fixes: `reason`, or `reason — hint`. */
 const messageOf = (error: IAuthProviderError): string =>
   error.hint === undefined ? error.reason : `${error.reason} — ${error.hint}`;
 
@@ -254,7 +252,7 @@ describe('AuthProviderFailure — the instance', () => {
     expect(String(failure)).not.toContain('sk-diag-marker');
   });
 
-  it('JSON.stringify and a pino-style enumerable copy hold only name, message, error (§12, measured)', () => {
+  it('JSON.stringify and a pino-style enumerable copy hold only name, message, error', () => {
     const error = authError.snc(
       { problem: 'library-init-failed' },
       { library: '/opt/sk-pino/libsapcrypto.so' },
@@ -360,7 +358,7 @@ describe('isAuthProviderFailure', () => {
     );
   });
 
-  it('true for another copy’s instance (D2), whose instanceof here is false', () => {
+  it('true for another copy’s instance, whose instanceof here is false', () => {
     const SecondFailure = second.exports.AuthProviderFailure as FailureClass;
     const secondBuilders = second.exports.authError as Record<
       AuthProviderErrorKind,
@@ -538,7 +536,7 @@ describe('a second copy’s AuthProviderFailure of every kind (C4)', () => {
   );
 });
 
-describe('forged diagnostics (§11.1 matrix: c carriers, d, and the readFailure boundary)', () => {
+describe('forged diagnostics', () => {
   const JWT_MARKER =
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzay1qd3QtbWFya2VyIn0.c2stc2lnbmF0dXJl';
   const EXCEPTION_MARKER = 'Error: sk-exception-in-issuer at line 1';

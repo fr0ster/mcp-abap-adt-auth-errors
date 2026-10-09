@@ -1,5 +1,5 @@
 /**
- * Minting (spec §5.1, §5.6): the one place an `IAuthProviderError` comes
+ * Minting: the one place an `IAuthProviderError` comes
  * into being. `IAuthProviderError` carries a brand keyed by a symbol
  * interfaces-auth declares and does not export, so no code can write one; the
  * single type assertion in `mint` is what produces one, and every builder

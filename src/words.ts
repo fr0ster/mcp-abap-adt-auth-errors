@@ -1,13 +1,8 @@
 /**
- * The default words (spec §5.6): `reason` and `hint` rendered from `kind`
+ * The default words: `reason` and `hint` rendered from `kind`
  * and `facts` only — never from a diagnostic, never from anything a thrown
  * value said. A builder renders them once, at minting; `render` gives any
  * consumer the same words from the same facts.
- *
- * The words are Appendix A's "new words" column; where a row says
- * *verbatim*, the words are today's string exactly (auth-providers 5.4.2 and
- * connection, at the lines the spec names), and a test pins each. Words the
- * spec does not fix are the plan's "Words for review" appendix.
  *
  * Exhaustive by construction: `WORDS` satisfies a mapped type over every
  * kind, and every discriminant within a kind is a `switch` ending in
@@ -15,7 +10,7 @@
  * other discriminant member without words does not compile. Every table here
  * is module-private or frozen; none is a `Set` or a `Map`.
  *
- * No word mentions a timeout: there is no built-in login timeout (§6a).
+ * No word mentions a timeout: there is no built-in login timeout.
  */
 import {
   type AssertionRuleCheck,
@@ -602,7 +597,7 @@ function interactiveLoginWords(
 
 /**
  * The check each rule belongs to — fixed by the rule, frozen. It satisfies
- * interfaces-auth's `AssertionRuleCheck` (Decision D1), so a rule without a
+ * interfaces-auth's `AssertionRuleCheck`, so a rule without a
  * check, or with another one, does not compile.
  */
 export const ASSERTION_RULE_CHECK = Object.freeze({
@@ -1207,7 +1202,7 @@ export function render<K extends AuthProviderErrorKind>(
 // ------------------------------------------------------------------- blame
 
 /**
- * Whether each kind blames the credential (§3.1's column): a provider renews
+ * Whether each kind blames the credential: a provider renews
  * only on a credential rejection. Module-private and frozen.
  */
 const BLAME = Object.freeze({
@@ -1253,7 +1248,7 @@ function blameOf<K extends AuthProviderErrorKind>(
 }
 
 /**
- * Whether `error` blames the credential (spec §3.1): `credential-refused`
+ * Whether `error` blames the credential: `credential-refused`
  * and `renewal-unchanged` always; `snc` for `no-credential`, and for
  * `logon-refused` with `RFC_LOGON_FAILURE`; `connection` for
  * `refused-after-renewal`; nothing else. Total: a value that is not an

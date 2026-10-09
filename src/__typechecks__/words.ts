@@ -1,7 +1,7 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run): the words
  * table covers every kind, and a discriminant switch covers every member
- * (§11.2). Each `@ts-expect-error` line is a rule; a positive line beside it
+ *. Each `@ts-expect-error` line is a rule; a positive line beside it
  * proves the failure is the rule's.
  */
 import type {

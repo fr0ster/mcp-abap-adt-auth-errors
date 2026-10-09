@@ -1,6 +1,6 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run): a branded
- * integer is obtained only from its maker, and only once narrowed (§4.3).
+ * integer is obtained only from its maker, and only once narrowed.
  */
 import type { Count, HttpStatus, Port } from '@mcp-abap-adt/interfaces-auth';
 import { type count, httpStatus, type port } from '../index';

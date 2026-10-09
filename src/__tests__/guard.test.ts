@@ -8,8 +8,7 @@ import type {
 import { loadBuilt, loadSecondCopy, type SecondCopy } from './builtPackage';
 
 /**
- * `guard` and `relayOutcome` (spec §7, §8.1, §11.1 "Forged diagnostics" —
- * the `relayOutcome` boundary), run against the built package.
+ * `guard` and `relayOutcome`, run against the built package.
  */
 type Builder = (facts: unknown, diagnostics?: unknown) => IAuthProviderError;
 type Failure = Error & { readonly error: IAuthProviderError };
@@ -455,7 +454,7 @@ describe('relayOutcome', () => {
     expect(isMinted(refusalOf(relayed.outcome))).toBe(true);
   });
 
-  describe('forged diagnostics (§11.1 matrix, the relayOutcome boundary)', () => {
+  describe('forged diagnostics', () => {
     const JWT_MARKER =
       'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzay1qd3QtbWFya2VyIn0.c2stc2lnbmF0dXJl';
     const EXCEPTION_MARKER = 'Error: sk-exception-in-issuer at line 1';

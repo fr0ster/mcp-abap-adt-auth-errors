@@ -1,7 +1,7 @@
 import { builtFunction } from './builtPackage';
 
 /**
- * The branded-integer makers (spec §4.3): a finite integer inside the range,
+ * The branded-integer makers: a finite integer inside the range,
  * read without coercion, comes back unchanged; anything else is `undefined`.
  */
 const MAKERS = [

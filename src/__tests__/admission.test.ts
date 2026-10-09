@@ -9,7 +9,7 @@ import {
 import { loadBuiltModule } from './builtPackage';
 
 /**
- * Diagnostics admission (spec §5.3, §11.1 "Diagnostics admission"): each
+ * Diagnostics admission: each
  * check answers the admitted value or `undefined` ("drop"), never throws,
  * and the per-kind admission keeps only the fields the interfaces-auth
  * diagnostics maps permit for the discriminant.
