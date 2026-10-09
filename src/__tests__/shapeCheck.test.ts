@@ -681,6 +681,10 @@ describe('the shape check: the publishing gate', () => {
   });
 
   it('lint:check is Biome alone: it runs no other command', () => {
-    expect(scripts['lint:check']).toMatch(/^npx biome check [^&;|]*$/);
+    const lint = scripts['lint:check'] ?? '';
+    expect(lint.startsWith('npx biome check ')).toBe(true);
+    for (const joiner of ['&', ';', '|']) {
+      expect(lint.includes(joiner)).toBe(false);
+    }
   });
 });
