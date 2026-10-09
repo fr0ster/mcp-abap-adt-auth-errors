@@ -7,6 +7,7 @@
  */
 import { checkOptions, Refused } from './options';
 import { createContext } from './program';
+import { runRules } from './rules';
 import type {
   ShapeCheckOptions,
   ShapeCheckReport,
@@ -44,6 +45,7 @@ export function checkProviderShape(
   try {
     const context = createContext(checkOptions(options));
     if (!('report' in context)) return context;
+    runRules(context);
     return { status: 'checked', findings: sortFindings(context.findings) };
   } catch (error) {
     if (error instanceof Refused) {

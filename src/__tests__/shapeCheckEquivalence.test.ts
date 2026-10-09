@@ -1,9 +1,10 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -101,9 +102,11 @@ function expectSame(args: readonly string[]): ShapeCheckReport {
     case 'checked':
       expect(script.stderr).toBe('');
       expect(script.status).toBe(report.findings.length > 0 ? 1 : 0);
-      expect(
-        script.stdout.split('\n').filter((line) => line.length > 0),
-      ).toEqual(reportLines(report));
+      expect(script.stdout).toBe(
+        reportLines(report)
+          .map((line) => `${line}\n`)
+          .join(''),
+      );
       break;
   }
   return report;
@@ -330,5 +333,228 @@ describe('the module refuses as the 2.1.1 script does', () => {
       'tools/assertion-sites.json': '[]',
     });
     expect(expectSame(['--rules', '6', '--root', root]).status).toBe('checked');
+  });
+});
+
+/** The commit before the module: the own tree's file set the script knew. */
+const BEFORE_THE_MODULE = '3cbf6a4';
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const TEST_DIRECTORIES = [
+  '__tests__',
+  '__typechecks__',
+  '__fixtures__',
+  '__mocks__',
+];
+
+/** Whether the command would select `path` (relative to the repo) itself. */
+function selectedByDefault(path: string): boolean {
+  if (!path.startsWith('src/')) return false;
+  if (!SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext))) return false;
+  if (path.split('/').some((part) => TEST_DIRECTORIES.includes(part)))
+    return false;
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  if (name.includes('.test.') || name.includes('.spec.')) return false;
+  if (name.includes('.d.')) return false;
+  return true;
+}
+
+/** The own tree's files as of the commit before the module, absolute. */
+function ownFilesBefore(): string[] {
+  return execFileSync(
+    'git',
+    ['ls-tree', '-r', '--name-only', BEFORE_THE_MODULE, '--', 'src'],
+    { cwd: repo, encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter((path) => path.length > 0 && selectedByDefault(path))
+    .map((path) => join(repo, path));
+}
+
+function fixtureSources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? fixtureSources(join(dir, entry.name))
+      : [join(dir, entry.name)],
+  );
+}
+
+function findingCount(report: ShapeCheckReport): number {
+  if (report.status !== 'checked') {
+    throw new Error(`not checked: ${reportLines(report).join('\n')}`);
+  }
+  return report.findings.length;
+}
+
+describe('the module finds what the 2.1.1 script finds', () => {
+  const ALL = '1,2,3,4,5,6,7,8';
+  const own = ownFilesBefore();
+  const onFixtures = ['--root', fixtures, '--sites', fixtureSites];
+  const withBase = [...onFixtures, '--base', FIXTURE_BASE];
+
+  it('selects the own tree as it was before the module', () => {
+    expect(own.length).toBeGreaterThan(10);
+    expect(own.some((file) => file.includes('shapeCheck'))).toBe(false);
+  });
+
+  it('the own tree, rules 4 and 6', () => {
+    expect(findingCount(expectSame(['--rules', '4,6', ...own]))).toBe(0);
+  });
+
+  it('the own tree, rule 4, with an empty sites directory', () => {
+    const empty = tree({});
+    expect(
+      findingCount(expectSame(['--rules', '4', '--sites', empty, ...own])),
+    ).toBe(4);
+  });
+
+  it('the own tree, every rule, against the fixtures’ base', () => {
+    expectSame([
+      '--rules',
+      ALL,
+      '--base',
+      './tools/__fixtures__/src/auth/AuthProviderBase#AuthProviderBase',
+      ...own,
+    ]);
+  });
+
+  it('the fixtures, every rule, their sites and base', () => {
+    expect(
+      findingCount(expectSame(['--rules', ALL, ...withBase])),
+    ).toBeGreaterThan(50);
+  });
+
+  const fixture = (...path: string[]): string => join(fixtures, ...path);
+
+  it.each([
+    ['rule 5 only', ['--rules', '5', ...onFixtures]],
+    [
+      'given files',
+      [
+        '--rules',
+        ALL,
+        ...withBase,
+        fixture('src', 'rule3.ts'),
+        fixture('src', 'obeys.ts'),
+      ],
+    ],
+    [
+      'the impostor pair',
+      [
+        '--rules',
+        '1,2,3',
+        ...withBase,
+        fixture('src', 'impostor', 'AuthProviderBase.ts'),
+        fixture('src', 'impostor', 'provider.ts'),
+      ],
+    ],
+    [
+      'bases/AuthProviderBase',
+      [
+        '--rules',
+        '1',
+        ...onFixtures,
+        '--base',
+        './bases/AuthProviderBase#AuthProviderBase',
+        fixture('bases', 'AuthProviderBase.ts'),
+      ],
+    ],
+    ...['1', '2', '3'].map(
+      (rules) =>
+        [
+          `bases/RewritingBase, rule ${rules}`,
+          [
+            '--rules',
+            rules,
+            ...onFixtures,
+            '--base',
+            './bases/RewritingBase#AuthProviderBase',
+            fixture('bases', 'RewritingBase.ts'),
+          ],
+        ] as const,
+    ),
+    [
+      'bases/ParameterBase',
+      [
+        '--rules',
+        '1',
+        ...onFixtures,
+        '--base',
+        './bases/ParameterBase#AuthProviderBase',
+        fixture('bases', 'ParameterBase.ts'),
+      ],
+    ],
+    [
+      'prose.ts with RewritingBase',
+      [
+        '--rules',
+        '1',
+        ...onFixtures,
+        '--base',
+        './bases/RewritingBase#AuthProviderBase',
+        fixture('src', 'auth', 'prose.ts'),
+      ],
+    ],
+    [
+      'obeys.ts with the fixtures’ base',
+      ['--rules', '1,2,3', ...withBase, fixture('src', 'obeys.ts')],
+    ],
+    [
+      'obeys.ts with the impostor base',
+      [
+        '--rules',
+        '1',
+        ...onFixtures,
+        '--base',
+        './src/impostor/AuthProviderBase#AuthProviderBase',
+        fixture('src', 'obeys.ts'),
+      ],
+    ],
+  ] as const)('%s', (_label, args) => {
+    expect(expectSame(args).status).toBe('checked');
+  });
+
+  it('two findings at one place, found in the other order, sorted by rule', () => {
+    const root = tree({
+      'src/base.ts': 'export abstract class AuthProviderBase {}\n',
+      'src/provider.ts': [
+        "import type { IAuthProvider } from '@mcp-abap-adt/interfaces-auth';",
+        '',
+        'const ok = async () => ({ ok: true }) as const;',
+        "export const provider = { kind: 'literal', prepare: ok, establish: ok, authorize: ok, rejected: ok } as IAuthProvider;",
+        '',
+      ].join('\n'),
+    });
+    const scope = join(root, 'node_modules', '@mcp-abap-adt');
+    mkdirSync(scope, { recursive: true });
+    symlinkSync(
+      join(repo, 'node_modules', '@mcp-abap-adt', 'interfaces-auth'),
+      join(scope, 'interfaces-auth'),
+      'dir',
+    );
+    const report = expectSame([
+      '--rules',
+      '3,4',
+      '--root',
+      root,
+      '--base',
+      './src/base#AuthProviderBase',
+    ]);
+    expect(
+      reportLines(report).filter((line) => line.startsWith('src/provider.ts')),
+    ).toEqual([
+      expect.stringMatching(/^src\/provider\.ts:4:25: rule 3: /),
+      expect.stringMatching(/^src\/provider\.ts:4:25: rule 4: /),
+    ]);
+  });
+
+  it.each(
+    [
+      ...fixtureSources(join(fixtures, 'src')),
+      ...fixtureSources(join(fixtures, 'bases')),
+    ].map((file) => [file.slice(fixtures.length + 1), file]),
+  )('%s alone, every rule', (_label, file) => {
+    expect(expectSame(['--rules', ALL, ...withBase, file]).status).toBe(
+      'checked',
+    );
   });
 });
