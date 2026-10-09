@@ -133,6 +133,72 @@ const OBEYING = [
   'src/credentials/BasicLike.ts',
 ];
 
+/** Every finding of the fixtures under every rule, as the check reports it. */
+const FIXTURE_REPORT: readonly string[] = [
+  'src/auth/rule8.ts:3:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:3:19: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:8:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:11:22: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:14:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:17:16: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:24:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:28:11: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:32:13: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/auth/rule8.ts:36:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-adapters.ts:8:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-adapters.ts:17:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-adapters.ts:31:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-chains.ts:5:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-chains.ts:14:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-impostors.ts:9:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-impostors.ts:15:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-impostors.ts:19:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-impostors.ts:26:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-limits.ts:6:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-limits.ts:14:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-limits.ts:21:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-limits.ts:28:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-reassigned.ts:8:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-secret.ts:3:10: rule 8: a base64 encoding of a client secret outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8-secret.ts:7:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/clientAuthentication/rule8.ts:3:10: rule 8: a Basic authorization value outside legacyBasic and clientSecretBasic',
+  'src/impostor/AuthProviderBase.ts:8:51: rule 1: a class implements IAuthProvider; a provider extends AuthProviderBase',
+  'src/impostor/provider.ts:4:14: rule 1: a class satisfies IAuthProvider without extending AuthProviderBase',
+  'src/rule1-structural.ts:5:14: rule 1: a class satisfies IAuthProvider without extending AuthProviderBase',
+  'src/rule1-structural.ts:26:34: rule 1: a class satisfies IAuthProvider without extending AuthProviderBase',
+  'src/rule1.ts:6:40: rule 1: a class implements IAuthProvider; a provider extends AuthProviderBase',
+  'src/rule1.ts:27:65: rule 1: drop `implements IAuthProvider`: AuthProviderBase already implements it',
+  'src/rule2.ts:7:3: rule 2: a class reaching AuthProviderBase declares prepare; AuthProviderBase owns the four methods',
+  'src/rule2.ts:15:5: rule 2: a class reaching AuthProviderBase assigns this.establish; AuthProviderBase owns the four methods',
+  'src/rule2.ts:20:15: rule 2: a class reaching AuthProviderBase declares authorize; AuthProviderBase owns the four methods',
+  'src/rule2.ts:28:3: rule 2: a class reaching AuthProviderBase declares prepare; AuthProviderBase owns the four methods',
+  'src/rule2.ts:36:5: rule 2: Object.assign writes rejected onto a class reaching AuthProviderBase; AuthProviderBase owns the four methods',
+  'src/rule2.ts:37:5: rule 2: Object.defineProperty writes prepare onto a class reaching AuthProviderBase; AuthProviderBase owns the four methods',
+  'src/rule2.ts:41:1: rule 2: Object.assign writes authorize onto a class reaching AuthProviderBase; AuthProviderBase owns the four methods',
+  'src/rule2.ts:43:1: rule 2: a class reaching AuthProviderBase assigns NamedProvider.prototype.rejected; AuthProviderBase owns the four methods',
+  'src/rule2.ts:51:5: rule 2: a class reaching AuthProviderBase assigns this.rejected; AuthProviderBase owns the four methods',
+  'src/rule3.ts:6:10: rule 3: an object literal satisfies IAuthProvider; a provider is a class extending AuthProviderBase',
+  'src/rule4-branded.ts:4:23: rule 4: a type assertion to a type of the contract (HttpStatus); only a listed site may assert',
+  'src/rule4-casts.ts:11:22: rule 4: a type assertion to a type of the contract (IAuthProviderError); only a listed site may assert',
+  'src/rule4-casts.ts:12:24: rule 4: a type assertion to a type of the contract (IAuthRefusal); only a listed site may assert',
+  'src/rule4-casts.ts:13:24: rule 4: a type assertion to a type of the contract (AuthOutcome); only a listed site may assert',
+  'src/rule4-casts.ts:14:22: rule 4: a type assertion to a type of the contract (Promise<AuthOutcome>); only a listed site may assert',
+  'src/rule4-casts.ts:15:24: rule 4: a type assertion to a type of the contract (IAuthProviderFailure); only a listed site may assert',
+  'src/rule4-casts.ts:16:24: rule 4: a type assertion to a type of the contract ({ readonly inner: IAuthProviderError }); only a listed site may assert',
+  "src/rule4-casts.ts:17:20: rule 4: a type assertion to a type of the contract (Extract<IAuthProviderError, { kind: 'tls' }>); only a listed site may assert",
+  'src/rule4-deep.ts:35:21: rule 4: a type assertion to a type of the contract ({ readonly far: L1; readonly near: Holder }); only a listed site may assert',
+  'src/rule4-overload.ts:8:1: rule 4: an overload signature returns a type of the contract; its implementation is not checked against it',
+  'src/rule4-overload.ts:13:1: rule 4: an overload signature returns a type of the contract; its implementation is not checked against it',
+  'src/rule4-site.ts:5:37: rule 4: a type assertion to a type of the contract (HttpStatus); only a listed site may assert',
+  'src/rule5.ts:5:12: rule 5: a spread of an error keeps its brand on a new object; relay the error as it is',
+  'src/rule5.ts:9:28: rule 5: Object.assign copies an error, keeping its brand on another object; relay the error as it is',
+  'src/rule6.ts:8:5: rule 6: diagnostics (issuer) passed outside the sites of diagnostic-sites.json (src/rule6.ts, samlRefusal)',
+  'src/rule6.ts:13:22: rule 6: a builder reached through bind; call it directly',
+  "src/rule7.ts:12:37: rule 7: guard's grant is not a function expression; it must be read inside the boundary",
+  "src/rule7.ts:19:18: rule 7: a provider property read in guard's arguments, before the boundary; only this.#moments is",
+  'src/rule7.ts:24:10: rule 7: guard reached through call; call it directly',
+];
+
 describe('the shape check: the fixtures', () => {
   let found: readonly ShapeFinding[];
 
@@ -146,8 +212,10 @@ describe('the shape check: the fixtures', () => {
     );
   });
 
-  it('reports something', () => {
-    expect(found.length).toBeGreaterThan(0);
+  it('reports every finding, in order and in its words', () => {
+    expect(
+      reportLines(checkProviderShape(onFixtures({ base: FIXTURE_BASE }))),
+    ).toEqual(FIXTURE_REPORT);
   });
 
   it.each(Object.entries(BREAKING))(

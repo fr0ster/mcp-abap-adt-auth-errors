@@ -42,7 +42,6 @@ export function createClassRules(
     return (baseDeclarations as ReadonlySet<ts.Node>).has(declaration);
   }
 
-  /** Whether the class declared by `node` has AuthProviderBase among its ancestors. */
   /** The symbol of the class `node` declares, named or not. */
   function classSymbol(node: ts.ClassLikeDeclaration): ts.Symbol | undefined {
     return node.name !== undefined
@@ -65,6 +64,7 @@ export function createClassRules(
     return type.isStringLiteral() ? type.value : undefined;
   }
 
+  /** Whether the class declared by `node` has AuthProviderBase among its ancestors. */
   function reachesBase(node: ts.ClassLikeDeclaration): boolean {
     const symbol = classSymbol(node);
     if (symbol === undefined) return false;
