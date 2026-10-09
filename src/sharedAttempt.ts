@@ -1,5 +1,5 @@
 /**
- * The waiter rules for a shared attempt (spec §6b), implemented once for the
+ * The waiter rules for a shared attempt, implemented once for the
  * token providers (renewal, pin) and the broker (its build cache).
  *
  * A slot holds at most one active attempt. `join(start, signal?)` starts an
@@ -60,8 +60,8 @@
  * call back in (join, attach, detach, abort another signal). Each runs only
  * once every membership change is complete — a waiter out of its attempt
  * and the slot left, a party out of the set and its moments, the moments to
- * abort decided — and the rejections and aborts follow it, in spec §6b's
- * order (a waiter's rejection before its attempt's abort).
+ * abort decided — and the rejections and aborts follow it, in
+ * the order (a waiter's rejection before its attempt's abort).
  */
 import type { Operation } from '@mcp-abap-adt/interfaces-auth';
 import { authError } from './builders';
@@ -87,7 +87,7 @@ export interface AttemptContext {
 export type AttemptStart<T> = (attempt: AttemptContext) => Promise<T>;
 
 /**
- * One slot of shared attempts (spec §6b). `T` must not be thenable: a
+ * One slot of shared attempts. `T` must not be thenable: a
  * waiter is resolved with `start`'s value, and resolving re-reads its
  * `then`, which would hand a waiter whatever that `then` passes, outside
  * `classify`. `start` is the caller's own code, which answers plain values.
@@ -355,7 +355,7 @@ export function sharedAttempt<T>(operation: Operation): SharedAttempt<T> {
   /**
    * A waiter's abort: it leaves; the last one takes the attempt with it.
    * State first — the waiter done and out, the slot left when it was the
-   * last — then the foreign cleanup, then (spec §6b's order) the waiter's
+   * last — then the foreign cleanup, then the waiter's
    * rejection and the attempt's abort.
    */
   function abandon(attempt: Attempt<T>, waiter: Waiter<T>): void {
@@ -516,7 +516,7 @@ export interface MomentWaiter {
   release(): void;
 }
 
-/** A provider's attached parties (spec §6b, "Which signals are waiters"). */
+/** A provider's attached parties. */
 export interface Parties {
   /**
    * Attaches a party. The same signal attached again is the same party. An
@@ -566,7 +566,7 @@ function remove<V>(list: V[], item: V): boolean {
 }
 
 /**
- * A set of attached parties (spec §6b). Each party holds one listener, on
+ * A set of attached parties. Each party holds one listener, on
  * its own signal; a moment holds none — the set tells it. A moment is
  * aborted when an abort leaves it with no member; a member detached without
  * aborting leaves it, but does not abort it. Nothing accumulates: a party

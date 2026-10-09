@@ -6,7 +6,7 @@ import {
 import { loadBuilt } from './builtPackage';
 
 /**
- * The builders (spec §5.2): one per kind, the only exported way to obtain an
+ * The builders: one per kind, the only exported way to obtain an
  * error. Each normalises the facts, admits the diagnostics its variant
  * permits, renders the words and mints a deeply frozen error.
  */

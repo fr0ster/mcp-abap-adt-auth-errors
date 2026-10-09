@@ -1,66 +1,74 @@
-#!/usr/bin/env node
+import type { GeneratedRegion } from '../../tables';
+import { contract, markdownCell } from '../../tables';
+import { loadBuilt, loadBuiltModule } from '../builtPackage';
+
 /**
- * The README's kinds table (spec §11.4): every kind, every discriminant
- * value, and a few optional facts, built through the built package's own
- * builders — so each row's `reason` and `hint` are the words `words.ts`
- * renders, never a hand copy.
- *
- *   node scripts/generate-kinds-table.mjs           print the table
- *   node scripts/generate-kinds-table.mjs --write   replace it in README.md
- *
- * Needs a build (`dist/`). `src/__tests__/kindsTable.test.ts` fails when the
- * committed README differs from what this prints.
+ * The README's kinds table: every kind, every discriminant value and a few
+ * optional facts, built through the built package's own builders, so each
+ * row's `reason` and `hint` are the words `words.ts` renders, never a copy.
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+type Facts = Record<string, unknown>;
+type Builder = (facts: Facts) => {
+  readonly kind: string;
+  readonly facts: unknown;
+  readonly reason: string;
+  readonly hint?: string | undefined;
+};
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(import.meta.url);
-const contract = require('@mcp-abap-adt/interfaces-auth');
-const built = require(join(root, 'dist/index.js'));
-const { ASSERTION_RULE_CHECK } = require(join(root, 'dist/words.js'));
-
-export const BEGIN =
+export const KINDS_OPEN =
   '<!-- BEGIN GENERATED: kinds table (npm run docs:kinds) — do not edit by hand -->';
-export const END = '<!-- END GENERATED: kinds table -->';
+export const KINDS_CLOSE = '<!-- END GENERATED: kinds table -->';
 
-const { authError, httpStatus, count, port } = built;
+const built = loadBuilt();
+const { ASSERTION_RULE_CHECK } = loadBuiltModule('words') as {
+  ASSERTION_RULE_CHECK: Record<string, string>;
+};
+const authError = built.authError as Record<string, Builder | undefined>;
+const httpStatus = built.httpStatus as (n: number) => unknown;
+const count = built.count as (n: number) => unknown;
+const port = built.port as (n: number) => unknown;
 
 /** Facts per discriminant value, then the samples of optional facts. */
-function samples(kind) {
+function defaultSamples(kind: string): Facts[] {
   switch (kind) {
     case 'configuration':
       return [
-        ...contract.CONFIG_CASES.map((c) => ({
-          case: c,
-          fields:
-            c === 'required-fields-missing'
-              ? ['clientId']
-              : c === 'invalid-value'
-                ? ['authorizationUrl']
-                : [],
-        })),
+        ...contract.CONFIG_CASES.map(
+          (c): Facts => ({
+            case: c,
+            fields:
+              c === 'required-fields-missing'
+                ? ['clientId']
+                : c === 'invalid-value'
+                  ? ['authorizationUrl']
+                  : [],
+          }),
+        ),
         {
           case: 'required-fields-missing',
           fields: ['clientId', 'clientSecret', 'uaaUrl'],
         },
       ];
     case 'client-certificate':
-      return contract.CLIENT_CERTIFICATE_PROBLEMS.map((problem) => ({
-        problem,
-      }));
+      return contract.CLIENT_CERTIFICATE_PROBLEMS.map(
+        (problem): Facts => ({
+          problem,
+        }),
+      );
     case 'client-authentication':
-      return contract.CLIENT_AUTHENTICATION_PROBLEMS.map((problem) => ({
-        problem,
-      }));
+      return contract.CLIENT_AUTHENTICATION_PROBLEMS.map(
+        (problem): Facts => ({
+          problem,
+        }),
+      );
     case 'request-failed':
       return [
-        ...contract.REQUEST_PROBLEMS.map((problem) => ({
-          operation: 'token-refresh',
-          problem,
-        })),
+        ...contract.REQUEST_PROBLEMS.map(
+          (problem): Facts => ({
+            operation: 'token-refresh',
+            problem,
+          }),
+        ),
         {
           operation: 'token-request',
           grant: 'client_credentials',
@@ -76,10 +84,12 @@ function samples(kind) {
       ];
     case 'tls':
       return [
-        ...contract.TLS_FAILURE_CODES.map((code) => ({
-          operation: 'oidc-discovery',
-          code,
-        })),
+        ...contract.TLS_FAILURE_CODES.map(
+          (code): Facts => ({
+            operation: 'oidc-discovery',
+            code,
+          }),
+        ),
         {
           operation: 'token-request',
           grant: 'client_credentials',
@@ -88,12 +98,13 @@ function samples(kind) {
       ];
     case 'interactive-login':
       return [
-        ...contract.INTERACTIVE_OUTCOMES.map((outcome) =>
-          outcome === 'port-in-use'
-            ? { outcome, port: port(61001) }
-            : outcome === 'disposed'
-              ? { outcome, strategy: 'browser' }
-              : { outcome },
+        ...contract.INTERACTIVE_OUTCOMES.map(
+          (outcome): Facts =>
+            outcome === 'port-in-use'
+              ? { outcome, port: port(61001) }
+              : outcome === 'disposed'
+                ? { outcome, strategy: 'browser' }
+                : { outcome },
         ),
         { outcome: 'aborted', strategy: 'browser', ignoredCallbacks: count(2) },
         { outcome: 'aborted', strategy: 'manual' },
@@ -128,7 +139,7 @@ function samples(kind) {
       ];
     case 'snc':
       return [
-        ...contract.SNC_PROBLEMS.map((problem) => ({ problem })),
+        ...contract.SNC_PROBLEMS.map((problem): Facts => ({ problem })),
         {
           problem: 'no-credential',
           secureLoginClient: true,
@@ -155,7 +166,7 @@ function samples(kind) {
         { credential: 'user-password', at: 'logon' },
       ];
     case 'system-refused':
-      return contract.SYSTEM_REFUSED_VERDICTS.flatMap((verdict) =>
+      return contract.SYSTEM_REFUSED_VERDICTS.flatMap((verdict): Facts[] =>
         verdict === 'rfc-failure'
           ? [{ verdict, rfcKey: 'RFC_COMMUNICATION_FAILURE', at: 'logon' }]
           : verdict === 'unknown'
@@ -176,7 +187,9 @@ function samples(kind) {
     case 'renewal-declined':
       return contract.RENEWAL_TRIGGERS.map((trigger) => ({ trigger }));
     case 'token-binding':
-      return contract.TOKEN_BINDING_PROBLEMS.map((problem) => ({ problem }));
+      return contract.TOKEN_BINDING_PROBLEMS.map(
+        (problem): Facts => ({ problem }),
+      );
     case 'not-prepared':
       return contract.NOT_PREPARED_PROVIDERS.map((provider) => ({ provider }));
     case 'logon-target':
@@ -185,7 +198,7 @@ function samples(kind) {
       );
     case 'connection':
       return [
-        ...contract.CONNECTION_PROBLEMS.map((problem) => ({ problem })),
+        ...contract.CONNECTION_PROBLEMS.map((problem): Facts => ({ problem })),
         { problem: 'provider-threw', at: 'logon' },
       ];
     case 'unknown':
@@ -204,7 +217,7 @@ function samples(kind) {
 }
 
 /** A status that reads as the verdict: 403, 302, 503, 418. */
-function statusFor(verdict) {
+function statusFor(verdict: string): number {
   switch (verdict) {
     case 'not-authorized':
       return 403;
@@ -218,25 +231,39 @@ function statusFor(verdict) {
 }
 
 /** A table cell holding `text` as code: a pipe escaped, backticks fenced. */
-function code(text) {
-  const escaped = text.replaceAll('|', '\\|');
+function code(text: string): string {
+  const escaped = markdownCell(text);
   return escaped.includes('`') ? `\`\` ${escaped} \`\`` : `\`${escaped}\``;
 }
 
-/** The generated Markdown, between and including the two markers. */
-export function generate() {
-  const lines = [BEGIN, ''];
-  for (const kind of contract.AUTH_PROVIDER_ERROR_KINDS) {
-    const builder = authError[kind];
-    if (typeof builder !== 'function')
+export interface KindsTableInputs {
+  readonly kinds?: readonly string[];
+  readonly samples?: Readonly<Record<string, readonly Facts[]>>;
+  readonly builders?: Readonly<Record<string, Builder | undefined>>;
+}
+
+/** The kinds table region of the README, rendered from the built builders. */
+export function kindsTableRegion(
+  inputs: KindsTableInputs = {},
+): GeneratedRegion {
+  const kinds = inputs.kinds ?? contract.AUTH_PROVIDER_ERROR_KINDS;
+  const lines: string[] = [''];
+  for (const kind of kinds) {
+    const builder = (inputs.builders ?? authError)[kind];
+    if (typeof builder !== 'function') {
       throw new Error(`no builder for ${kind}`);
+    }
+    const sampled = inputs.samples
+      ? inputs.samples[kind]
+      : defaultSamples(kind);
+    if (sampled === undefined) throw new Error(`no samples for kind ${kind}`);
     lines.push(
       `#### \`${kind}\``,
       '',
       '| facts | reason | hint |',
       '|---|---|---|',
     );
-    for (const facts of samples(kind)) {
+    for (const facts of sampled) {
       const error = builder(facts);
       if (error.kind !== kind) {
         throw new Error(`${kind} ${JSON.stringify(facts)} built ${error.kind}`);
@@ -248,31 +275,5 @@ export function generate() {
     }
     lines.push('');
   }
-  lines.push(END);
-  return lines.join('\n');
-}
-
-/** The README's generated section, between and including the markers. */
-export function committed(readme) {
-  const start = readme.indexOf(BEGIN);
-  const end = readme.indexOf(END);
-  if (start < 0 || end < start)
-    throw new Error('README has no kinds table markers');
-  return readme.slice(start, end + END.length);
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const table = generate();
-  if (process.argv.includes('--write')) {
-    const file = join(root, 'README.md');
-    const readme = readFileSync(file, 'utf8');
-    const old = committed(readme);
-    const at = readme.indexOf(old);
-    writeFileSync(
-      file,
-      `${readme.slice(0, at)}${table}${readme.slice(at + old.length)}`,
-    );
-  } else {
-    process.stdout.write(`${table}\n`);
-  }
+  return { open: KINDS_OPEN, close: KINDS_CLOSE, body: lines.join('\n') };
 }

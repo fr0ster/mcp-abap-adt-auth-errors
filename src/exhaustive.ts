@@ -1,5 +1,5 @@
 /**
- * Exhaustiveness for consumers (spec §9): `matchKind`, a handler map typed
+ * Exhaustiveness for consumers: `matchKind`, a handler map typed
  * over every kind, and `unreachableKind`, the check in a `switch`'s
  * `default`. Both compile only when every kind is handled.
  *

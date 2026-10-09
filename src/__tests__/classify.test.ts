@@ -7,9 +7,7 @@ import type {
 import { loadBuilt, loadSecondCopy, type SecondCopy } from './builtPackage';
 
 /**
- * `classify` and `classifyOutcome` (spec §5.4, §11.1 "Hostile values",
- * "Carriers from another copy", "Forged diagnostics", "Exception text
- * excluded", "Re-mint across copies"; §13 item 3), run against the built
+ * `classify` and `classifyOutcome`, run against the built
  * package. Carriers here are plain objects: the `AuthProviderFailure` cases
  * are in failure.test.ts.
  */
@@ -336,7 +334,7 @@ describe('classify — step 3: structural rebuild', () => {
     },
   );
 
-  it('keeps only the declared keys of facts and drops diagnostics (index-signature limit, §13 item 3)', () => {
+  it('keeps only the declared keys of facts and drops diagnostics (index-signature limit)', () => {
     const facts: { [key: string]: string } = {
       rule: 'untrusted-issuer',
       check: 'issuer',
@@ -688,7 +686,7 @@ function classifyRefusal(refusal: unknown): IAuthProviderError {
   return outcome.refusal;
 }
 
-describe('forged diagnostics (§11.1 matrix: a, b, c bare, e)', () => {
+describe('forged diagnostics', () => {
   const JWT_MARKER =
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzay1qd3QtbWFya2VyIn0.c2stc2lnbmF0dXJl';
   const EXCEPTION_MARKER = 'Error: sk-exception-in-issuer at line 1';

@@ -1,6 +1,6 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run):
- * `AuthProviderFailure` takes a minted error only (spec §6, §11.2). Each
+ * `AuthProviderFailure` takes a minted error only. Each
  * `@ts-expect-error` line is a rule; an unused directive fails the check.
  */
 import type {

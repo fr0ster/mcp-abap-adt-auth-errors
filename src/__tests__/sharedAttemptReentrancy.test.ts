@@ -3,7 +3,7 @@ import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt } from './builtPackage';
 
 /**
- * Re-entrancy of `sharedAttempt` and `createParties` (spec §6b): a
+ * Re-entrancy of `sharedAttempt` and `createParties`: a
  * consumer's signal runs foreign code — `addEventListener`,
  * `removeEventListener`, the `aborted` getter — and that code may call back
  * in. Whatever it does, it must see a consistent state, and the rules must

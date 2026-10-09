@@ -1,6 +1,6 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run): each
- * membership guard's predicate type is exactly its array's union (§5.5).
+ * membership guard's predicate type is exactly its array's union.
  */
 import type * as Contract from '@mcp-abap-adt/interfaces-auth';
 import * as Guards from '../index';

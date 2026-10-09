@@ -72,7 +72,7 @@ import {
 } from '@mcp-abap-adt/interfaces-auth';
 
 /**
- * Allowlist runtime sets and their membership guards (spec §5.5).
+ * Allowlist runtime sets and their membership guards.
  *
  * One `Set` per allowlist array of interfaces-auth, copied at module load
  * and held in a module-private constant: never exported, never returned,

@@ -1,5 +1,5 @@
 /**
- * Classification (spec §5.4): the first boundary of goal invariant 4. What a
+ * Classification: the first boundary of the contract. What a
  * provider caught, or an outcome a collaborator answered, becomes an error of
  * this contract — and nothing of it but its allowlisted facts survives.
  *
@@ -102,7 +102,7 @@ function fromThrown(
 }
 
 /**
- * What `thrown` is, as an error of this contract (spec §5.4). `operation`
+ * What `thrown` is, as an error of this contract. `operation`
  * and `grant` say where it was caught; they are the facts of the `tls` and
  * `unknown` answers. Total: anything that throws while the value is read
  * answers `unknown` with the operation.
@@ -130,7 +130,7 @@ export function classify(
 
 /**
  * An `AuthOutcome` that came from a collaborator (a logon target, a
- * consumer's provider), as this copy answers it (spec §5.4): `{ ok: true }`
+ * consumer's provider), as this copy answers it: `{ ok: true }`
  * answers the frozen `OK`; `{ ok: false, refusal }` whose refusal (read
  * once) this copy minted answers a fresh outcome with that object as it is,
  * one that rebuilds structurally a fresh outcome with the rebuild (no

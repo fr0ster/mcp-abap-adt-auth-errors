@@ -1,7 +1,7 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run):
- * `matchKind` and `unreachableKind` compile only when every kind is handled
- * (spec §9, §11.2), and `guard` / `relayOutcome` take what §7 and §8.1
+ * `matchKind` and `unreachableKind` compile only when every kind is
+ * handled, and `guard` / `relayOutcome` take only what their contracts
  * name. Each `@ts-expect-error` line is a rule; an unused directive fails
  * the check.
  */

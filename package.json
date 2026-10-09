@@ -1,14 +1,34 @@
 {
   "name": "@mcp-abap-adt/auth-errors",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "The runtime half of the MCP ABAP ADT authentication error contract: builders, renderers, allowlist guards and classification for IAuthProviderError",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "shape-check": [
+        "dist/shapeCheck/index.d.ts"
+      ],
+      "tables": [
+        "dist/tables.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./shape-check": {
+      "types": "./dist/shapeCheck/index.d.ts",
+      "require": "./dist/shapeCheck/index.js",
+      "default": "./dist/shapeCheck/index.js"
+    },
+    "./tables": {
+      "types": "./dist/tables.d.ts",
+      "require": "./dist/tables.js",
+      "default": "./dist/tables.js"
     },
     "./package.json": "./package.json",
     "./tools/check-provider-shape.mjs": "./tools/check-provider-shape.mjs"
@@ -46,15 +66,16 @@
   },
   "scripts": {
     "clean": "rm -rf dist tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
-    "lint": "npx biome check --write src scripts tools/check-provider-shape.mjs",
-    "lint:check": "npx biome check --error-on-warnings src scripts tools/check-provider-shape.mjs && node tools/check-provider-shape.mjs --rules 4,6",
+    "lint": "npx biome check --write src tools/check-provider-shape.mjs",
+    "lint:check": "npx biome check --error-on-warnings src tools/check-provider-shape.mjs",
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "test:check": "npx tsc --noEmit",
-    "docs:kinds": "node scripts/generate-kinds-table.mjs --write",
-    "prepublishOnly": "npm run build"
+    "docs:kinds": "npm run build && WRITE_README_TABLES=1 npm test -- src/__tests__/kindsTable.test.ts",
+    "test:shape": "npm test -- src/__tests__/shapeCheck.test.ts",
+    "prepublishOnly": "npm run build && npm run test:shape"
   },
   "engines": {
     "node": "^22 || ^24 || ^26"

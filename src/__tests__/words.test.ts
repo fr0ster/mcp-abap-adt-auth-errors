@@ -22,9 +22,9 @@ import {
 import { loadBuilt, loadBuiltModule } from './builtPackage';
 
 /**
- * The default words (spec §5.6, §11.1 "Words"): every kind and every
- * discriminant renders; each row of Appendix A marked verbatim renders
- * today's string exactly; no diagnostic value reaches a word.
+ * The default words: every kind and every discriminant renders; each
+ * verbatim row renders the string earlier releases used exactly; no
+ * diagnostic value reaches a word.
  */
 type Builder = (facts: unknown, diagnostics?: unknown) => IAuthProviderError;
 type Words = { readonly reason: string; readonly hint?: string };
@@ -202,7 +202,7 @@ describe('every kind × every discriminant renders', () => {
     ['system-refused', SYSTEM_REFUSED_VERDICTS.length],
     ['client-certificate', CLIENT_CERTIFICATE_PROBLEMS.length],
     ['client-authentication', CLIENT_AUTHENTICATION_PROBLEMS.length],
-    // refused and no-response without a fact share today's words (A14, D2):
+    // refused and no-response without a fact share today's words:
     // `<operation> failed (the token endpoint gave no reason)`.
     ['request-failed', REQUEST_PROBLEMS.length - 1],
     ['connection', CONNECTION_PROBLEMS.length],
@@ -234,7 +234,7 @@ describe('ASSERTION_RULE_CHECK', () => {
   });
 });
 
-/** Appendix A rows marked verbatim: [row, kind, facts, reason, hint?]. */
+/** Rows whose words earlier releases fixed: [row, kind, facts, reason, hint?]. */
 const VERBATIM: readonly (readonly [
   string,
   string,
@@ -357,7 +357,7 @@ const VERBATIM: readonly (readonly [
     undefined,
   ],
   [
-    'D2 code only',
+    'code only',
     'request-failed',
     {
       operation: 'token-request',
@@ -861,7 +861,7 @@ const VERBATIM: readonly (readonly [
   ],
 ];
 
-describe('verbatim rows of Appendix A', () => {
+describe('verbatim rows', () => {
   it.each(VERBATIM)('%s', (_row, kind, facts, reason, hint) => {
     const error = build(kind, facts);
     expect(error.reason).toBe(reason);
@@ -924,7 +924,7 @@ describe('A15: every TLS code has today’s words', () => {
   });
 });
 
-/** The configuration words ("Words for review", plan). */
+/** The configuration words. */
 const CONFIGURATION: readonly (readonly [
   string,
   readonly string[],
@@ -1666,7 +1666,7 @@ describe('render', () => {
   });
 });
 
-describe('blamesCredential (spec §3.1)', () => {
+describe('blamesCredential', () => {
   const ROWS: readonly (readonly [string, string, unknown, boolean])[] = [
     [
       'configuration',

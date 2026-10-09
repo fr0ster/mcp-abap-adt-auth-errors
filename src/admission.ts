@@ -1,7 +1,6 @@
 /**
- * Diagnostics admission (spec §5.3) — the second boundary of goal
- * invariant 4. Each check takes `unknown`, never throws, and answers the
- * admitted value or `undefined` ("drop"): a value that fails is dropped, not
+ * Diagnostics admission — the second boundary of the contract. Each check
+ * takes `unknown`, never throws, and answers the admitted value or `undefined` ("drop"): a value that fails is dropped, not
  * repaired — every check refuses on the value as given, before anything is
  * parsed or cut. Only an admitted value is shortened: cut at 64 code points
  * (`DocumentValue`, `XmlId`) or reduced to `origin + pathname` (`ConfigUri`).
@@ -63,7 +62,7 @@ const XML_NAME_MAX = 64;
 const DOCUMENT_TIME_MAX = 40;
 /** `ConfigUri`: `origin + pathname`, at most 512 characters. */
 const CONFIG_URI_MAX = 512;
-/** `facts.candidates` of `snc` `library-not-found` holds at most 8 (§3.2). */
+/** `facts.candidates` of `snc` `library-not-found` holds at most 8. */
 const SNC_CANDIDATES_MAX = 8;
 
 /**

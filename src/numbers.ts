@@ -1,10 +1,10 @@
 import type { Count, HttpStatus, Port } from '@mcp-abap-adt/interfaces-auth';
 
 /**
- * The branded-integer makers (spec §4.3). A range check does not narrow
+ * The branded-integer makers. A range check does not narrow
  * `number` to a brand, so each maker ends in one type assertion; these three
- * and `mint` are the only assertion sites the shape check permits (§8.2
- * rule 4). Each answers `undefined` outside its range. A fact never carries
+ * and `mint` are the only assertion sites the shape check permits
+ * (rule 4). Each answers `undefined` outside its range. A fact never carries
  * `-0`: `count` and `port` admit it (it is 0) and answer `+0` (`value + 0`).
  */
 

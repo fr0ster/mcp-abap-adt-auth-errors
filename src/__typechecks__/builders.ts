@@ -1,6 +1,6 @@
 /**
  * Compiled by `npm run test:check` only (never built, never run): the builder
- * half of the spec's correlation probe (§11.2), verbatim, on the full types,
+ * half of the correlation probe, verbatim, on the full types,
  * and the builders' result types. Each `@ts-expect-error` line is a rule; an
  * unused directive fails the check, so each line is load-bearing.
  */

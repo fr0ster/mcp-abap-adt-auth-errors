@@ -1,5 +1,5 @@
 /**
- * The builders (spec §5.2): one per kind, the only exported way to obtain an
+ * The builders: one per kind, the only exported way to obtain an
  * error. A builder reads and checks the facts it is given (`factCheck.ts`:
  * own data properties only, each against its allowlist guard or maker,
  * arrays capped and `fields` deduplicated) — a required fact that fails
@@ -214,7 +214,7 @@ function variantOf(
 }
 
 /**
- * The structural rebuild of classification (spec §5.4 step 3): the facts of
+ * The structural rebuild of classification: the facts of
  * `kind` read and checked by the same per-kind validator the builders use —
  * only the declared keys kept — and re-minted with words rendered here and
  * **no diagnostics**: a rebuild never carries any. `undefined` when the

@@ -1,5 +1,5 @@
 /**
- * `AuthProviderFailure`, the one thrown class (spec §6), and how a consumer
+ * `AuthProviderFailure`, the one thrown class, and how a consumer
  * reads a thrown value: `readFailure` (which is `classify`) and
  * `isAuthProviderFailure`.
  *
@@ -77,7 +77,7 @@ export class AuthProviderFailure extends Error implements IAuthProviderFailure {
 
 /**
  * What a caught value is, as an error of this contract: `classify` with the
- * operation the catch was at (spec §5.4, §6). This copy's failure, or one
+ * operation the catch was at. This copy's failure, or one
  * carrying this copy's error, answers that error as it is, diagnostics
  * included; another copy's failure, or any other carrier, is rebuilt
  * without diagnostics. Total.
@@ -91,7 +91,7 @@ export function readFailure(
 
 /**
  * Whether `value` is an `AuthProviderFailure`, of this copy or another
- * (Decision D2): an own data `name` of `'AuthProviderFailure'` and an own
+ * : an own data `name` of `'AuthProviderFailure'` and an own
  * data `error` that this copy minted or that passes the structural rebuild.
  * No `instanceof`, no getter, never `message`. Total.
  *
