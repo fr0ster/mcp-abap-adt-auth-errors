@@ -35,7 +35,7 @@ own data `error` of the value, and nothing else.
 npm install @mcp-abap-adt/auth-errors
 ```
 
-It depends on `@mcp-abap-adt/interfaces-auth` `^7.4.0` and nothing else.
+It depends on `@mcp-abap-adt/interfaces-auth` `^7.5.0` and nothing else.
 Node.js 22, 24 or 26.
 
 The package's `exports` map exposes five paths by name: the entry
@@ -911,7 +911,7 @@ interfaces-auth's rule decides most of this package's versions:
 
 What it means here:
 
-- This package depends on `^7.4.0`. A major of interfaces-auth needs a major
+- This package depends on `^7.5.0`. A major of interfaces-auth needs a major
   of auth-errors that moves its range: the builders, words and fact checks are
   written against one shape. Upgrade the two together, so that a process holds
   one interfaces-auth major (`npm ls @mcp-abap-adt/interfaces-auth`).

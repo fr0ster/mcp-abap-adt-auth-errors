@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-12
+
+### Changed
+- Dependency `@mcp-abap-adt/interfaces-auth` `^7.5.0` (was `^7.4.0`), the current contract.
+  Nothing this package reads from it changed. The lockfile is refreshed from the registry.
+
 ## [2.2.0] - 2026-10-09
 
 The shape check and the README tables become modules a repository runs from
