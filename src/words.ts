@@ -984,6 +984,11 @@ function spnegoWords(facts: AuthProviderErrorFacts['spnego']): Words {
       return say(
         `${what}: the token is empty, not base64, or neither a Kerberos nor an NTLM token`,
       );
+    case 'mechanism-unsupported':
+      return say(
+        `${what}: the requested mechanism is not supported`,
+        "check that the system's GSS library supports the mechanism the source was configured with",
+      );
     default:
       return unreachable(facts);
   }

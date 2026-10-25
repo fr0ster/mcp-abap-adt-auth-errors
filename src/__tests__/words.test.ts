@@ -281,6 +281,11 @@ describe('spnego words', () => {
       'obtaining the Negotiate token failed: the token is empty, not base64, or neither a Kerberos nor an NTLM token',
       undefined,
     ],
+    [
+      'mechanism-unsupported',
+      'obtaining the Negotiate token failed: the requested mechanism is not supported',
+      "check that the system's GSS library supports the mechanism the source was configured with",
+    ],
   ];
 
   it('covers every problem of the contract', () => {

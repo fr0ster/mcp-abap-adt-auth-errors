@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-25
+
+On `@mcp-abap-adt/interfaces-auth` `^8.0.1`, which adds the `spnego` problem
+`mechanism-unsupported` (the mechanism the token source asked for is not
+supported where it ran) and corrects a design error of 8.0.0. A patch: it
+follows that correction.
+
+### Added
+
+- `spnego` `mechanism-unsupported`: reason "the requested mechanism is not
+  supported", hint "check that the system's GSS library supports the mechanism
+  the source was configured with". It does not blame the credential. The
+  README's `spnego` table has its row.
+
 ## [3.0.0] - 2026-10-25
 
 On `@mcp-abap-adt/interfaces-auth` `^8.0.0`, which adds the `spnego` kind. A
