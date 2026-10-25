@@ -160,6 +160,19 @@ function defaultSamples(kind: string): Facts[] {
           ],
         },
       ];
+    case 'spnego':
+      return [
+        ...contract.SPNEGO_PROBLEMS.map(
+          (problem): Facts => ({
+            problem,
+            operation: 'obtaining-negotiate-token',
+          }),
+        ),
+        {
+          problem: 'ntlm-token',
+          operation: 'presenting-negotiate-token',
+        },
+      ];
     case 'credential-refused':
       return [
         ...contract.CREDENTIAL_KINDS.map((credential) => ({ credential })),

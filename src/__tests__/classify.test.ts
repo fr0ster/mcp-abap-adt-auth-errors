@@ -63,6 +63,7 @@ const SAMPLES: { readonly [K in AuthProviderErrorKind]: object } = {
     searched: true,
     candidates: [{ source: 'SNC_LIB', reason: 'missing' }],
   },
+  spnego: { problem: 'no-credential', operation: 'obtaining-negotiate-token' },
   'credential-refused': { credential: 'token', at: 'request' },
   'system-refused': { verdict: 'not-authorized', status: 403, at: 'logon' },
   'renewal-unchanged': { source: 'token-provider' },

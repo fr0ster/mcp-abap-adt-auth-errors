@@ -16,7 +16,7 @@ own data `error` of the value, and nothing else.
 
 - [Install](#install)
 - [What an error is](#what-an-error-is)
-- [The seventeen kinds](#the-seventeen-kinds) and [their words](#the-words)
+- [The eighteen kinds](#the-eighteen-kinds) and [their words](#the-words)
 - [Building an error](#building-an-error)
 - [Diagnostics and their admission](#diagnostics-and-their-admission)
 - [Catching: `classify` and `readFailure`, never `instanceof`](#catching-classify-and-readfailure-never-instanceof)
@@ -35,7 +35,7 @@ own data `error` of the value, and nothing else.
 npm install @mcp-abap-adt/auth-errors
 ```
 
-It depends on `@mcp-abap-adt/interfaces-auth` `^7.5.0` and nothing else.
+It depends on `@mcp-abap-adt/interfaces-auth` `^8.0.0` and nothing else.
 Node.js 22, 24 or 26.
 
 The package's `exports` map exposes five paths by name: the entry
@@ -53,11 +53,11 @@ Every failure of authentication is an `IAuthProviderError`, a frozen object:
 
 | Property | What it is |
 |---|---|
-| `kind` | one of seventeen, from the closed list `AUTH_PROVIDER_ERROR_KINDS` |
-| `variant` | for `saml-assertion`, `snc` and `configuration` only: the rule, problem or case — the same value as in `facts`, lifted so that `e.kind === 'snc' && e.variant === 'library-not-found'` narrows the whole object, `diagnostics` included |
+| `kind` | one of eighteen, from the closed list `AUTH_PROVIDER_ERROR_KINDS` |
+| `variant` | for `saml-assertion`, `snc`, `spnego` and `configuration` only: the rule, problem or case — the same value as in `facts`, lifted so that `e.kind === 'snc' && e.variant === 'library-not-found'` narrows the whole object, `diagnostics` included |
 | `facts` | what happened, drawn only from allowlists (the `as const` arrays of interfaces-auth) and branded integer ranges — nothing free-form |
 | `reason`, `hint?` | the default words, rendered from `kind` and `facts` at minting — never from a diagnostic, never from anything a thrown value said |
-| `diagnostics?` | for the three variant kinds only, and only the fields that variant permits, each admitted on its own (see [below](#diagnostics-and-their-admission)) |
+| `diagnostics?` | for three of the four variant kinds (`spnego` carries none), and only the fields that variant permits, each admitted on its own (see [below](#diagnostics-and-their-admission)) |
 
 An error is also the refusal: `AuthOutcome` is `{ ok: true }` or
 `{ ok: false, refusal: IAuthProviderError }`. What a token provider throws is
@@ -66,7 +66,7 @@ an `AuthProviderFailure`, an `Error` holding one error.
 The type carries a brand no code can write, so an error can only be
 **minted** — and this package is the only place that mints one.
 
-## The seventeen kinds
+## The eighteen kinds
 
 Each kind's facts, as `interfaces-auth` declares them (`?` optional; every
 other fact key is `?: never`, so the fact types are closed):
@@ -81,6 +81,7 @@ other fact key is `?: never`, so the fact types are closed):
 | `interactive-login` | `outcome` (`INTERACTIVE_OUTCOMES`), and by outcome: `port-in-use` `port` (`Port`); `aborted` `strategy?` (`browser` / `manual` / `consumer`), `ignoredCallbacks?` (`Count`); `disposed` `strategy`; `identity-provider-refused` `oauthError?`; `failed` `status?`, `oauthError?`, `code?` |
 | `saml-assertion` | `rule` (`ASSERTION_RULES`, 56), `check` (the rule's `AssertionCheck`), and by rule: a "several …" rule `count?` (at least 2); `declined` `statusCode?` (`SAML_STATUS_CODES`); `no-bearer-qualifies` `candidates?` (each a `BEARER_CANDIDATE_REASONS` reason, with `count?` — at least 2 — only for `several-confirmation-data`; at most 5), `moreCandidates?` |
 | `snc` | `problem` (`SNC_PROBLEMS`), and by problem: `no-credential` `secureLoginClient?`, `libraryArchs?`; `library-init-failed` `libraryArchs?`; `logon-refused` `rfcKey?` (`RFC_KEYS`); `library-not-found` `searched?`, `candidates?` (`source`, `reason`, `archs?`; at most 8), `processArch?` |
+| `spnego` | `problem` (`SPNEGO_PROBLEMS`), `operation` (`OPERATIONS`); nothing else |
 | `credential-refused` | `credential` (`CREDENTIAL_KINDS`), `at?` (`logon` / `request`) |
 | `system-refused` | `verdict` (`SYSTEM_REFUSED_VERDICTS`), `at`; a status verdict `status`; `rfc-failure` `rfcKey` |
 | `renewal-unchanged` | `source`: `token-source`, `token-provider` |
@@ -295,6 +296,20 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"problem":"logon-refused","rfcKey":"RFC_LOGON_FAILURE"}` | `SNC logon refused (RFC_LOGON_FAILURE)` | — |
 | `{"problem":"library-not-found","searched":true,"candidates":[{"source":"SNC_LIB_64","reason":"missing"},{"source":"sncLib","reason":"wrong architecture","archs":["arm64"]}],"processArch":"x64"}` | `no usable SNC library was found: SNC_LIB_64 (missing); sncLib (wrong architecture)` | `set sncLib to the SNC (GSS) library of your SNC product` |
 
+#### `spnego`
+
+| facts | reason | hint |
+|---|---|---|
+| `{"problem":"no-credential","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: there is no Kerberos ticket, or it has expired` | `obtain a ticket: kinit, or the domain logon` |
+| `{"problem":"service-unknown","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the Kerberos server does not know the service principal` | `check servicePrincipal against the service's registered principal` |
+| `{"problem":"kdc-unreachable","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: no Kerberos server (KDC) answered` | `check the Kerberos configuration's realm and KDC` |
+| `{"problem":"clock-skew","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: this machine's clock differs from the Kerberos server's beyond its tolerance` | `check the machine's time` |
+| `{"problem":"binding-unavailable","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the library of the system token source could not be loaded` | `install the system source's native part` |
+| `{"problem":"source-failed","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token source failed` | — |
+| `{"problem":"ntlm-token","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token is an NTLM token, not a Kerberos one` | `the service principal is not known to the domain; NTLM is not used` |
+| `{"problem":"token-unreadable","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token is empty, not base64, or neither a Kerberos nor an NTLM token` | — |
+| `{"problem":"ntlm-token","operation":"presenting-negotiate-token"}` | `presenting the Negotiate token failed: the token is an NTLM token, not a Kerberos one` | `the service principal is not known to the domain; NTLM is not used` |
+
 #### `credential-refused`
 
 | facts | reason | hint |
@@ -304,6 +319,7 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"credential":"saml-session"}` | `the SAML session was refused or has expired` | `obtain a new SAML session` |
 | `{"credential":"token"}` | `the token was refused` | `obtain a new token` |
 | `{"credential":"refresh-token"}` | `the refresh token was refused` | `log in again` |
+| `{"credential":"kerberos-ticket"}` | `the Kerberos ticket was refused` | `obtain a new ticket: kinit, or the domain logon` |
 | `{"credential":"user-password","at":"logon"}` | `the user or password was refused` | `check the user and password` |
 
 #### `system-refused`
@@ -412,6 +428,8 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"operation":"preparing"}` | `preparing failed (unknown error)` | — |
 | `{"operation":"establishing"}` | `establishing the logon failed (unknown error)` | — |
 | `{"operation":"authorizing"}` | `authorizing the request failed (unknown error)` | — |
+| `{"operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed (unknown error)` | — |
+| `{"operation":"presenting-negotiate-token"}` | `presenting the Negotiate token failed (unknown error)` | — |
 | `{"operation":"token-request","grant":"password","status":500}` | `password token request failed (HTTP 500)` | — |
 | `{"operation":"refresh","code":"ECONNRESET"}` | `the refresh failed (unknown error, ECONNRESET)` | — |
 
@@ -443,10 +461,11 @@ integer maker, omits absent facts, copies every array, deduplicates and caps
 deeply. An invalid optional fact is dropped; an invalid required one makes the
 call answer `unknown` with operation `unfamiliar-error`.
 
-The builders of `saml-assertion`, `snc` and `configuration` are generic over
-the variant, inferred from the facts literal (a discriminant typed as the
-whole union does not compile), take the diagnostics that variant permits, and
-answer that variant's error type. Every other builder takes facts only.
+The builders of `saml-assertion`, `snc`, `spnego` and `configuration` are
+generic over the variant, inferred from the facts literal (a discriminant
+typed as the whole union does not compile), and answer that variant's error
+type; all but `spnego` take the diagnostics that variant permits. Every other
+builder takes facts only.
 
 `isMinted(value)` is the public provenance guard: true only for an error this
 copy of the package minted (a module-private `WeakSet`). A structural copy —
@@ -911,7 +930,7 @@ interfaces-auth's rule decides most of this package's versions:
 
 What it means here:
 
-- This package depends on `^7.5.0`. A major of interfaces-auth needs a major
+- This package depends on `^8.0.0`. A major of interfaces-auth needs a major
   of auth-errors that moves its range: the builders, words and fact checks are
   written against one shape. Upgrade the two together, so that a process holds
   one interfaces-auth major (`npm ls @mcp-abap-adt/interfaces-auth`).

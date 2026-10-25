@@ -66,6 +66,10 @@ function recordingHandlers(seen: IAuthProviderError[]): Handlers {
       seen.push(e);
       return `snc:${e.facts.problem.length}`;
     },
+    spnego: (e) => {
+      seen.push(e);
+      return `spnego:${e.facts.problem.length}`;
+    },
     'credential-refused': kindOnly,
     'system-refused': kindOnly,
     'renewal-unchanged': kindOnly,

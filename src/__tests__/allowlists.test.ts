@@ -22,6 +22,8 @@ const GUARDS: ReadonlyArray<[string, string]> = [
   ['isBearerCandidateReason', 'BEARER_CANDIDATE_REASONS'],
   ['isSamlStatusCode', 'SAML_STATUS_CODES'],
   ['isSncProblem', 'SNC_PROBLEMS'],
+  ['isSpnegoProblem', 'SPNEGO_PROBLEMS'],
+  ['isNegotiateSourceProblem', 'NEGOTIATE_SOURCE_PROBLEMS'],
   ['isSncCandidateSource', 'SNC_CANDIDATE_SOURCES'],
   ['isSncUnusableReason', 'SNC_UNUSABLE_REASONS'],
   ['isSncArch', 'SNC_ARCHS'],

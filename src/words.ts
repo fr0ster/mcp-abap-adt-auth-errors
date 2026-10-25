@@ -156,6 +156,8 @@ const OPERATION_PHRASE = Object.freeze({
   preparing: 'preparing',
   establishing: 'establishing the logon',
   authorizing: 'authorizing the request',
+  'obtaining-negotiate-token': 'obtaining the Negotiate token',
+  'presenting-negotiate-token': 'presenting the Negotiate token',
 }) satisfies { readonly [O in Operation]: string };
 
 /** What was being done: `<grant> token request` for a token request. */
@@ -943,6 +945,50 @@ function sncWords(facts: AuthProviderErrorFacts['snc']): Words {
   }
 }
 
+function spnegoWords(facts: AuthProviderErrorFacts['spnego']): Words {
+  const what = failed(facts.operation);
+  switch (facts.problem) {
+    case 'no-credential':
+      return say(
+        `${what}: there is no Kerberos ticket, or it has expired`,
+        'obtain a ticket: kinit, or the domain logon',
+      );
+    case 'service-unknown':
+      return say(
+        `${what}: the Kerberos server does not know the service principal`,
+        "check servicePrincipal against the service's registered principal",
+      );
+    case 'kdc-unreachable':
+      return say(
+        `${what}: no Kerberos server (KDC) answered`,
+        "check the Kerberos configuration's realm and KDC",
+      );
+    case 'clock-skew':
+      return say(
+        `${what}: this machine's clock differs from the Kerberos server's beyond its tolerance`,
+        "check the machine's time",
+      );
+    case 'binding-unavailable':
+      return say(
+        `${what}: the library of the system token source could not be loaded`,
+        "install the system source's native part",
+      );
+    case 'source-failed':
+      return say(`${what}: the token source failed`);
+    case 'ntlm-token':
+      return say(
+        `${what}: the token is an NTLM token, not a Kerberos one`,
+        'the service principal is not known to the domain; NTLM is not used',
+      );
+    case 'token-unreadable':
+      return say(
+        `${what}: the token is empty, not base64, or neither a Kerberos nor an NTLM token`,
+      );
+    default:
+      return unreachable(facts);
+  }
+}
+
 // ------------------------------------------------- credentials and rejection
 
 function credentialRefusedWords(
@@ -968,6 +1014,11 @@ function credentialRefusedWords(
       return say('the token was refused', 'obtain a new token');
     case 'refresh-token':
       return say('the refresh token was refused', 'log in again');
+    case 'kerberos-ticket':
+      return say(
+        'the Kerberos ticket was refused',
+        'obtain a new ticket: kinit, or the domain logon',
+      );
     default:
       return unreachable(facts.credential);
   }
@@ -1158,6 +1209,7 @@ const WORDS_BY_KIND = {
   'interactive-login': interactiveLoginWords,
   'saml-assertion': samlAssertionWords,
   snc: sncWords,
+  spnego: spnegoWords,
   'credential-refused': credentialRefusedWords,
   'system-refused': systemRefusedWords,
   'renewal-unchanged': renewalUnchangedWords,
@@ -1213,6 +1265,7 @@ const BLAME = Object.freeze({
   tls: () => false,
   'interactive-login': () => false,
   'saml-assertion': () => false,
+  spnego: () => false,
   snc: (facts: AuthProviderErrorFacts['snc']) =>
     facts.problem === 'no-credential' ||
     (facts.problem === 'logon-refused' && facts.rfcKey === 'RFC_LOGON_FAILURE'),

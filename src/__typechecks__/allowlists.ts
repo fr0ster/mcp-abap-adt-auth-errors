@@ -122,6 +122,24 @@ export type isSncProblemGuard = Expect<
 export type isSncProblemUnion = Expect<
   Equal<Contract.SncProblem, (typeof Contract.SNC_PROBLEMS)[number]>
 >;
+export type isNegotiateSourceProblemGuard = Expect<
+  GuardOf<
+    typeof Guards.isNegotiateSourceProblem,
+    Contract.NegotiateSourceProblem
+  >
+>;
+export type isNegotiateSourceProblemUnion = Expect<
+  Equal<
+    Contract.NegotiateSourceProblem,
+    (typeof Contract.NEGOTIATE_SOURCE_PROBLEMS)[number]
+  >
+>;
+export type isSpnegoProblemGuard = Expect<
+  GuardOf<typeof Guards.isSpnegoProblem, Contract.SpnegoProblem>
+>;
+export type isSpnegoProblemUnion = Expect<
+  Equal<Contract.SpnegoProblem, (typeof Contract.SPNEGO_PROBLEMS)[number]>
+>;
 export type isSncCandidateSourceGuard = Expect<
   GuardOf<typeof Guards.isSncCandidateSource, Contract.SncCandidateSource>
 >;
