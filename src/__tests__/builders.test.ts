@@ -62,6 +62,11 @@ const ONE_PER_KIND: Record<string, () => IAuthProviderError> = {
   'saml-assertion': () =>
     authError['saml-assertion']({ rule: 'expired', check: 'notOnOrAfter' }),
   snc: () => authError.snc({ problem: 'locator-returned-no-path' }),
+  spnego: () =>
+    authError.spnego({
+      problem: 'no-credential',
+      operation: 'obtaining-negotiate-token',
+    }),
   'credential-refused': () =>
     authError['credential-refused']({ credential: 'token', at: 'request' }),
   'system-refused': () =>
@@ -128,7 +133,7 @@ describe('authError', () => {
     });
   });
 
-  it('sets variant from the facts for the three kinds that carry one', () => {
+  it('sets variant from the facts for the kinds that carry one', () => {
     const saml = authError['saml-assertion']({
       rule: 'duplicate-id',
       check: 'duplicateId',

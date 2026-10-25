@@ -11,6 +11,7 @@ import type {
   IAuthProviderError,
   SamlAssertionError,
   SncError,
+  SpnegoError,
 } from '@mcp-abap-adt/interfaces-auth';
 import { authError, httpStatus, isMinted } from '../index';
 
@@ -118,6 +119,37 @@ authError['saml-assertion']({ rule: 'audience-not-us', check: 'issuer' });
 authError['saml-assertion']({ rule: 'audience-not-us', check: 'audience' }); // ok
 
 // the results: one variant for the three kinds, the kind's error otherwise
+
+// spnego: facts are the problem and the operation, nothing else
+authError.spnego({
+  problem: 'no-credential',
+  operation: 'obtaining-negotiate-token',
+}); // ok
+// @ts-expect-error a problem off SPNEGO_PROBLEMS
+authError.spnego({
+  problem: 'made-up',
+  operation: 'obtaining-negotiate-token',
+});
+// @ts-expect-error the operation is required
+authError.spnego({ problem: 'no-credential' });
+authError.spnego(
+  { problem: 'no-credential', operation: 'obtaining-negotiate-token' },
+  // @ts-expect-error spnego takes no diagnostics
+  { library: v },
+);
+authError.spnego({
+  problem: 'no-credential',
+  operation: 'obtaining-negotiate-token',
+  // @ts-expect-error no other fact is allowed
+  rfcKey: 'RFC_LOGON_FAILURE',
+});
+
+export type SpnegoResult = Expect<
+  Equal<
+    ReturnType<typeof authError.spnego<'clock-skew'>>,
+    Extract<SpnegoError, { variant: 'clock-skew' }>
+  >
+>;
 export type SncResult = Expect<
   Equal<
     ReturnType<typeof authError.snc<'no-credential'>>,

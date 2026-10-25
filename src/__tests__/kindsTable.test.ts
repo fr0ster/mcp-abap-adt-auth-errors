@@ -45,7 +45,7 @@ describe('the README kinds table', () => {
   it('holds one section per kind', () => {
     const { body } = kindsTableRegion();
     expect(body.split('\n').filter((l) => l.startsWith('#### ')).length).toBe(
-      17,
+      18,
     );
   });
 

@@ -33,6 +33,8 @@ import {
   LOGON_TARGET_WIRES,
   type LogonTargetRefusal,
   type LogonTargetWire,
+  NEGOTIATE_SOURCE_PROBLEMS,
+  type NegotiateSourceProblem,
   NOT_PREPARED_PROVIDERS,
   type NotPreparedProvider,
   OAUTH_ERROR_CODES,
@@ -61,6 +63,8 @@ import {
   type SncProblem,
   type SncQop,
   type SncUnusableReason,
+  SPNEGO_PROBLEMS,
+  type SpnegoProblem,
   SYSTEM_CODES,
   SYSTEM_REFUSED_VERDICTS,
   type SystemCode,
@@ -132,6 +136,12 @@ const SNC_CANDIDATE_SOURCE_SET: ReadonlySet<string> = new Set<string>(
 );
 const SNC_UNUSABLE_REASON_SET: ReadonlySet<string> = new Set<string>(
   SNC_UNUSABLE_REASONS,
+);
+const NEGOTIATE_SOURCE_PROBLEM_SET: ReadonlySet<string> = new Set<string>(
+  NEGOTIATE_SOURCE_PROBLEMS,
+);
+const SPNEGO_PROBLEM_SET: ReadonlySet<string> = new Set<string>(
+  SPNEGO_PROBLEMS,
 );
 const SNC_ARCH_SET: ReadonlySet<string> = new Set<string>(SNC_ARCHS);
 const INTERACTIVE_OUTCOME_SET: ReadonlySet<string> = new Set<string>(
@@ -267,6 +277,18 @@ export function isSamlStatusCode(value: unknown): value is SamlStatusCode {
 /** Whether `value` is a member of `SNC_PROBLEMS`. */
 export function isSncProblem(value: unknown): value is SncProblem {
   return member(SNC_PROBLEM_SET, value);
+}
+
+/** Whether `value` is a member of `NEGOTIATE_SOURCE_PROBLEMS`. */
+export function isNegotiateSourceProblem(
+  value: unknown,
+): value is NegotiateSourceProblem {
+  return member(NEGOTIATE_SOURCE_PROBLEM_SET, value);
+}
+
+/** Whether `value` is a member of `SPNEGO_PROBLEMS`. */
+export function isSpnegoProblem(value: unknown): value is SpnegoProblem {
+  return member(SPNEGO_PROBLEM_SET, value);
 }
 
 /** Whether `value` is a member of `SNC_CANDIDATE_SOURCES`. */

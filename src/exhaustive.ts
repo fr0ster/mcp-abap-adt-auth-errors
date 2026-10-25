@@ -49,6 +49,8 @@ export function matchKind<R>(
       return handlers['saml-assertion'](known);
     case 'snc':
       return handlers.snc(known);
+    case 'spnego':
+      return handlers.spnego(known);
     case 'credential-refused':
       return handlers['credential-refused'](known);
     case 'system-refused':

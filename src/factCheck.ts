@@ -67,6 +67,7 @@ import {
   isSncCandidateSource,
   isSncProblem,
   isSncUnusableReason,
+  isSpnegoProblem,
   isSystemCode,
   isSystemRefusedVerdict,
   isTlsFailureCode,
@@ -382,6 +383,10 @@ const CHECKERS = Object.freeze({
   'saml-assertion': (input: object, out: Out, checks: RuleChecks) =>
     samlAssertion(input, out, checks),
   snc,
+  spnego: (input: object, out: Out) => {
+    need(out, input, 'problem', by(isSpnegoProblem));
+    need(out, input, 'operation', operation);
+  },
   'credential-refused': (input: object, out: Out) => {
     need(out, input, 'credential', by(isCredentialKind));
     may(out, input, 'at', rejectionMoment);

@@ -36,6 +36,7 @@ const all: KindHandlers<string> = {
   'interactive-login': (e) => e.facts.outcome,
   'saml-assertion': (e) => e.facts.rule,
   snc: (e) => e.facts.problem,
+  spnego: (e) => e.facts.problem,
   'credential-refused': (e) => e.facts.credential,
   'system-refused': (e) => e.facts.verdict,
   'renewal-unchanged': (e) => e.facts.source,
@@ -72,6 +73,7 @@ export function described(e: IAuthProviderError): string {
     case 'interactive-login':
     case 'saml-assertion':
     case 'snc':
+    case 'spnego':
     case 'credential-refused':
     case 'system-refused':
     case 'renewal-unchanged':
@@ -98,6 +100,7 @@ export function missingOne(e: IAuthProviderError): string {
     case 'interactive-login':
     case 'saml-assertion':
     case 'snc':
+    case 'spnego':
     case 'credential-refused':
     case 'system-refused':
     case 'renewal-unchanged':

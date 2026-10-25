@@ -15,6 +15,7 @@ import {
   RENEWAL_UNCHANGED_SOURCES,
   REQUEST_PROBLEMS,
   SNC_PROBLEMS,
+  SPNEGO_PROBLEMS,
   SYSTEM_REFUSED_VERDICTS,
   TLS_FAILURE_CODES,
   TOKEN_BINDING_PROBLEMS,
@@ -122,6 +123,14 @@ const SAMPLES: readonly (readonly [string, string, unknown])[] = [
     (r) => [`saml-assertion ${r}`, 'saml-assertion', samlFacts(r)] as const,
   ),
   ...SNC_PROBLEMS.map((p) => [`snc ${p}`, 'snc', { problem: p }] as const),
+  ...SPNEGO_PROBLEMS.map(
+    (p) =>
+      [
+        `spnego ${p}`,
+        'spnego',
+        { problem: p, operation: 'obtaining-negotiate-token' },
+      ] as const,
+  ),
   ...CREDENTIAL_KINDS.map(
     (c) =>
       [
@@ -197,6 +206,7 @@ describe('every kind × every discriminant renders', () => {
     ['configuration', CONFIG_CASES.length],
     ['saml-assertion', ASSERTION_RULES.length],
     ['snc', SNC_PROBLEMS.length],
+    ['spnego', SPNEGO_PROBLEMS.length],
     ['interactive-login', INTERACTIVE_OUTCOMES.length],
     ['credential-refused', CREDENTIAL_KINDS.length],
     ['system-refused', SYSTEM_REFUSED_VERDICTS.length],
@@ -222,6 +232,120 @@ describe('every kind × every discriminant renders', () => {
       OPERATIONS.map((operation) => build('unknown', { operation }).reason),
     );
     expect(reasons.size).toBe(OPERATIONS.length);
+  });
+});
+
+describe('spnego words', () => {
+  const FACTS = (problem: string, operation = 'obtaining-negotiate-token') => ({
+    problem,
+    operation,
+  });
+  const ROWS: readonly [string, string, string | undefined][] = [
+    [
+      'no-credential',
+      'obtaining the Negotiate token failed: there is no Kerberos ticket, or it has expired',
+      'obtain a ticket: kinit, or the domain logon',
+    ],
+    [
+      'service-unknown',
+      'obtaining the Negotiate token failed: the Kerberos server does not know the service principal',
+      "check servicePrincipal against the service's registered principal",
+    ],
+    [
+      'kdc-unreachable',
+      'obtaining the Negotiate token failed: no Kerberos server (KDC) answered',
+      "check the Kerberos configuration's realm and KDC",
+    ],
+    [
+      'clock-skew',
+      "obtaining the Negotiate token failed: this machine's clock differs from the Kerberos server's beyond its tolerance",
+      "check the machine's time",
+    ],
+    [
+      'binding-unavailable',
+      'obtaining the Negotiate token failed: the library of the system token source could not be loaded',
+      "install the system source's native part",
+    ],
+    [
+      'source-failed',
+      'obtaining the Negotiate token failed: the token source failed',
+      undefined,
+    ],
+    [
+      'ntlm-token',
+      'obtaining the Negotiate token failed: the token is an NTLM token, not a Kerberos one',
+      'the service principal is not known to the domain; NTLM is not used',
+    ],
+    [
+      'token-unreadable',
+      'obtaining the Negotiate token failed: the token is empty, not base64, or neither a Kerberos nor an NTLM token',
+      undefined,
+    ],
+  ];
+
+  it('covers every problem of the contract', () => {
+    expect(ROWS.map(([p]) => p).sort()).toEqual([...SPNEGO_PROBLEMS].sort());
+  });
+
+  it.each(ROWS)(
+    '%s: its own reason and hint, verbatim',
+    (problem, reason, hint) => {
+      expect(words(build('spnego', FACTS(problem)))).toStrictEqual(
+        hint === undefined ? { reason } : { reason, hint },
+      );
+    },
+  );
+
+  it('names the operation: presenting differs from obtaining', () => {
+    const error = build(
+      'spnego',
+      FACTS('ntlm-token', 'presenting-negotiate-token'),
+    );
+    expect(error.reason).toBe(
+      'presenting the Negotiate token failed: the token is an NTLM token, not a Kerberos one',
+    );
+  });
+
+  it('lifts the problem as variant and carries only problem and operation', () => {
+    const error = build('spnego', {
+      ...FACTS('clock-skew'),
+      secret: 'S3CR3T',
+      code: 'KRB5KRB_AP_ERR_SKEW',
+    });
+    expect(error.variant).toBe('clock-skew');
+    expect(error.facts).toStrictEqual(FACTS('clock-skew'));
+    expect(error.diagnostics).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain('S3CR3T');
+  });
+
+  it('refuses a problem off SPNEGO_PROBLEMS, a missing or foreign operation', () => {
+    for (const facts of [
+      FACTS('made-up'),
+      { problem: 'no-credential' },
+      FACTS('no-credential', 'made-up'),
+      { operation: 'obtaining-negotiate-token' },
+    ]) {
+      const error = build('spnego', facts);
+      expect(error.kind).toBe('unknown');
+      expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
+    }
+  });
+
+  it('blames the credential for no-credential only', () => {
+    for (const p of SPNEGO_PROBLEMS) {
+      expect(blamesCredential(build('spnego', FACTS(p)))).toBe(
+        p === 'no-credential',
+      );
+    }
+  });
+
+  it('words kerberos-ticket for credential-refused', () => {
+    expect(
+      words(build('credential-refused', { credential: 'kerberos-ticket' })),
+    ).toStrictEqual({
+      reason: 'the Kerberos ticket was refused',
+      hint: 'obtain a new ticket: kinit, or the domain logon',
+    });
   });
 });
 

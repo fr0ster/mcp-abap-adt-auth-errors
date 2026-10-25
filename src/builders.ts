@@ -37,6 +37,9 @@ import type {
   SncError,
   SncFactsOf,
   SncProblem,
+  SpnegoError,
+  SpnegoFactsOf,
+  SpnegoProblem,
 } from '@mcp-abap-adt/interfaces-auth';
 import {
   admitConfigDiagnostics,
@@ -70,6 +73,9 @@ export interface VariantBuilders {
     facts: SncFactsOf<One<P>>,
     diagnostics?: DiagnosticsInputOf<SncDiagnosticField, SncDiagnosticOf<P>>,
   ): Extract<SncError, { variant: P }>;
+  spnego<P extends SpnegoProblem>(
+    facts: SpnegoFactsOf<One<P>>,
+  ): Extract<SpnegoError, { variant: P }>;
   configuration<C extends ConfigCase>(
     facts: ConfigFactsOf<One<C>>,
     diagnostics?: DiagnosticsInputOf<
@@ -160,6 +166,17 @@ function buildSnc(facts: unknown, diagnostics?: unknown): IAuthProviderError {
   );
 }
 
+function buildSpnego<P extends SpnegoProblem>(
+  facts: SpnegoFactsOf<One<P>>,
+): Extract<SpnegoError, { variant: P }>;
+function buildSpnego(facts: unknown): IAuthProviderError {
+  const kept = checkFacts('spnego', facts, ASSERTION_RULE_CHECK);
+  if (kept === undefined) return unfamiliar();
+  return mint(
+    draft('spnego', kept.problem, kept, render('spnego', kept), undefined),
+  );
+}
+
 function buildConfiguration<C extends ConfigCase>(
   facts: ConfigFactsOf<One<C>>,
   diagnostics?: DiagnosticsInputOf<
@@ -203,7 +220,7 @@ function variantOf(
   const key =
     kind === 'saml-assertion'
       ? 'rule'
-      : kind === 'snc'
+      : kind === 'snc' || kind === 'spnego'
         ? 'problem'
         : kind === 'configuration'
           ? 'case'
@@ -245,6 +262,7 @@ export function rebuild(
 export const authError: AuthErrorBuilders = Object.freeze({
   'saml-assertion': buildSaml,
   snc: buildSnc,
+  spnego: buildSpnego,
   configuration: buildConfiguration,
   'client-certificate': (facts: AuthProviderErrorFacts['client-certificate']) =>
     plain('client-certificate', facts),
