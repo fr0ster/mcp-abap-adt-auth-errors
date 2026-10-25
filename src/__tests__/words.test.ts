@@ -331,9 +331,11 @@ describe('spnego words', () => {
     }
   });
 
-  it('does not blame the credential', () => {
+  it('blames the credential for no-credential only', () => {
     for (const p of SPNEGO_PROBLEMS) {
-      expect(blamesCredential(build('spnego', FACTS(p)))).toBe(false);
+      expect(blamesCredential(build('spnego', FACTS(p)))).toBe(
+        p === 'no-credential',
+      );
     }
   });
 

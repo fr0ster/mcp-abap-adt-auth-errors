@@ -94,7 +94,7 @@ other fact key is `?: never`, so the fact types are closed):
 
 `blamesCredential(error)` answers whether an error blames the credential
 (the reason to renew it): `credential-refused`, `renewal-unchanged`, `snc`
-`no-credential`, `snc` `logon-refused` with `RFC_LOGON_FAILURE`, and
+`no-credential`, `spnego` `no-credential`, `snc` `logon-refused` with `RFC_LOGON_FAILURE`, and
 `connection` `refused-after-renewal`. Total.
 
 ### The words

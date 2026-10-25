@@ -1265,7 +1265,8 @@ const BLAME = Object.freeze({
   tls: () => false,
   'interactive-login': () => false,
   'saml-assertion': () => false,
-  spnego: () => false,
+  spnego: (facts: AuthProviderErrorFacts['spnego']) =>
+    facts.problem === 'no-credential',
   snc: (facts: AuthProviderErrorFacts['snc']) =>
     facts.problem === 'no-credential' ||
     (facts.problem === 'logon-refused' && facts.rfcKey === 'RFC_LOGON_FAILURE'),
@@ -1302,7 +1303,7 @@ function blameOf<K extends AuthProviderErrorKind>(
 
 /**
  * Whether `error` blames the credential: `credential-refused`
- * and `renewal-unchanged` always; `snc` for `no-credential`, and for
+ * and `renewal-unchanged` always; `snc` and `spnego` for `no-credential`, and for
  * `logon-refused` with `RFC_LOGON_FAILURE`; `connection` for
  * `refused-after-renewal`; nothing else. Total: a value that is not an
  * error, whose facts fail their check, or whose reads throw, does not blame

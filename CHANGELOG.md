@@ -31,7 +31,9 @@ major because a kind is added: a consumer's exhaustive `matchKind` or
   ticket). The new config fields `servicePrincipal` and `tokenSource` are
   admitted by the existing `ConfigField` guard.
 - `matchKind` requires a `spnego` handler; the README kinds table has the kind.
-  `spnego` does not blame the credential (`blamesCredential` is false).
+  `blamesCredential` is true for `spnego` `no-credential` (no or an expired
+  ticket is the credential's absence, as for `snc`), false for every other
+  `spnego` problem.
 
 ### Changed
 - Dependency `@mcp-abap-adt/interfaces-auth` `^8.0.0` (was `^7.5.0`). The
