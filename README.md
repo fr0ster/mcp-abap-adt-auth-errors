@@ -35,7 +35,7 @@ own data `error` of the value, and nothing else.
 npm install @mcp-abap-adt/auth-errors
 ```
 
-It depends on `@mcp-abap-adt/interfaces-auth` `^8.0.0` and nothing else.
+It depends on `@mcp-abap-adt/interfaces-auth` `^8.0.1` and nothing else.
 Node.js 22, 24 or 26.
 
 The package's `exports` map exposes five paths by name: the entry
@@ -306,6 +306,7 @@ builder was given (as the error holds them) and the words it rendered.
 | `{"problem":"clock-skew","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: this machine's clock differs from the Kerberos server's beyond its tolerance` | `check the machine's time` |
 | `{"problem":"binding-unavailable","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the library of the system token source could not be loaded` | `install the system source's native part` |
 | `{"problem":"source-failed","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token source failed` | — |
+| `{"problem":"mechanism-unsupported","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the requested mechanism is not supported` | `check that the system's GSS library supports the mechanism the source was configured with` |
 | `{"problem":"ntlm-token","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token is an NTLM token, not a Kerberos one` | `the service principal is not known to the domain; NTLM is not used` |
 | `{"problem":"token-unreadable","operation":"obtaining-negotiate-token"}` | `obtaining the Negotiate token failed: the token is empty, not base64, or neither a Kerberos nor an NTLM token` | — |
 | `{"problem":"ntlm-token","operation":"presenting-negotiate-token"}` | `presenting the Negotiate token failed: the token is an NTLM token, not a Kerberos one` | `the service principal is not known to the domain; NTLM is not used` |
@@ -930,7 +931,7 @@ interfaces-auth's rule decides most of this package's versions:
 
 What it means here:
 
-- This package depends on `^8.0.0`. A major of interfaces-auth needs a major
+- This package depends on `^8.0.1`. A major of interfaces-auth needs a major
   of auth-errors that moves its range: the builders, words and fact checks are
   written against one shape. Upgrade the two together, so that a process holds
   one interfaces-auth major (`npm ls @mcp-abap-adt/interfaces-auth`).
