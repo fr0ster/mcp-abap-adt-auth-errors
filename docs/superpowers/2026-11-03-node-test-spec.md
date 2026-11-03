@@ -126,10 +126,23 @@ Not a gate today, so none is added. A run can ask for it with
 
 ## 7. Order across repositories
 
-The order is:
-1. auth-errors (this one: no module mocks, no timers);
-2. auth-mocks, auth-stores and proxy;
-3. auth-broker, the first with module mocks to replace by seams: `node:readline`, the
-   provider factory, the broker in the CLI, `mcpSsoConfig`;
-4. auth-providers, adt-clients and mcp-abap-adt. Each one gets its own PR
-and its own spec addendum for its seams. A repository moves when the one before is released.
+The problems that started this live in adt-clients and mcp-abap-adt:
+- path patterns that selected live suites;
+- the live runs' global setup;
+- cleanup lost when a test ran past Jest's timeout.
+
+So they move right after the proof here.
+
+1. **auth-errors** (this one). It has no module mocks and no timers, so it proves §2 and §3:
+   `tsc`, then `node --test`, `node:assert` and the matchers module.
+2. **adt-clients**: the live layout of §4, the live run's global setup, the `{ timeout }` of
+   §2 with cleanup that always runs, 18 module mocks and 168 table cases.
+3. **mcp-abap-adt**: the same, plus the most module mocks (93) and fake timers (114).
+4. **The rest:**
+   - auth-providers;
+   - auth-broker, where module mocks are replaced by seams (`node:readline`, the provider
+     factory, the broker in the CLI, `mcpSsoConfig`);
+   - auth-mocks, auth-stores and proxy.
+
+Each one gets its own PR and its own spec addendum for its seams. A repository moves when the
+one before it is released.
