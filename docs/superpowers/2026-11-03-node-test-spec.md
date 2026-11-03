@@ -18,7 +18,8 @@ repository. The plan carries it out in this repository first.
 | `toThrow` / `rejects`+`resolves` | 332 / 360 | 256 / 187 | 64 / 259 | 291 / 242 |
 | snapshots, `expect.extend`, `__mocks__` | 0 | 0 | 0 | 0 |
 
-Every repository is CommonJS (`module: CommonJS`). Every one uses Jest 30 with ts-jest,
+Every repository compiles to CommonJS: `module: CommonJS`, or `module: Node16` with no
+`"type": "module"` (this one). Every one uses Jest 30 with ts-jest,
 `testEnvironment: node` and one worker. The source imports relative modules without file
 extensions.
 
@@ -85,7 +86,8 @@ auth-broker's 11 `jest.mock` replace (they move with auth-broker, §7):
     and `advanceTimersByTime`.
   - Where a test needs async ticking (`advanceTimersByTimeAsync`), its helper awaits the
     queued promises between ticks.
-  - The plan measures that in this repository's 8 uses before the larger repositories move.
+  - auth-broker's 8 uses, the first repository that has any, measure it before the larger
+    repositories move.
 - **Global setup and teardown.** A live run's setup becomes its own entry file, run by the
   live script before the suites, with `--test-global-setup` where the Node version has it.
   Unit runs have none.
