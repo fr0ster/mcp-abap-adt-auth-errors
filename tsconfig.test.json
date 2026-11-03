@@ -1,0 +1,41 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./.test-build",
+    "rootDir": "./src",
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmitOnError": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/__typechecks__/**",
+    "src/__tests__/admission.test.ts",
+    "src/__tests__/allowlists.test.ts",
+    "src/__tests__/builders.test.ts",
+    "src/__tests__/classify.test.ts",
+    "src/__tests__/diagnostics.test.ts",
+    "src/__tests__/exhaustive.test.ts",
+    "src/__tests__/exportsMap.test.ts",
+    "src/__tests__/failure.test.ts",
+    "src/__tests__/guard.test.ts",
+    "src/__tests__/kindsTable.test.ts",
+    "src/__tests__/mainEntryLoadsNothing.test.ts",
+    "src/__tests__/numbers.test.ts",
+    "src/__tests__/ok.test.ts",
+    "src/__tests__/readme.test.ts",
+    "src/__tests__/shapeCheck.test.ts",
+    "src/__tests__/shapeCheckApi.test.ts",
+    "src/__tests__/shapeCheckCommand.test.ts",
+    "src/__tests__/sharedAttempt.test.ts",
+    "src/__tests__/sharedAttemptReentrancy.test.ts",
+    "src/__tests__/sharedAttemptRetention.test.ts",
+    "src/__tests__/tables.test.ts",
+    "src/__tests__/widening.test.ts",
+    "src/__tests__/words.test.ts"
+  ]
+}
