@@ -71,12 +71,12 @@
     "format": "npx biome format --write src",
     "build": "npm run --silent clean && npx biome check src --diagnostic-level=error && npx tsc -p tsconfig.build.json",
     "build:fast": "npx tsc -p tsconfig.build.json",
-    "test": "npm run --silent test:build && node --test \".test-build/**/*.test.js\" && NODE_OPTIONS=--experimental-vm-modules jest",
+    "test": "npm run --silent test:build && node --test \".test-build/**/*.test.js\"",
     "test:build": "rm -rf .test-build && tsc -p tsconfig.test.json",
     "test:file": "npm run --silent test:build && node --test",
     "test:check": "tsc --noEmit",
     "docs:kinds": "npm run build && WRITE_README_TABLES=1 npm test -- src/__tests__/kindsTable.test.ts",
-    "test:shape": "npm test -- src/__tests__/shapeCheck.test.ts",
+    "test:shape": "npm run --silent test:build && node --test .test-build/__tests__/shapeCheck.test.js",
     "prepublishOnly": "npm run build && npm run test:shape"
   },
   "engines": {

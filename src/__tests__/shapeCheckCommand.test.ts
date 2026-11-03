@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {
   copyFileSync,
   mkdirSync,
@@ -9,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import * as typescript from 'typescript';
 import {
   checkProviderShape,
@@ -37,19 +39,23 @@ const USAGE =
   'usage: check-provider-shape.mjs --rules <n,…> [--base <module>#AuthProviderBase] [--root <dir>] [--project <tsconfig>] [--sites <dir>] [files…]';
 const TYPE_ERRORS = 'the shape check needs a program that type-checks:\n';
 
-jest.setTimeout(120_000);
+/** The bound of each test and hook of this file. */
+const perTest = { timeout: 120_000 };
 
 let consumer: PackedConsumer | undefined;
 const trees: string[] = [];
 
-beforeAll(() => {
-  consumer = packedConsumer({ withTypescript: true });
-}, 60_000);
+before(
+  () => {
+    consumer = packedConsumer({ withTypescript: true });
+  },
+  { timeout: 60_000 },
+);
 
-afterAll(() => {
+after(() => {
   consumer?.remove();
   for (const root of trees) rmSync(root, { recursive: true, force: true });
-});
+}, perTest);
 
 function installed(): PackedConsumer {
   if (consumer === undefined) throw new Error('no consumer');
@@ -100,35 +106,43 @@ const onFixtures = [
 ];
 
 describe('the published command: what it finds', () => {
-  it('prints every finding of the fixtures, as the module reports them, and exits 1', () => {
-    const report = checkProviderShape({
-      typescript,
-      rules: [1, 2, 3, 4, 5, 6, 7, 8],
-      root: fixtures,
-      project: join(fixtures, 'tsconfig.json'),
-      sites: fixtureSites,
-      base: FIXTURE_BASE,
-    });
-    expect(report.status).toBe('checked');
-    const lines = reportLines(report);
-    expect(lines.length).toBeGreaterThan(50);
-    expect(command(['--rules', ALL, ...onFixtures])).toEqual({
-      status: 1,
-      stdout: printed(lines),
-      stderr: '',
-    });
-  });
+  it(
+    'prints every finding of the fixtures, as the module reports them, and exits 1',
+    perTest,
+    () => {
+      const report = checkProviderShape({
+        typescript,
+        rules: [1, 2, 3, 4, 5, 6, 7, 8],
+        root: fixtures,
+        project: join(fixtures, 'tsconfig.json'),
+        sites: fixtureSites,
+        base: FIXTURE_BASE,
+      });
+      assert.equal(report.status, 'checked');
+      const lines = reportLines(report);
+      assert.ok(lines.length > 50);
+      assert.deepEqual(command(['--rules', ALL, ...onFixtures]), {
+        status: 1,
+        stdout: printed(lines),
+        stderr: '',
+      });
+    },
+  );
 
-  it('is clean on this repository with its own rules, and exits 0', () => {
-    expect(command(['--rules', '4,6', '--root', repo])).toEqual({
-      status: 0,
-      stdout: '',
-      stderr: '',
-    });
-  });
+  it(
+    'is clean on this repository with its own rules, and exits 0',
+    perTest,
+    () => {
+      assert.deepEqual(command(['--rules', '4,6', '--root', repo]), {
+        status: 0,
+        stdout: '',
+        stderr: '',
+      });
+    },
+  );
 
-  it('resolves relative paths against the working directory', () => {
-    expect(
+  it('resolves relative paths against the working directory', perTest, () => {
+    assert.deepEqual(
       command(
         [
           '--rules',
@@ -143,7 +157,6 @@ describe('the published command: what it finds', () => {
         ],
         fixtures,
       ),
-    ).toEqual(
       command(
         ['--rules', ALL, ...onFixtures, join(fixtures, 'src', 'rule3.ts')],
         fixtures,
@@ -166,27 +179,37 @@ describe('the published command: a missing project or sites directory', () => {
     };
   }
 
-  it('a tree without tsconfig.json and tools/ is checked as the module checks it with neither', () => {
-    const { root, options } = bare();
-    const lines = reportLines(checkProviderShape(options));
-    expect(lines).toEqual([
-      expect.stringMatching(/^src\/forged\.ts:2:\d+: rule 4: /),
-    ]);
-    expect(command(['--rules', '4', '--root', root])).toEqual({
-      status: 1,
-      stdout: printed(lines),
-      stderr: '',
-    });
-  });
+  it(
+    'a tree without tsconfig.json and tools/ is checked as the module checks it with neither',
+    perTest,
+    () => {
+      const { root, options } = bare();
+      const lines = reportLines(checkProviderShape(options));
+      // One line: src/forged.ts:2:<column>: rule 4: …
+      assert.equal(lines.length, 1);
+      const line = lines[0] ?? '';
+      const prefix = 'src/forged.ts:2:';
+      assert.ok(line.startsWith(prefix));
+      let at = prefix.length;
+      while (line.charAt(at) >= '0' && line.charAt(at) <= '9') at += 1;
+      assert.ok(at > prefix.length);
+      assert.ok(line.startsWith(': rule 4: ', at));
+      assert.deepEqual(command(['--rules', '4', '--root', root]), {
+        status: 1,
+        stdout: printed(lines),
+        stderr: '',
+      });
+    },
+  );
 
-  it('a --project naming a missing file is no project', () => {
+  it('a --project naming a missing file is no project', perTest, () => {
     const { root, options } = bare();
     writeFileSync(
       join(root, 'tsconfig.json'),
       JSON.stringify({ compilerOptions: { nope: 1 } }),
     );
     const lines = reportLines(checkProviderShape(options));
-    expect(
+    assert.deepEqual(
       command([
         '--rules',
         '4',
@@ -195,12 +218,13 @@ describe('the published command: a missing project or sites directory', () => {
         '--project',
         join(root, 'missing.json'),
       ]),
-    ).toEqual({ status: 1, stdout: printed(lines), stderr: '' });
+      { status: 1, stdout: printed(lines), stderr: '' },
+    );
   });
 });
 
 describe('the published command: what it refuses', () => {
-  it.each([
+  for (const [_label, args, message] of [
     ['without --rules', [], '--rules is required'],
     ['a rule it does not know', ['--rules', '4,9'], 'unknown rule 9'],
     ['a rule that is not a number', ['--rules', '4,x'], 'unknown rule x'],
@@ -248,18 +272,21 @@ describe('the published command: what it refuses', () => {
       ['--rules', '4', '--root', repo, join(repo, 'src', 'nope.ts')],
       `no such file: ${join(repo, 'src', 'nope.ts')}`,
     ],
-  ] as const)('%s', (_label, args, message) => {
-    expect(command(args)).toEqual(refused(message));
-  });
+  ] as const) {
+    it(`${_label}`, perTest, () => {
+      assert.deepEqual(command(args), refused(message));
+    });
+  }
 
-  it('a root with nothing to check', () => {
+  it('a root with nothing to check', perTest, () => {
     const root = tree({});
-    expect(command(['--rules', '6', '--root', root])).toEqual(
+    assert.deepEqual(
+      command(['--rules', '6', '--root', root]),
       refused(`no file to check under ${join(root, 'src')}`),
     );
   });
 
-  it('rules 4 and 5 without the brands of interfaces-auth 6', () => {
+  it('rules 4 and 5 without the brands of interfaces-auth 6', perTest, () => {
     const root = tree({
       'node_modules/@mcp-abap-adt/interfaces-auth/package.json': JSON.stringify(
         {
@@ -282,7 +309,8 @@ describe('the published command: what it refuses', () => {
         "import type { IAuthRefusal } from '@mcp-abap-adt/interfaces-auth';\nexport const r = {} as IAuthRefusal;\n",
     });
     for (const rules of ['4', '5']) {
-      expect(command(['--rules', rules, '--root', root])).toEqual(
+      assert.deepEqual(
+        command(['--rules', rules, '--root', root]),
         refused(
           'rules 4 and 5 need the brands of @mcp-abap-adt/interfaces-auth 6.0.0 or later; not found: minted, httpStatusBrand, countBrand, portBrand',
         ),
@@ -290,7 +318,7 @@ describe('the published command: what it refuses', () => {
     }
   });
 
-  it('a program that does not type-check', () => {
+  it('a program that does not type-check', perTest, () => {
     const root = tree({
       'tsconfig.json': JSON.stringify({
         compilerOptions: { strict: true },
@@ -307,57 +335,66 @@ describe('the published command: what it refuses', () => {
     });
     if (report.status !== 'type-errors') throw new Error(report.status);
     const run = command(['--rules', '4', '--root', root]);
-    expect(run.stderr.startsWith(TYPE_ERRORS)).toBe(true);
-    expect(run).toEqual({
+    assert.equal(run.stderr.startsWith(TYPE_ERRORS), true);
+    assert.deepEqual(run, {
       status: 2,
       stdout: '',
       stderr: `${TYPE_ERRORS}${report.diagnostics}`,
     });
-    expect(report.diagnostics).toMatch(/src\/broken\.ts/);
+    assert.ok(report.diagnostics.includes('src/broken.ts'));
   });
 });
 
 describe('the published command: copied into another repository', () => {
-  it('a copy in the consumer’s own tools/ finds the installed module and answers as the installed command', () => {
-    const copy = join(installed().dir, 'tools', 'check-provider-shape.mjs');
-    mkdirSync(dirname(copy), { recursive: true });
-    copyFileSync(installed().command, copy);
-    for (const args of [
-      ['--rules', ALL, ...onFixtures],
-      ['--rules', '4,6', '--root', repo],
-      ['--rules', '4,9'],
-    ]) {
-      const fromCopy = installed().runCommand(args, undefined, copy);
-      expect(fromCopy).toEqual(command(args));
-      expect(fromCopy.stderr).not.toMatch(/ERR_MODULE_NOT_FOUND/);
-    }
-  });
+  it(
+    'a copy in the consumer’s own tools/ finds the installed module and answers as the installed command',
+    perTest,
+    () => {
+      const copy = join(installed().dir, 'tools', 'check-provider-shape.mjs');
+      mkdirSync(dirname(copy), { recursive: true });
+      copyFileSync(installed().command, copy);
+      for (const args of [
+        ['--rules', ALL, ...onFixtures],
+        ['--rules', '4,6', '--root', repo],
+        ['--rules', '4,9'],
+      ]) {
+        const fromCopy = installed().runCommand(args, undefined, copy);
+        assert.deepEqual(fromCopy, command(args));
+        assert.ok(!fromCopy.stderr.includes('ERR_MODULE_NOT_FOUND'));
+      }
+    },
+  );
 });
 
 describe('the published command: a report it does not know', () => {
-  it('fails closed: one line on stderr, exit 2, nothing on stdout', () => {
-    const root = tree({
-      'node_modules/@mcp-abap-adt/auth-errors/package.json': JSON.stringify({
-        name: '@mcp-abap-adt/auth-errors',
-        exports: { './shape-check': './shape-check.js' },
-      }),
-      'node_modules/@mcp-abap-adt/auth-errors/shape-check.js':
-        "module.exports = { checkProviderShape: () => ({ status: 'later' }), formatFinding: () => 'never' };\n",
-    });
-    symlinkSync(
-      join(repo, 'node_modules', 'typescript'),
-      join(root, 'node_modules', 'typescript'),
-      'dir',
-    );
-    const copy = join(root, 'tools', 'check-provider-shape.mjs');
-    mkdirSync(dirname(copy), { recursive: true });
-    copyFileSync(installed().command, copy);
-    expect(installed().runCommand(['--rules', '4'], root, copy)).toEqual({
-      status: 2,
-      stdout: '',
-      stderr: 'the shape check answered a report this command does not know\n',
-    });
-  });
+  it(
+    'fails closed: one line on stderr, exit 2, nothing on stdout',
+    perTest,
+    () => {
+      const root = tree({
+        'node_modules/@mcp-abap-adt/auth-errors/package.json': JSON.stringify({
+          name: '@mcp-abap-adt/auth-errors',
+          exports: { './shape-check': './shape-check.js' },
+        }),
+        'node_modules/@mcp-abap-adt/auth-errors/shape-check.js':
+          "module.exports = { checkProviderShape: () => ({ status: 'later' }), formatFinding: () => 'never' };\n",
+      });
+      symlinkSync(
+        join(repo, 'node_modules', 'typescript'),
+        join(root, 'node_modules', 'typescript'),
+        'dir',
+      );
+      const copy = join(root, 'tools', 'check-provider-shape.mjs');
+      mkdirSync(dirname(copy), { recursive: true });
+      copyFileSync(installed().command, copy);
+      assert.deepEqual(installed().runCommand(['--rules', '4'], root, copy), {
+        status: 2,
+        stdout: '',
+        stderr:
+          'the shape check answered a report this command does not know\n',
+      });
+    },
+  );
 });
 
 describe('the command holds no rule logic of its own', () => {
@@ -369,34 +406,40 @@ describe('the command holds no rule logic of its own', () => {
     ),
   };
 
-  it.each(Object.keys(sources))(
-    '%s imports the module by package name and implements nothing',
-    (name) => {
-      const source = readFileSync(sources[name] as string, 'utf8');
-      expect(source).toContain("from '@mcp-abap-adt/auth-errors/shape-check'");
-      // No import of a relative or built path: the module is found by name.
-      for (const line of source.split('\n')) {
-        if (!line.startsWith('import ')) continue;
-        expect(line).not.toContain("from '.");
-        expect(line).not.toContain("from '/");
-        expect(line).not.toContain('dist/');
-      }
-      // None of the machinery a rule needs belongs to the command.
-      for (const marker of [
-        'createProgram',
-        'getTypeChecker',
-        'SyntaxKind',
-        'forEachChild',
-        'readFileSync',
-      ]) {
-        expect(source).not.toContain(marker);
-      }
-      expect(source.split('\n').length).toBeLessThan(150);
-    },
-  );
+  for (const name of Object.keys(sources)) {
+    it(
+      `${name} imports the module by package name and implements nothing`,
+      perTest,
+      () => {
+        const source = readFileSync(sources[name] as string, 'utf8');
+        assert.ok(
+          source.includes("from '@mcp-abap-adt/auth-errors/shape-check'"),
+        );
+        // No import of a relative or built path: the module is found by name.
+        for (const line of source.split('\n')) {
+          if (!line.startsWith('import ')) continue;
+          assert.ok(!line.includes("from '."));
+          assert.ok(!line.includes("from '/"));
+          assert.ok(!line.includes('dist/'));
+        }
+        // None of the machinery a rule needs belongs to the command.
+        for (const marker of [
+          'createProgram',
+          'getTypeChecker',
+          'SyntaxKind',
+          'forEachChild',
+          'readFileSync',
+        ]) {
+          assert.ok(!source.includes(marker));
+        }
+        assert.ok(source.split('\n').length < 150);
+      },
+    );
+  }
 
-  it('the packed command is the same file', () => {
-    expect(readFileSync(installed().command, 'utf8')).toBe(
+  it('the packed command is the same file', perTest, () => {
+    assert.equal(
+      readFileSync(installed().command, 'utf8'),
       readFileSync(sources['tools/check-provider-shape.mjs'] as string, 'utf8'),
     );
   });

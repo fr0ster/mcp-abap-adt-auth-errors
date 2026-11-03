@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {
   mkdirSync,
   mkdtempSync,
@@ -7,6 +8,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { after, describe, it, mock } from 'node:test';
 import * as typescript from 'typescript';
 import {
   checkProviderShape,
@@ -34,7 +36,8 @@ const INSTALLED_CONTRACT = join(
   'interfaces-auth',
 );
 
-jest.setTimeout(120_000);
+/** The bound of each test and hook of this file. */
+const perTest = { timeout: 120_000 };
 
 const trees: string[] = [];
 
@@ -56,9 +59,9 @@ function linkContract(root: string): void {
   symlinkSync(INSTALLED_CONTRACT, join(scope, 'interfaces-auth'), 'dir');
 }
 
-afterAll(() => {
+after(() => {
   for (const root of trees) rmSync(root, { recursive: true, force: true });
-});
+}, perTest);
 
 /** The fixtures root, as the command resolves it, with `overrides`. */
 function onFixtures(overrides: Partial<ShapeCheckOptions>): ShapeCheckOptions {
@@ -89,15 +92,16 @@ const STRICT_TSCONFIG = JSON.stringify({
 });
 
 describe('the shape check API: the command’s refusals, in its words', () => {
-  it('without rules: --rules is required', () => {
+  it('without rules: --rules is required', perTest, () => {
     const options = { ...onFixtures({}), rules: undefined };
-    expect(
+    assert.equal(
       usage(checkProviderShape(options as unknown as ShapeCheckOptions)),
-    ).toBe('--rules is required');
+      '--rules is required',
+    );
   });
 
-  it('a rule it does not know', () => {
-    expect(
+  it('a rule it does not know', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({
@@ -105,41 +109,47 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           }),
         ),
       ),
-    ).toBe('unknown rule 9');
+      'unknown rule 9',
+    );
   });
 
-  it('a base that is not <module>#<export>', () => {
-    expect(
+  it('a base that is not <module>#<export>', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({ rules: [1], base: './src/auth/AuthProviderBase' }),
         ),
       ),
-    ).toBe('--base must be <module>#<export>: ./src/auth/AuthProviderBase');
-  });
-
-  it.each([[1], [2], [3]])('rule %i without a base', (rule) => {
-    expect(
-      usage(
-        checkProviderShape(onFixtures({ rules: [rule as 1 | 2 | 3] as const })),
-      ),
-    ).toBe(
-      'rules 1, 2 and 3 need --base <module>#AuthProviderBase: the base, by declaration',
+      '--base must be <module>#<export>: ./src/auth/AuthProviderBase',
     );
   });
 
-  it('a base module that does not resolve', () => {
-    expect(
+  for (const [rule] of [[1], [2], [3]] as const) {
+    it(`rule ${rule} without a base`, perTest, () => {
+      assert.equal(
+        usage(
+          checkProviderShape(
+            onFixtures({ rules: [rule as 1 | 2 | 3] as const }),
+          ),
+        ),
+        'rules 1, 2 and 3 need --base <module>#AuthProviderBase: the base, by declaration',
+      );
+    });
+  }
+
+  it('a base module that does not resolve', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({ rules: [1], base: './src/auth/Nope#AuthProviderBase' }),
         ),
       ),
-    ).toBe(`--base: ./src/auth/Nope does not resolve from ${fixtures}`);
+      `--base: ./src/auth/Nope does not resolve from ${fixtures}`,
+    );
   });
 
-  it('a base package that does not resolve', () => {
-    expect(
+  it('a base package that does not resolve', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({
@@ -148,21 +158,23 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           }),
         ),
       ),
-    ).toBe(`--base: @mcp-abap-adt/nope does not resolve from ${fixtures}`);
+      `--base: @mcp-abap-adt/nope does not resolve from ${fixtures}`,
+    );
   });
 
-  it('a base export that is not there', () => {
-    expect(
+  it('a base export that is not there', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({ rules: [1], base: `${FIXTURE_BASE}X` }),
         ),
       ),
-    ).toBe(`--base: ${FIXTURE_BASE}X exports no AuthProviderBaseX`);
+      `--base: ${FIXTURE_BASE}X exports no AuthProviderBaseX`,
+    );
   });
 
-  it('a base export that is not a class', () => {
-    expect(
+  it('a base export that is not a class', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onFixtures({
@@ -171,18 +183,17 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           }),
         ),
       ),
-    ).toBe(
       '--base: IAuthProvider of @mcp-abap-adt/interfaces-auth#IAuthProvider is not a class',
     );
   });
 
-  it('a base file that is not a module of the program', () => {
+  it('a base file that is not a module of the program', perTest, () => {
     const root = tree({
       'src/a.ts': 'export const a = 1;\n',
       'base.js': 'class AuthProviderBase {}\n',
     });
     linkContract(root);
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -193,12 +204,13 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           base: './base.js#AuthProviderBase',
         }),
       ),
-    ).toBe('--base: ./base.js#AuthProviderBase is not a module');
+      '--base: ./base.js#AuthProviderBase is not a module',
+    );
   });
 
-  it('a file that does not exist', () => {
+  it('a file that does not exist', perTest, () => {
     const missing = join(repo, 'src', 'nope.ts');
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -209,12 +221,13 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           files: [missing],
         }),
       ),
-    ).toBe(`no such file: ${missing}`);
+      `no such file: ${missing}`,
+    );
   });
 
-  it('a root with nothing to check', () => {
+  it('a root with nothing to check', perTest, () => {
     const root = tree({});
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -224,10 +237,11 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           sites: null,
         }),
       ),
-    ).toBe(`no file to check under ${join(root, 'src')}`);
+      `no file to check under ${join(root, 'src')}`,
+    );
   });
 
-  it('rules 4 and 5 without the brands of interfaces-auth 6', () => {
+  it('rules 4 and 5 without the brands of interfaces-auth 6', perTest, () => {
     const root = tree({
       'node_modules/@mcp-abap-adt/interfaces-auth/package.json': JSON.stringify(
         {
@@ -251,21 +265,24 @@ describe('the shape check API: the command’s refusals, in its words', () => {
     };
     const refusal =
       'rules 4 and 5 need the brands of @mcp-abap-adt/interfaces-auth 6.0.0 or later; not found: minted, httpStatusBrand, countBrand, portBrand';
-    expect(usage(checkProviderShape(options))).toBe(refusal);
-    expect(usage(checkProviderShape({ ...options, rules: [5] }))).toBe(refusal);
-    expect(checkProviderShape({ ...options, rules: [6] })).toEqual({
+    assert.equal(usage(checkProviderShape(options)), refusal);
+    assert.equal(
+      usage(checkProviderShape({ ...options, rules: [5] })),
+      refusal,
+    );
+    assert.deepEqual(checkProviderShape({ ...options, rules: [6] }), {
       status: 'checked',
       findings: [],
     });
   });
 
-  it('rules 1 and 3 where interfaces-auth does not resolve', () => {
+  it('rules 1 and 3 where interfaces-auth does not resolve', perTest, () => {
     const root = tree({
       'src/a.ts': 'export const a = 1;\n',
       'base.ts': 'export class AuthProviderBase {}\n',
     });
     for (const rule of [1, 3] as const) {
-      expect(
+      assert.equal(
         usage(
           checkProviderShape({
             typescript,
@@ -276,18 +293,17 @@ describe('the shape check API: the command’s refusals, in its words', () => {
             base: './base#AuthProviderBase',
           }),
         ),
-      ).toBe(
         `rules 1 and 3 need @mcp-abap-adt/interfaces-auth, which does not resolve from ${root}`,
       );
     }
   });
 
-  it('a file to check that is not in the program', () => {
+  it('a file to check that is not in the program', perTest, () => {
     const root = tree({
       'src/a.ts': 'export const a = 1;\n',
       'src/a.txt': 'x',
     });
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -298,10 +314,11 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           files: [join(root, 'src', 'a.txt')],
         }),
       ),
-    ).toBe('a file to check is not in the program');
+      'a file to check is not in the program',
+    );
   });
 
-  it.each([
+  for (const [_label, content, expected] of [
     ['not JSON', '{', (path: string) => `${path} is not JSON`],
     ['not an array', '{}', (path: string) => `${path} is not an array`],
     [
@@ -309,26 +326,29 @@ describe('the shape check API: the command’s refusals, in its words', () => {
       JSON.stringify([{ file: 'src/a.ts' }]),
       (path: string) => `${path}: every entry needs a string function`,
     ],
-  ])('an assertion site list that is %s', (_label, content, expected) => {
-    const root = tree({
-      'src/a.ts': 'export const a = 1;\n',
-      'tools/assertion-sites.json': content,
+  ] as const) {
+    it(`an assertion site list that is ${_label}`, perTest, () => {
+      const root = tree({
+        'src/a.ts': 'export const a = 1;\n',
+        'tools/assertion-sites.json': content,
+      });
+      const path = join(root, 'tools', 'assertion-sites.json');
+      assert.equal(
+        usage(
+          checkProviderShape({
+            typescript,
+            rules: [6],
+            root,
+            project: null,
+            sites: join(root, 'tools'),
+          }),
+        ),
+        expected(path),
+      );
     });
-    const path = join(root, 'tools', 'assertion-sites.json');
-    expect(
-      usage(
-        checkProviderShape({
-          typescript,
-          rules: [6],
-          root,
-          project: null,
-          sites: join(root, 'tools'),
-        }),
-      ),
-    ).toBe(expected(path));
-  });
+  }
 
-  it('a diagnostic site list whose entry has no string field', () => {
+  it('a diagnostic site list whose entry has no string field', perTest, () => {
     const root = tree({
       'src/a.ts': 'export const a = 1;\n',
       'tools/diagnostic-sites.json': JSON.stringify([
@@ -336,7 +356,7 @@ describe('the shape check API: the command’s refusals, in its words', () => {
       ]),
     });
     const path = join(root, 'tools', 'diagnostic-sites.json');
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -346,32 +366,36 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           sites: join(root, 'tools'),
         }),
       ),
-    ).toBe(`${path}: every entry needs a string field`);
-  });
-
-  it('a project with an unknown compiler option: its diagnostics, as text', () => {
-    const root = tree({
-      'tsconfig.json': '{"compilerOptions":{"nope":1}}',
-      'src/a.ts': 'export const a = 1;\n',
-    });
-    expect(
-      usage(
-        checkProviderShape({
-          typescript,
-          rules: [6],
-          root,
-          project: join(root, 'tsconfig.json'),
-          sites: null,
-        }),
-      ),
-    ).toBe(
-      "tsconfig.json(1,21): error TS5023: Unknown compiler option 'nope'.\n",
+      `${path}: every entry needs a string field`,
     );
   });
 
-  it('a project that cannot be read', () => {
+  it(
+    'a project with an unknown compiler option: its diagnostics, as text',
+    perTest,
+    () => {
+      const root = tree({
+        'tsconfig.json': '{"compilerOptions":{"nope":1}}',
+        'src/a.ts': 'export const a = 1;\n',
+      });
+      assert.equal(
+        usage(
+          checkProviderShape({
+            typescript,
+            rules: [6],
+            root,
+            project: join(root, 'tsconfig.json'),
+            sites: null,
+          }),
+        ),
+        "tsconfig.json(1,21): error TS5023: Unknown compiler option 'nope'.\n",
+      );
+    },
+  );
+
+  it('a project that cannot be read', perTest, () => {
     const root = tree({ 'src/a.ts': 'export const a = 1;\n' });
-    expect(
+    assert.equal(
       usage(
         checkProviderShape({
           typescript,
@@ -381,12 +405,13 @@ describe('the shape check API: the command’s refusals, in its words', () => {
           sites: null,
         }),
       ),
-    ).toBe(`Cannot read file '${join(root, 'src')}'.`);
+      `Cannot read file '${join(root, 'src')}'.`,
+    );
   });
 });
 
 describe('the shape check API: a program that does not type-check', () => {
-  it('is type-errors, the diagnostics relative to the root', () => {
+  it('is type-errors, the diagnostics relative to the root', perTest, () => {
     const root = tree({
       'tsconfig.json': JSON.stringify({
         compilerOptions: { strict: true },
@@ -401,7 +426,7 @@ describe('the shape check API: a program that does not type-check', () => {
       project: join(root, 'tsconfig.json'),
       sites: null,
     });
-    expect(report).toEqual({
+    assert.deepEqual(report, {
       status: 'type-errors',
       diagnostics:
         "src/broken.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\n",
@@ -413,7 +438,7 @@ describe('the shape check API: refusals of its own, naming the option', () => {
   const root = fixtures;
   const base = onFixtures({});
 
-  it.each<[string, string, Partial<Record<keyof ShapeCheckOptions, unknown>>]>([
+  for (const [_label, option, overrides] of [
     ['no typescript', 'typescript', { typescript: undefined }],
     ['a typescript that is not the module', 'typescript', { typescript: {} }],
     ['an empty rule list', 'rules', { rules: [] }],
@@ -438,48 +463,56 @@ describe('the shape check API: refusals of its own, naming the option', () => {
     ['a relative file', 'files', { files: ['src/obeys.ts'] }],
     ['files that are not a list', 'files', { files: 'src/obeys.ts' }],
     ['a base that is not a string', 'base', { base: 1 }],
-  ])('%s', (_label, option, overrides) => {
-    const message = usage(
-      checkProviderShape({ ...base, ...overrides } as ShapeCheckOptions),
-    );
-    expect(message.startsWith(`${option}: `)).toBe(true);
-  });
-
-  it('a stated sites directory holding one list only is checked', () => {
-    const root = tree({
-      'src/a.ts': 'export const a = 1;\n',
-      'tools/assertion-sites.json': '[]',
+  ] as const) {
+    it(`${_label}`, perTest, () => {
+      const message = usage(
+        checkProviderShape({ ...base, ...overrides } as ShapeCheckOptions),
+      );
+      assert.equal(message.startsWith(`${option}: `), true);
     });
-    expect(
-      checkProviderShape({
-        typescript,
-        rules: [6],
-        root,
-        project: null,
-        sites: join(root, 'tools'),
-      }),
-    ).toEqual({ status: 'checked', findings: [] });
-    expect(
-      usage(
+  }
+
+  it(
+    'a stated sites directory holding one list only is checked',
+    perTest,
+    () => {
+      const root = tree({
+        'src/a.ts': 'export const a = 1;\n',
+        'tools/assertion-sites.json': '[]',
+      });
+      assert.deepEqual(
         checkProviderShape({
           typescript,
           rules: [6],
           root,
           project: null,
-          sites: join(root, 'elsewhere'),
+          sites: join(root, 'tools'),
         }),
-      ),
-    ).toBe(`sites: ${join(root, 'elsewhere')} does not exist`);
-  });
+        { status: 'checked', findings: [] },
+      );
+      assert.equal(
+        usage(
+          checkProviderShape({
+            typescript,
+            rules: [6],
+            root,
+            project: null,
+            sites: join(root, 'elsewhere'),
+          }),
+        ),
+        `sites: ${join(root, 'elsewhere')} does not exist`,
+      );
+    },
+  );
 });
 
 describe('the shape check API: no project', () => {
-  it('checks the files given, under the strict defaults', () => {
+  it('checks the files given, under the strict defaults', perTest, () => {
     const root = tree({
       'src/clean.ts': 'export const a = 1;\n',
       'src/implicit.ts': 'export function f(x) {\n  return x;\n}\n',
     });
-    expect(
+    assert.deepEqual(
       checkProviderShape({
         typescript,
         rules: [6],
@@ -488,7 +521,8 @@ describe('the shape check API: no project', () => {
         sites: null,
         files: [join(root, 'src', 'clean.ts')],
       }),
-    ).toEqual({ status: 'checked', findings: [] });
+      { status: 'checked', findings: [] },
+    );
     const strict = checkProviderShape({
       typescript,
       rules: [6],
@@ -497,30 +531,37 @@ describe('the shape check API: no project', () => {
       sites: null,
       files: [join(root, 'src', 'implicit.ts')],
     });
-    expect(strict.status).toBe('type-errors');
-    expect(strict.status === 'type-errors' && strict.diagnostics).toMatch(
-      /^src\/implicit\.ts\(1,19\): error TS7006: /,
+    assert.equal(strict.status, 'type-errors');
+    assert.ok(
+      strict.status === 'type-errors' &&
+        strict.diagnostics.startsWith('src/implicit.ts(1,19): error TS7006: '),
     );
   });
 
-  it('finds global types in the root’s own @types, wherever the process runs', () => {
-    const root = tree({
-      'node_modules/@types/foo/index.d.ts': 'declare var fooGlobal: number;\n',
-      'src/a.ts': 'export const a: number = fooGlobal;\n',
-    });
-    expect(process.cwd()).not.toBe(root);
-    expect(
-      checkProviderShape({
-        typescript,
-        rules: [6],
-        root,
-        project: null,
-        sites: null,
-      }),
-    ).toEqual({ status: 'checked', findings: [] });
-  });
+  it(
+    'finds global types in the root’s own @types, wherever the process runs',
+    perTest,
+    () => {
+      const root = tree({
+        'node_modules/@types/foo/index.d.ts':
+          'declare var fooGlobal: number;\n',
+        'src/a.ts': 'export const a: number = fooGlobal;\n',
+      });
+      assert.notEqual(process.cwd(), root);
+      assert.deepEqual(
+        checkProviderShape({
+          typescript,
+          rules: [6],
+          root,
+          project: null,
+          sites: null,
+        }),
+        { status: 'checked', findings: [] },
+      );
+    },
+  );
 
-  it('without files, checks every file under <root>/src', () => {
+  it('without files, checks every file under <root>/src', perTest, () => {
     const root = tree({
       'src/clean.ts': 'export const a = 1;\n',
       'src/deep/implicit.ts': 'export function f(x) {\n  return x;\n}\n',
@@ -533,8 +574,13 @@ describe('the shape check API: no project', () => {
       project: null,
       sites: null,
     });
-    expect(report.status === 'type-errors' && report.diagnostics).toMatch(
-      /^src\/deep\/implicit\.ts\(1,19\): error TS7006: [^\n]*\n$/,
+    // One line: the prefix, then no line break until the final one.
+    assert.ok(
+      report.status === 'type-errors' &&
+        report.diagnostics.startsWith(
+          'src/deep/implicit.ts(1,19): error TS7006: ',
+        ) &&
+        report.diagnostics.indexOf('\n') === report.diagnostics.length - 1,
     );
   });
 });
@@ -548,43 +594,47 @@ describe('reportLines and formatFinding', () => {
     what: 'a type assertion to IAuthProviderError',
   } as const;
 
-  it('formats a finding as the command prints it', () => {
-    expect(formatFinding(finding)).toBe(
+  it('formats a finding as the command prints it', perTest, () => {
+    assert.equal(
+      formatFinding(finding),
       'src/a.ts:3:7: rule 4: a type assertion to IAuthProviderError',
     );
   });
 
-  it('a checked report: one line per finding, in order', () => {
+  it('a checked report: one line per finding, in order', perTest, () => {
     const second = { ...finding, file: 'src/b.ts', rule: 6 as const };
-    expect(
+    assert.deepEqual(
       reportLines({ status: 'checked', findings: [finding, second] }),
-    ).toEqual([formatFinding(finding), formatFinding(second)]);
-    expect(reportLines({ status: 'checked', findings: [] })).toEqual([]);
+      [formatFinding(finding), formatFinding(second)],
+    );
+    assert.deepEqual(reportLines({ status: 'checked', findings: [] }), []);
   });
 
-  it('a usage error: why nothing could be checked', () => {
-    expect(
+  it('a usage error: why nothing could be checked', perTest, () => {
+    assert.deepEqual(
       reportLines({ status: 'usage-error', message: '--rules is required' }),
-    ).toEqual(['cannot check: --rules is required']);
+      ['cannot check: --rules is required'],
+    );
   });
 
-  it('type errors: the sentence, then each diagnostic line', () => {
-    expect(
+  it('type errors: the sentence, then each diagnostic line', perTest, () => {
+    assert.deepEqual(
       reportLines({
         status: 'type-errors',
         diagnostics:
           'src/a.ts(1,1): error TS1: one.\nsrc/b.ts(2,2): error TS2: two.\n',
       }),
-    ).toEqual([
-      'cannot check: the program does not type-check',
-      'src/a.ts(1,1): error TS1: one.',
-      'src/b.ts(2,2): error TS2: two.',
-    ]);
+      [
+        'cannot check: the program does not type-check',
+        'src/a.ts(1,1): error TS1: one.',
+        'src/b.ts(2,2): error TS2: two.',
+      ],
+    );
   });
 });
 
 describe('the shape check API: no stream, no environment', () => {
-  it('writes nothing and reads no environment variable', () => {
+  it('writes nothing and reads no environment variable', perTest, () => {
     const broken = tree({
       'tsconfig.json': JSON.stringify({
         compilerOptions: { strict: true },
@@ -594,18 +644,14 @@ describe('the shape check API: no stream, no environment', () => {
     });
     const writes: string[] = [];
     const reads: PropertyKey[] = [];
-    const stdout = jest
-      .spyOn(process.stdout, 'write')
-      .mockImplementation((chunk: unknown) => {
-        writes.push(String(chunk));
-        return true;
-      });
-    const stderr = jest
-      .spyOn(process.stderr, 'write')
-      .mockImplementation((chunk: unknown) => {
-        writes.push(String(chunk));
-        return true;
-      });
+    const stdout = mock.method(process.stdout, 'write', (chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    const stderr = mock.method(process.stderr, 'write', (chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    });
     const env = process.env;
     process.env = new Proxy(env, {
       get(target, key, receiver) {
@@ -642,15 +688,14 @@ describe('the shape check API: no stream, no environment', () => {
       ];
     } finally {
       process.env = env;
-      stdout.mockRestore();
-      stderr.mockRestore();
+      stdout.mock.restore();
+      stderr.mock.restore();
     }
-    expect(reports.map((report) => report.status)).toEqual([
-      'checked',
-      'usage-error',
-      'type-errors',
-    ]);
-    expect(writes).toEqual([]);
-    expect(reads).toEqual([]);
+    assert.deepEqual(
+      reports.map((report) => report.status),
+      ['checked', 'usage-error', 'type-errors'],
+    );
+    assert.deepEqual(writes, []);
+    assert.deepEqual(reads, []);
   });
 });

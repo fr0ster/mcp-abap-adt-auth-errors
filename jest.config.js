@@ -26,6 +26,9 @@ module.exports = {
     '/src/__tests__/diagnostics.test.ts',
     '/src/__tests__/exportsMap.test.ts',
     '/src/__tests__/mainEntryLoadsNothing.test.ts',
+    '/src/__tests__/shapeCheck.test.ts',
+    '/src/__tests__/shapeCheckApi.test.ts',
+    '/src/__tests__/shapeCheckCommand.test.ts',
   ],
   collectCoverageFrom: [
     'src/**/*.ts',
