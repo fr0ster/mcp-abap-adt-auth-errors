@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing in the package changes: only how its tests run.
+
+### Changed
+
+- The tests run on Node's own runner, `node:test`, with `node:assert/strict`
+  and `mock` from `node:test`; Jest, ts-jest, jest-util and `@types/jest`
+  leave the devDependencies, and `NODE_OPTIONS=--experimental-vm-modules`
+  leaves the scripts. `npm test` compiles the sources and the tests with the
+  repository's `tsc` (`tsconfig.test.json`) into `.test-build/`, ignored by
+  git, and runs the compiled files with `node --test`; `npm run test:file --
+  <compiled file>` runs one. Every test keeps its title and what it asserts
+  (2874 in 23 files); a pattern match in a test is plain string code now.
+- The README's shape-check example is a `node:test` test.
+- No script calls `npx`: each tool is found on npm's own `PATH`.
+- Every test script runs through `tools/run-tests.mjs`, which finds the
+  compiled tests itself and fails when it finds none (`node --test` alone exits
+  0 on a pattern that matches nothing); `--env NAME=VALUE` replaces a shell
+  prefix. `tools/remove.mjs` replaces `rm -rf` in `clean` and `test:build`. No
+  script uses a shell-only command, so they run on Windows as well.
+
 ## [3.0.1] - 2026-10-25
 
 On `@mcp-abap-adt/interfaces-auth` `^8.0.1`, which adds the `spnego` problem

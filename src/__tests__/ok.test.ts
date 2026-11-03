@@ -1,24 +1,26 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import { loadBuilt } from './builtPackage';
 
 describe('OK', () => {
   it('is exported by the built package, deep-equal to { ok: true }', () => {
     const { OK } = loadBuilt();
-    expect(OK).toStrictEqual({ ok: true });
+    assert.deepEqual(OK, { ok: true });
   });
 
   it('is frozen: an assignment throws in strict mode', () => {
     const { OK } = loadBuilt();
-    expect(Object.isFrozen(OK)).toBe(true);
-    expect(() => {
+    assert.equal(Object.isFrozen(OK), true);
+    assert.throws(() => {
       (OK as { ok: boolean }).ok = false;
-    }).toThrow(TypeError);
-    expect(() => {
+    }, TypeError);
+    assert.throws(() => {
       (OK as Record<string, unknown>).refusal = {};
-    }).toThrow(TypeError);
-    expect(OK).toStrictEqual({ ok: true });
+    }, TypeError);
+    assert.deepEqual(OK, { ok: true });
   });
 
   it('is one object, the same on every read', () => {
-    expect(loadBuilt().OK).toBe(loadBuilt().OK);
+    assert.equal(loadBuilt().OK, loadBuilt().OK);
   });
 });

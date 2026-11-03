@@ -1,5 +1,7 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { describe, it } from 'node:test';
 
 /**
  * What a finished handle keeps reachable: a handle the consumer
@@ -254,7 +256,7 @@ function run(name: string): { collected: boolean[]; kept: number } {
 }
 
 describe('what a finished handle keeps reachable', () => {
-  it.each([
+  for (const name of [
     'detachKept',
     'staleDetach',
     'releasedMoment',
@@ -268,12 +270,14 @@ describe('what a finished handle keeps reachable', () => {
     'keptListenerJoinRefused',
     'keptListenerAttach',
     'keptListenerAttachAborted',
-  ])(
-    '%s: every signal is collectible while the finished handles are kept',
-    (name) => {
+  ]) {
+    it(`${name}: every signal is collectible while the finished handles are kept`, () => {
       const result = run(name);
-      expect(result.kept).toBeGreaterThan(0);
-      expect(result.collected).toEqual(result.collected.map(() => true));
-    },
-  );
+      assert.ok(result.kept > 0);
+      assert.deepEqual(
+        result.collected,
+        result.collected.map(() => true),
+      );
+    });
+  }
 });

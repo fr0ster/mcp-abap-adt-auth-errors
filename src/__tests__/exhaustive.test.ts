@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
 import type {
   AuthProviderErrorKind,
   IAuthProviderError,
@@ -86,31 +88,30 @@ function recordingHandlers(seen: IAuthProviderError[]): Handlers {
 }
 
 describe('matchKind — version skew', () => {
-  it.each(SKEWED)(
-    '%s: no handler throws, the unknown handler receives operation unfamiliar-error',
-    (_label, value) => {
+  for (const [_label, value] of SKEWED) {
+    it(`${_label}: no handler throws, the unknown handler receives operation unfamiliar-error`, () => {
       const seen: IAuthProviderError[] = [];
       const answer = matchKind(
         value as IAuthProviderError,
         recordingHandlers(seen),
       );
-      expect(answer).toBe(`unknown:16:unfamiliar-error`);
-      expect(seen).toHaveLength(1);
+      assert.equal(answer, `unknown:16:unfamiliar-error`);
+      assert.equal(seen.length, 1);
       const [received] = seen;
-      expect(isMinted(received)).toBe(true);
-      expect(received?.kind).toBe('unknown');
-      expect(received?.facts).toStrictEqual({ operation: 'unfamiliar-error' });
-    },
-  );
+      assert.equal(isMinted(received), true);
+      assert.equal(received?.kind, 'unknown');
+      assert.deepEqual(received?.facts, { operation: 'unfamiliar-error' });
+    });
+  }
 
   describe('a valid foreign tls error reaches the tls handler', () => {
     let second: SecondCopy;
-    beforeAll(() => {
+    before(() => {
       second = loadSecondCopy();
     });
-    afterAll(() => second.remove());
+    after(() => second.remove());
 
-    it.each([
+    for (const [_label, make] of [
       [
         'minted by a second copy',
         () =>
@@ -126,23 +127,25 @@ describe('matchKind — version skew', () => {
           reason: 'sk-tls',
         }),
       ],
-    ])('%s: rebuilt, minted here, handed to tls', (_label, make) => {
-      const value = make();
-      const seen: IAuthProviderError[] = [];
-      const answer = matchKind(
-        value as IAuthProviderError,
-        recordingHandlers(seen),
-      );
-      expect(answer).toBe(`tls:${'CERT_HAS_EXPIRED'.length}`);
-      const [received] = seen;
-      expect(received).not.toBe(value);
-      expect(isMinted(received)).toBe(true);
-      expect(received?.facts).toStrictEqual({
-        operation: 'token-request',
-        code: 'CERT_HAS_EXPIRED',
+    ] as const) {
+      it(`${_label}: rebuilt, minted here, handed to tls`, () => {
+        const value = make();
+        const seen: IAuthProviderError[] = [];
+        const answer = matchKind(
+          value as IAuthProviderError,
+          recordingHandlers(seen),
+        );
+        assert.equal(answer, `tls:${'CERT_HAS_EXPIRED'.length}`);
+        const [received] = seen;
+        assert.notEqual(received, value);
+        assert.equal(isMinted(received), true);
+        assert.deepEqual(received?.facts, {
+          operation: 'token-request',
+          code: 'CERT_HAS_EXPIRED',
+        });
+        assert.equal(received?.reason?.includes('sk-'), false);
       });
-      expect(received?.reason).not.toContain('sk-');
-    });
+    }
   });
 
   it('an error this copy minted is dispatched as it is, diagnostics included', () => {
@@ -152,13 +155,13 @@ describe('matchKind — version skew', () => {
     );
     const seen: IAuthProviderError[] = [];
     matchKind(minted, recordingHandlers(seen));
-    expect(seen[0]).toBe(minted);
+    assert.equal(seen[0], minted);
   });
 
   it('every kind reaches its own handler', () => {
     const minted = authError['not-prepared']({ provider: 'snc' });
     const seen: IAuthProviderError[] = [];
-    expect(matchKind(minted, recordingHandlers(seen))).toBe('not-prepared');
+    assert.equal(matchKind(minted, recordingHandlers(seen)), 'not-prepared');
   });
 });
 
@@ -196,29 +199,31 @@ describe('unreachableKind — version skew', () => {
   }
 
   it('future-kind falls to default; the result names unfamiliar-error', () => {
-    expect(describeError(FUTURE_KIND as unknown as IAuthProviderError)).toBe(
+    assert.equal(
+      describeError(FUTURE_KIND as unknown as IAuthProviderError),
       'default:16:unfamiliar-error',
     );
   });
 
-  it.each([
+  for (const [_label, value, expected] of [
     ['tls with an unknown code', TLS_UNKNOWN_CODE, 'tls:14'],
     ['snc with an unknown problem', SNC_UNKNOWN_PROBLEM, 'snc:14'],
-  ])('%s reaches its case without throwing', (_label, value, expected) => {
-    expect(describeError(value as IAuthProviderError)).toBe(expected);
-  });
+  ] as const) {
+    it(`${_label} reaches its case without throwing`, () => {
+      assert.equal(describeError(value as IAuthProviderError), expected);
+    });
+  }
 
-  it.each(SKEWED)(
-    '%s through unreachableKind: a minted unknown with operation unfamiliar-error',
-    (_label, value) => {
+  for (const [_label, value] of SKEWED) {
+    it(`${_label} through unreachableKind: a minted unknown with operation unfamiliar-error`, () => {
       const normal = unreachableKind(value as never);
-      expect(isMinted(normal)).toBe(true);
-      expect(normal.kind).toBe('unknown');
-      expect(normal.facts).toStrictEqual({ operation: 'unfamiliar-error' });
-    },
-  );
+      assert.equal(isMinted(normal), true);
+      assert.equal(normal.kind, 'unknown');
+      assert.deepEqual(normal.facts, { operation: 'unfamiliar-error' });
+    });
+  }
 
-  it.each([
+  for (const [_label, value] of [
     ['undefined', undefined],
     [
       'a Proxy whose get throws',
@@ -231,9 +236,11 @@ describe('unreachableKind — version skew', () => {
         },
       ),
     ],
-  ])('%s through unreachableKind: never throws', (_label, value) => {
-    expect(unreachableKind(value as never).facts).toStrictEqual({
-      operation: 'unfamiliar-error',
+  ] as const) {
+    it(`${_label} through unreachableKind: never throws`, () => {
+      assert.deepEqual(unreachableKind(value as never).facts, {
+        operation: 'unfamiliar-error',
+      });
     });
-  });
+  }
 });

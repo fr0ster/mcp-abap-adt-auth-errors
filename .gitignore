@@ -41,3 +41,6 @@ temp/
 
 # Superpowers scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Compiled tests (tsconfig.test.json)
+.test-build/

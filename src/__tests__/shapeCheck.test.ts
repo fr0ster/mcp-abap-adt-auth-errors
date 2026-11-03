@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
@@ -11,6 +12,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import * as typescript from 'typescript';
 import {
   checkProviderShape,
@@ -35,7 +37,8 @@ const ALL_RULES: readonly ShapeRule[] = [1, 2, 3, 4, 5, 6, 7, 8];
 /** The fixtures' base, named by declaration (relative to the fixture root). */
 const FIXTURE_BASE = './src/auth/AuthProviderBase#AuthProviderBase';
 
-jest.setTimeout(120_000);
+/** The bound of each test and hook of this file. */
+const perTest = { timeout: 120_000 };
 
 const trees: string[] = [];
 
@@ -45,9 +48,9 @@ function scratch(prefix: string): string {
   return root;
 }
 
-afterAll(() => {
+after(() => {
   for (const root of trees) rmSync(root, { recursive: true, force: true });
-});
+}, perTest);
 
 /** The fixtures root with its project and site lists, and `overrides`. */
 function onFixtures(overrides: Partial<ShapeCheckOptions>): ShapeCheckOptions {
@@ -85,6 +88,20 @@ function usage(report: ShapeCheckReport): string {
     throw new Error(`expected a usage error, got ${JSON.stringify(report)}`);
   }
   return report.message;
+}
+
+/** Whether `text` holds `first`, then `second` after it on the same line. */
+function onOneLine(text: string, first: string, second: string): boolean {
+  for (
+    let at = text.indexOf(first);
+    at !== -1;
+    at = text.indexOf(first, at + 1)
+  ) {
+    const rest = text.slice(at + first.length);
+    const end = rest.indexOf('\n');
+    if ((end === -1 ? rest : rest.slice(0, end)).includes(second)) return true;
+  }
+  return false;
 }
 
 function fixtureFiles(dir: string): string[] {
@@ -202,62 +219,78 @@ const FIXTURE_REPORT: readonly string[] = [
 describe('the shape check: the fixtures', () => {
   let found: readonly ShapeFinding[];
 
-  beforeAll(() => {
+  before(() => {
     found = findings(checkProviderShape(onFixtures({ base: FIXTURE_BASE })));
-  });
+  }, perTest);
 
-  it('lists every fixture in one of the two tables', () => {
-    expect(fixtureFiles(join(fixtures, 'src')).sort()).toEqual(
+  it('lists every fixture in one of the two tables', perTest, () => {
+    assert.deepEqual(
+      fixtureFiles(join(fixtures, 'src')).sort(),
       [...Object.keys(BREAKING), ...OBEYING].sort(),
     );
   });
 
-  it('reports every finding, in order and in its words', () => {
-    expect(
+  it('reports every finding, in order and in its words', perTest, () => {
+    assert.deepEqual(
       reportLines(checkProviderShape(onFixtures({ base: FIXTURE_BASE }))),
-    ).toEqual(FIXTURE_REPORT);
+      FIXTURE_REPORT,
+    );
   });
 
-  it.each(Object.entries(BREAKING))(
-    '%s is reported for its rule only',
-    (file, [rule, count]) => {
+  for (const [file, [rule, count]] of Object.entries(BREAKING)) {
+    it(`${file} is reported for its rule only`, perTest, () => {
       const mine = found.filter((finding) => finding.file === file);
-      expect(mine.map((finding) => finding.rule)).toEqual(
+      assert.deepEqual(
+        mine.map((finding) => finding.rule),
         Array.from({ length: count }, () => rule),
+      );
+    });
+  }
+
+  for (const file of OBEYING) {
+    it(`${file} is clean`, perTest, () => {
+      assert.deepEqual(
+        found.filter((finding) => finding.file === file),
+        [],
+      );
+    });
+  }
+
+  it('reports `500 as HttpStatus` in any file', perTest, () => {
+    assert.deepEqual(
+      found
+        .filter((finding) => finding.file === 'src/rule4-branded.ts')
+        .map((finding) => [finding.line, finding.rule]),
+      [[4, 4]],
+    );
+  });
+
+  it(
+    'tells a class beside the base to drop `implements IAuthProvider`',
+    perTest,
+    () => {
+      assert.deepEqual(
+        found
+          .filter((finding) => finding.file === 'src/rule1.ts')
+          .map((finding) => finding.what),
+        [
+          'a class implements IAuthProvider; a provider extends AuthProviderBase',
+          'drop `implements IAuthProvider`: AuthProviderBase already implements it',
+        ],
       );
     },
   );
 
-  it.each(OBEYING)('%s is clean', (file) => {
-    expect(found.filter((finding) => finding.file === file)).toEqual([]);
-  });
-
-  it('reports `500 as HttpStatus` in any file', () => {
-    expect(
-      found
-        .filter((finding) => finding.file === 'src/rule4-branded.ts')
-        .map((finding) => [finding.line, finding.rule]),
-    ).toEqual([[4, 4]]);
-  });
-
-  it('tells a class beside the base to drop `implements IAuthProvider`', () => {
-    expect(
-      found
-        .filter((finding) => finding.file === 'src/rule1.ts')
-        .map((finding) => finding.what),
-    ).toEqual([
-      'a class implements IAuthProvider; a provider extends AuthProviderBase',
-      'drop `implements IAuthProvider`: AuthProviderBase already implements it',
-    ]);
-  });
-
-  it('runs only the rules asked for', () => {
+  it('runs only the rules asked for', perTest, () => {
     const only = findings(checkProviderShape(onFixtures({ rules: [5] })));
-    expect(only.length).toBeGreaterThan(0);
-    expect(new Set(only.map((finding) => finding.rule))).toEqual(new Set([5]));
+    assert.ok(only.length > 0);
+    assert.deepEqual(
+      new Set(only.map((finding) => finding.rule)),
+      new Set([5]),
+    );
   });
 
-  it('checks the files it is given, and only those', () => {
+  it('checks the files it is given, and only those', perTest, () => {
     const one = findings(
       checkProviderShape(
         onFixtures({
@@ -269,200 +302,238 @@ describe('the shape check: the fixtures', () => {
         }),
       ),
     );
-    expect(one.map((finding) => [finding.file, finding.rule])).toEqual([
-      ['src/rule3.ts', 3],
-    ]);
+    assert.deepEqual(
+      one.map((finding) => [finding.file, finding.rule]),
+      [['src/rule3.ts', 3]],
+    );
   });
 
-  it('counts a rule listed twice once, whatever the order', () => {
+  it('counts a rule listed twice once, whatever the order', perTest, () => {
     const once = reportLines(
       checkProviderShape(onFixtures({ base: FIXTURE_BASE, rules: [4, 6] })),
     );
-    expect(once.filter((line) => line.includes(': rule 4: ')).length).toBe(12);
-    expect(once.filter((line) => line.includes(': rule 6: ')).length).toBe(2);
-    expect(new Set(once).size).toBe(once.length);
+    assert.equal(once.filter((line) => line.includes(': rule 4: ')).length, 12);
+    assert.equal(once.filter((line) => line.includes(': rule 6: ')).length, 2);
+    assert.equal(new Set(once).size, once.length);
     for (const rules of [
       [4, 4, 6],
       [6, 4],
     ] as const) {
-      expect(
+      assert.deepEqual(
         reportLines(
           checkProviderShape(onFixtures({ base: FIXTURE_BASE, rules })),
         ),
-      ).toEqual(once);
+        once,
+      );
     }
   });
 });
 
 describe('the shape check: this repository', () => {
-  it('is clean with its own rules and site lists', () => {
-    expect(reportLines(checkProviderShape(onRepo({})))).toEqual([]);
+  it('is clean with its own rules and site lists', perTest, () => {
+    assert.deepEqual(reportLines(checkProviderShape(onRepo({}))), []);
   });
 
-  it('is clean under every rule (rules 1–3 against the fixtures’ base)', () => {
-    expect(
-      reportLines(
-        checkProviderShape(
-          onRepo({
-            rules: ALL_RULES,
-            base: './tools/__fixtures__/src/auth/AuthProviderBase#AuthProviderBase',
-          }),
+  it(
+    'is clean under every rule (rules 1–3 against the fixtures’ base)',
+    perTest,
+    () => {
+      assert.deepEqual(
+        reportLines(
+          checkProviderShape(
+            onRepo({
+              rules: ALL_RULES,
+              base: './tools/__fixtures__/src/auth/AuthProviderBase#AuthProviderBase',
+            }),
+          ),
         ),
-      ),
-    ).toEqual([]);
-  });
+        [],
+      );
+    },
+  );
 
-  it('reports the four trusted sites once the list is empty', () => {
+  it('reports the four trusted sites once the list is empty', perTest, () => {
     const empty = scratch('shape-sites-');
-    expect(
+    assert.deepEqual(
       findings(checkProviderShape(onRepo({ rules: [4], sites: empty }))).map(
         (finding) => `${finding.file} ${finding.rule}`,
       ),
-    ).toEqual([
-      'src/mint.ts 4',
-      'src/numbers.ts 4',
-      'src/numbers.ts 4',
-      'src/numbers.ts 4',
-    ]);
+      [
+        'src/mint.ts 4',
+        'src/numbers.ts 4',
+        'src/numbers.ts 4',
+        'src/numbers.ts 4',
+      ],
+    );
   });
 });
 
 describe('the shape check: the base, by declaration', () => {
-  it('a same-named local class, in a file of that name, exempts nothing', () => {
-    expect(
-      findings(
-        checkProviderShape(
-          onFixtures({
-            rules: [1, 2, 3],
-            base: FIXTURE_BASE,
-            files: [
-              join(fixtures, 'src', 'impostor', 'AuthProviderBase.ts'),
-              join(fixtures, 'src', 'impostor', 'provider.ts'),
-            ],
-          }),
-        ),
-      ).map((finding) => [finding.file, finding.rule, finding.what]),
-    ).toEqual([
-      [
-        'src/impostor/AuthProviderBase.ts',
-        1,
-        'a class implements IAuthProvider; a provider extends AuthProviderBase',
-      ],
-      [
-        'src/impostor/provider.ts',
-        1,
-        'a class satisfies IAuthProvider without extending AuthProviderBase',
-      ],
-    ]);
-  });
-
-  it('the base named is verified: each moment only returns guard(…, () => …, () => …)', () => {
-    expect(
-      findings(
-        checkProviderShape(
-          onFixtures({
-            rules: [1],
-            base: './bases/AuthProviderBase#AuthProviderBase',
-            files: [join(fixtures, 'bases', 'AuthProviderBase.ts')],
-          }),
-        ),
-      ).map((finding) => [finding.file, finding.rule, finding.what]),
-    ).toEqual(
-      ['prepare', 'establish', 'authorize', 'rejected'].map((moment) => [
-        'bases/AuthProviderBase.ts',
-        1,
-        `AuthProviderBase.${moment} must only return guard(this.#moments.${moment}, () => …, () => …)`,
-      ]),
-    );
-  });
-
-  it('the base may not replace a verified moment: every write is refused under rule 1', () => {
-    const suffix = '; its moments only delegate to guard';
-    for (const rules of [[1], [2], [3]] as const) {
-      expect(
+  it(
+    'a same-named local class, in a file of that name, exempts nothing',
+    perTest,
+    () => {
+      assert.deepEqual(
         findings(
           checkProviderShape(
             onFixtures({
-              rules,
-              base: './bases/RewritingBase#AuthProviderBase',
-              files: [join(fixtures, 'bases', 'RewritingBase.ts')],
+              rules: [1, 2, 3],
+              base: FIXTURE_BASE,
+              files: [
+                join(fixtures, 'src', 'impostor', 'AuthProviderBase.ts'),
+                join(fixtures, 'src', 'impostor', 'provider.ts'),
+              ],
             }),
           ),
         ).map((finding) => [finding.file, finding.rule, finding.what]),
-      ).toEqual(
         [
-          'AuthProviderBase assigns this.authorize',
-          'AuthProviderBase assigns this.prepare',
-          'Object.assign writes rejected onto AuthProviderBase',
-          'Object.defineProperty writes establish onto AuthProviderBase',
-          'AuthProviderBase assigns AuthProviderBase.prototype.prepare',
-          'Object.assign writes authorize onto AuthProviderBase',
-          'Object.defineProperty writes rejected onto AuthProviderBase',
-        ].map((what) => ['bases/RewritingBase.ts', 1, `${what}${suffix}`]),
+          [
+            'src/impostor/AuthProviderBase.ts',
+            1,
+            'a class implements IAuthProvider; a provider extends AuthProviderBase',
+          ],
+          [
+            'src/impostor/provider.ts',
+            1,
+            'a class satisfies IAuthProvider without extending AuthProviderBase',
+          ],
+        ],
       );
-    }
-  });
+    },
+  );
 
-  it('the base’s own file is scanned for its writes even when only another file is checked', () => {
-    const run = findings(
-      checkProviderShape(
-        onFixtures({
-          rules: [1],
-          base: './bases/RewritingBase#AuthProviderBase',
-          files: [join(fixtures, 'src', 'auth', 'prose.ts')],
-        }),
-      ),
-    );
-    expect(run).toHaveLength(7);
-    for (const finding of run) {
-      expect(finding.file).toBe('bases/RewritingBase.ts');
-      expect(finding.rule).toBe(1);
-    }
-  });
+  it(
+    'the base named is verified: each moment only returns guard(…, () => …, () => …)',
+    perTest,
+    () => {
+      assert.deepEqual(
+        findings(
+          checkProviderShape(
+            onFixtures({
+              rules: [1],
+              base: './bases/AuthProviderBase#AuthProviderBase',
+              files: [join(fixtures, 'bases', 'AuthProviderBase.ts')],
+            }),
+          ),
+        ).map((finding) => [finding.file, finding.rule, finding.what]),
+        ['prepare', 'establish', 'authorize', 'rejected'].map((moment) => [
+          'bases/AuthProviderBase.ts',
+          1,
+          `AuthProviderBase.${moment} must only return guard(this.#moments.${moment}, () => …, () => …)`,
+        ]),
+      );
+    },
+  );
 
-  it('the base may not declare a moment as a constructor parameter property', () => {
-    expect(
-      findings(
+  it(
+    'the base may not replace a verified moment: every write is refused under rule 1',
+    perTest,
+    () => {
+      const suffix = '; its moments only delegate to guard';
+      for (const rules of [[1], [2], [3]] as const) {
+        assert.deepEqual(
+          findings(
+            checkProviderShape(
+              onFixtures({
+                rules,
+                base: './bases/RewritingBase#AuthProviderBase',
+                files: [join(fixtures, 'bases', 'RewritingBase.ts')],
+              }),
+            ),
+          ).map((finding) => [finding.file, finding.rule, finding.what]),
+          [
+            'AuthProviderBase assigns this.authorize',
+            'AuthProviderBase assigns this.prepare',
+            'Object.assign writes rejected onto AuthProviderBase',
+            'Object.defineProperty writes establish onto AuthProviderBase',
+            'AuthProviderBase assigns AuthProviderBase.prototype.prepare',
+            'Object.assign writes authorize onto AuthProviderBase',
+            'Object.defineProperty writes rejected onto AuthProviderBase',
+          ].map((what) => ['bases/RewritingBase.ts', 1, `${what}${suffix}`]),
+        );
+      }
+    },
+  );
+
+  it(
+    'the base’s own file is scanned for its writes even when only another file is checked',
+    perTest,
+    () => {
+      const run = findings(
         checkProviderShape(
           onFixtures({
             rules: [1],
-            base: './bases/ParameterBase#AuthProviderBase',
-            files: [join(fixtures, 'bases', 'ParameterBase.ts')],
+            base: './bases/RewritingBase#AuthProviderBase',
+            files: [join(fixtures, 'src', 'auth', 'prose.ts')],
           }),
         ),
-      ).map((finding) => [finding.file, finding.rule, finding.what]),
-    ).toEqual([
-      [
-        'bases/ParameterBase.ts',
-        1,
-        'AuthProviderBase declares establish as a constructor parameter property; its moments only delegate to guard',
-      ],
-    ]);
-  });
+      );
+      assert.equal(run.length, 7);
+      for (const finding of run) {
+        assert.equal(finding.file, 'bases/RewritingBase.ts');
+        assert.equal(finding.rule, 1);
+      }
+    },
+  );
 
-  it('a provider of the named base is clean; with another base named, it reaches none', () => {
-    const obeys = join(fixtures, 'src', 'obeys.ts');
-    expect(
-      reportLines(
-        checkProviderShape(
-          onFixtures({ rules: [1, 2, 3], base: FIXTURE_BASE, files: [obeys] }),
-        ),
-      ),
-    ).toEqual([]);
-    expect(
-      findings(
-        checkProviderShape(
-          onFixtures({
-            rules: [1],
-            base: './src/impostor/AuthProviderBase#AuthProviderBase',
-            files: [obeys],
-          }),
-        ),
-      ).some((finding) => finding.file === 'src/obeys.ts'),
-    ).toBe(true);
-  });
+  it(
+    'the base may not declare a moment as a constructor parameter property',
+    perTest,
+    () => {
+      assert.deepEqual(
+        findings(
+          checkProviderShape(
+            onFixtures({
+              rules: [1],
+              base: './bases/ParameterBase#AuthProviderBase',
+              files: [join(fixtures, 'bases', 'ParameterBase.ts')],
+            }),
+          ),
+        ).map((finding) => [finding.file, finding.rule, finding.what]),
+        [
+          [
+            'bases/ParameterBase.ts',
+            1,
+            'AuthProviderBase declares establish as a constructor parameter property; its moments only delegate to guard',
+          ],
+        ],
+      );
+    },
+  );
 
-  it.each([
+  it(
+    'a provider of the named base is clean; with another base named, it reaches none',
+    perTest,
+    () => {
+      const obeys = join(fixtures, 'src', 'obeys.ts');
+      assert.deepEqual(
+        reportLines(
+          checkProviderShape(
+            onFixtures({
+              rules: [1, 2, 3],
+              base: FIXTURE_BASE,
+              files: [obeys],
+            }),
+          ),
+        ),
+        [],
+      );
+      assert.equal(
+        findings(
+          checkProviderShape(
+            onFixtures({
+              rules: [1],
+              base: './src/impostor/AuthProviderBase#AuthProviderBase',
+              files: [obeys],
+            }),
+          ),
+        ).some((finding) => finding.file === 'src/obeys.ts'),
+        true,
+      );
+    },
+  );
+
+  for (const [_label, overrides] of [
     ['rules 1–3 without a base', { rules: [1] }],
     ['rule 2 without a base', { rules: [2] }],
     ['rule 3 without a base', { rules: [3] }],
@@ -483,42 +554,52 @@ describe('the shape check: the base, by declaration', () => {
       'an export that is not a class',
       { rules: [1], base: '@mcp-abap-adt/interfaces-auth#IAuthProvider' },
     ],
-  ] as const)('refuses %s', (_label, overrides) => {
-    expect(usage(checkProviderShape(onFixtures(overrides)))).toMatch(/--base/);
-  });
+  ] as const) {
+    it(`refuses ${_label}`, perTest, () => {
+      assert.ok(
+        usage(checkProviderShape(onFixtures(overrides))).includes('--base'),
+      );
+    });
+  }
 });
 
 describe('the shape check: usage', () => {
-  it('refuses to run without rules', () => {
+  it('refuses to run without rules', perTest, () => {
     const { rules: _none, ...options } = onRepo({});
-    expect(
+    assert.equal(
       usage(checkProviderShape(options as unknown as ShapeCheckOptions)),
-    ).toBe('--rules is required');
+      '--rules is required',
+    );
   });
 
-  it('refuses a rule it does not know', () => {
-    expect(
+  it('refuses a rule it does not know', perTest, () => {
+    assert.equal(
       usage(
         checkProviderShape(
           onRepo({ rules: [4, 9] as unknown as readonly ShapeRule[] }),
         ),
       ),
-    ).toBe('unknown rule 9');
+      'unknown rule 9',
+    );
   });
 
-  it('refuses a file that does not exist', () => {
-    expect(
-      usage(
-        checkProviderShape(
-          onRepo({ rules: [4], files: [join(repo, 'src', 'nope.ts')] }),
+  it('refuses a file that does not exist', perTest, () => {
+    assert.ok(
+      onOneLine(
+        usage(
+          checkProviderShape(
+            onRepo({ rules: [4], files: [join(repo, 'src', 'nope.ts')] }),
+          ),
         ),
+        'no such file: ',
+        'nope.ts',
       ),
-    ).toMatch(/no such file: .*nope\.ts/);
+    );
   });
 
-  it('refuses a root with nothing to check', () => {
+  it('refuses a root with nothing to check', perTest, () => {
     const root = scratch('shape-empty-');
-    expect(
+    assert.ok(
       usage(
         checkProviderShape({
           typescript,
@@ -527,64 +608,73 @@ describe('the shape check: usage', () => {
           project: null,
           sites: null,
         }),
-      ),
-    ).toMatch(/no file to check/);
+      ).includes('no file to check'),
+    );
   });
 
-  it('refuses rules 4 and 5 without the brands of interfaces-auth 6', () => {
-    const root = scratch('shape-old-');
-    const contract = join(
-      root,
-      'node_modules',
-      '@mcp-abap-adt',
-      'interfaces-auth',
-    );
-    mkdirSync(contract, { recursive: true });
-    writeFileSync(
-      join(contract, 'package.json'),
-      JSON.stringify({
-        name: '@mcp-abap-adt/interfaces-auth',
-        version: '5.0.0',
-        types: 'index.d.ts',
-      }),
-    );
-    writeFileSync(
-      join(contract, 'index.d.ts'),
-      'export interface IAuthRefusal { readonly reason: string }\n',
-    );
-    writeFileSync(
-      join(root, 'tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          module: 'node16',
-          moduleResolution: 'node16',
-        },
-        include: ['src'],
-      }),
-    );
-    mkdirSync(join(root, 'src'));
-    writeFileSync(
-      join(root, 'src', 'old.ts'),
-      "import type { IAuthRefusal } from '@mcp-abap-adt/interfaces-auth';\nexport const r = {} as IAuthRefusal;\n",
-    );
-    const options = {
-      typescript,
-      root,
-      project: join(root, 'tsconfig.json'),
-      sites: null,
-    };
-    for (const rules of [[4], [5]] as const) {
-      expect(usage(checkProviderShape({ ...options, rules }))).toMatch(
-        /need the brands .* not found: minted/,
+  it(
+    'refuses rules 4 and 5 without the brands of interfaces-auth 6',
+    perTest,
+    () => {
+      const root = scratch('shape-old-');
+      const contract = join(
+        root,
+        'node_modules',
+        '@mcp-abap-adt',
+        'interfaces-auth',
       );
-    }
-    expect(reportLines(checkProviderShape({ ...options, rules: [6] }))).toEqual(
-      [],
-    );
-  });
+      mkdirSync(contract, { recursive: true });
+      writeFileSync(
+        join(contract, 'package.json'),
+        JSON.stringify({
+          name: '@mcp-abap-adt/interfaces-auth',
+          version: '5.0.0',
+          types: 'index.d.ts',
+        }),
+      );
+      writeFileSync(
+        join(contract, 'index.d.ts'),
+        'export interface IAuthRefusal { readonly reason: string }\n',
+      );
+      writeFileSync(
+        join(root, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'node16',
+            moduleResolution: 'node16',
+          },
+          include: ['src'],
+        }),
+      );
+      mkdirSync(join(root, 'src'));
+      writeFileSync(
+        join(root, 'src', 'old.ts'),
+        "import type { IAuthRefusal } from '@mcp-abap-adt/interfaces-auth';\nexport const r = {} as IAuthRefusal;\n",
+      );
+      const options = {
+        typescript,
+        root,
+        project: join(root, 'tsconfig.json'),
+        sites: null,
+      };
+      for (const rules of [[4], [5]] as const) {
+        assert.ok(
+          onOneLine(
+            usage(checkProviderShape({ ...options, rules })),
+            'need the brands ',
+            ' not found: minted',
+          ),
+        );
+      }
+      assert.deepEqual(
+        reportLines(checkProviderShape({ ...options, rules: [6] })),
+        [],
+      );
+    },
+  );
 
-  it('refuses a program that does not type-check', () => {
+  it('refuses a program that does not type-check', perTest, () => {
     const root = scratch('shape-broken-');
     writeFileSync(
       join(root, 'tsconfig.json'),
@@ -602,52 +692,63 @@ describe('the shape check: usage', () => {
       project: join(root, 'tsconfig.json'),
       sites: null,
     });
-    expect(report.status).toBe('type-errors');
-    expect(reportLines(report).join('\n')).toMatch(/broken\.ts/);
+    assert.equal(report.status, 'type-errors');
+    assert.ok(reportLines(report).join('\n').includes('broken.ts'));
   });
 });
 
 describe('the shape check: no state between calls', () => {
-  it('decides on a package by its name as it is when the check runs', () => {
-    const root = scratch('shape-state-');
-    const installed = realpathSync(
-      join(repo, 'node_modules', '@mcp-abap-adt', 'interfaces-auth'),
-    );
-    const copy = join(root, 'node_modules', '@mcp-abap-adt', 'interfaces-auth');
-    mkdirSync(dirname(copy), { recursive: true });
-    cpSync(installed, copy, { recursive: true, dereference: true });
-    mkdirSync(join(root, 'src'));
-    writeFileSync(
-      join(root, 'src', 'forged.ts'),
-      "import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';\nexport const forged = {} as IAuthProviderError;\n",
-    );
-    const options: ShapeCheckOptions = {
-      typescript,
-      rules: [4],
-      root,
-      project: null,
-      sites: null,
-    };
-    const first = findings(checkProviderShape(options));
-    expect(first.map((finding) => [finding.file, finding.rule])).toEqual([
-      ['src/forged.ts', 4],
-    ]);
-    const manifest = join(copy, 'package.json');
-    writeFileSync(
-      manifest,
-      JSON.stringify({
-        ...(JSON.parse(readFileSync(manifest, 'utf8')) as object),
-        name: '@example/not-interfaces-auth',
-      }),
-    );
-    expect(usage(checkProviderShape(options))).toBe(
-      'rules 4 and 5 need the brands of @mcp-abap-adt/interfaces-auth 6.0.0 or later; not found: minted, httpStatusBrand, countBrand, portBrand',
-    );
-  });
+  it(
+    'decides on a package by its name as it is when the check runs',
+    perTest,
+    () => {
+      const root = scratch('shape-state-');
+      const installed = realpathSync(
+        join(repo, 'node_modules', '@mcp-abap-adt', 'interfaces-auth'),
+      );
+      const copy = join(
+        root,
+        'node_modules',
+        '@mcp-abap-adt',
+        'interfaces-auth',
+      );
+      mkdirSync(dirname(copy), { recursive: true });
+      cpSync(installed, copy, { recursive: true, dereference: true });
+      mkdirSync(join(root, 'src'));
+      writeFileSync(
+        join(root, 'src', 'forged.ts'),
+        "import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';\nexport const forged = {} as IAuthProviderError;\n",
+      );
+      const options: ShapeCheckOptions = {
+        typescript,
+        rules: [4],
+        root,
+        project: null,
+        sites: null,
+      };
+      const first = findings(checkProviderShape(options));
+      assert.deepEqual(
+        first.map((finding) => [finding.file, finding.rule]),
+        [['src/forged.ts', 4]],
+      );
+      const manifest = join(copy, 'package.json');
+      writeFileSync(
+        manifest,
+        JSON.stringify({
+          ...(JSON.parse(readFileSync(manifest, 'utf8')) as object),
+          name: '@example/not-interfaces-auth',
+        }),
+      );
+      assert.equal(
+        usage(checkProviderShape(options)),
+        'rules 4 and 5 need the brands of @mcp-abap-adt/interfaces-auth 6.0.0 or later; not found: minted, httpStatusBrand, countBrand, portBrand',
+      );
+    },
+  );
 });
 
 describe('the shape check: the published command', () => {
-  it('is in the package, without its fixtures or site lists', () => {
+  it('is in the package, without its fixtures or site lists', perTest, () => {
     const output = execFileSync(
       'npm',
       ['pack', '--dry-run', '--json', '--ignore-scripts'],
@@ -659,7 +760,7 @@ describe('the shape check: the published command', () => {
     const tools = pack.files
       .map((file) => file.path)
       .filter((path) => path.startsWith('tools/'));
-    expect(tools).toEqual(['tools/check-provider-shape.mjs']);
+    assert.deepEqual(tools, ['tools/check-provider-shape.mjs']);
   });
 });
 
@@ -670,21 +771,22 @@ describe('the shape check: the publishing gate', () => {
     }
   ).scripts;
 
-  it('test:shape runs this file', () => {
-    expect(scripts['test:shape']).toBe(
-      'npm test -- src/__tests__/shapeCheck.test.ts',
+  it('test:shape runs this file', perTest, () => {
+    assert.equal(
+      scripts['test:shape'],
+      'npm run --silent test:build && node tools/run-tests.mjs .test-build/__tests__/shapeCheck.test.js',
     );
   });
 
-  it('prepublishOnly names npm run test:shape', () => {
-    expect(scripts.prepublishOnly).toContain('npm run test:shape');
+  it('prepublishOnly names npm run test:shape', perTest, () => {
+    assert.ok(scripts.prepublishOnly?.includes('npm run test:shape'));
   });
 
-  it('lint:check is Biome alone: it runs no other command', () => {
+  it('lint:check is Biome alone: it runs no other command', perTest, () => {
     const lint = scripts['lint:check'] ?? '';
-    expect(lint.startsWith('npx biome check ')).toBe(true);
+    assert.equal(lint.startsWith('biome check '), true);
     for (const joiner of ['&', ';', '|']) {
-      expect(lint.includes(joiner)).toBe(false);
+      assert.equal(lint.includes(joiner), false);
     }
   });
 });

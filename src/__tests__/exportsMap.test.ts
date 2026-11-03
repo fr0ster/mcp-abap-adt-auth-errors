@@ -1,6 +1,8 @@
+import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import {
   type PackedConsumer,
   packedConsumer,
@@ -25,30 +27,34 @@ function inConsumer(script: string): string {
   return consumer.run(script);
 }
 
-beforeAll(() => {
-  consumer = packedConsumer({ withTypescript: true });
-  // The typed consumers check every declaration, interfaces-auth's included,
-  // which names Node's types: the repository's @types/node (and the
-  // undici-types it holds) are linked in, as a consumer has them installed.
-  mkdirSync(join(consumer.dir, 'node_modules/@types'));
-  symlinkSync(
-    join(root, 'node_modules/@types/node'),
-    join(consumer.dir, 'node_modules/@types/node'),
-    'dir',
-  );
-}, 60_000);
+before(
+  () => {
+    consumer = packedConsumer({ withTypescript: true });
+    // The typed consumers check every declaration, interfaces-auth's included,
+    // which names Node's types: the repository's @types/node (and the
+    // undici-types it holds) are linked in, as a consumer has them installed.
+    mkdirSync(join(consumer.dir, 'node_modules/@types'));
+    symlinkSync(
+      join(root, 'node_modules/@types/node'),
+      join(consumer.dir, 'node_modules/@types/node'),
+      'dir',
+    );
+  },
+  { timeout: 60_000 },
+);
 
-afterAll(() => {
+after(() => {
   consumer?.remove();
 });
 
 describe('the exports map', () => {
   it('the entry resolves by name and loads', () => {
-    expect(
+    assert.equal(
       inConsumer(
         "console.log(typeof require('@mcp-abap-adt/auth-errors').classify)",
       ),
-    ).toBe('function');
+      'function',
+    );
   });
 
   it('a deep path by name is ERR_PACKAGE_PATH_NOT_EXPORTED', () => {
@@ -61,12 +67,15 @@ describe('the exports map', () => {
       '@mcp-abap-adt/auth-errors/dist/tables',
       '@mcp-abap-adt/auth-errors/dist/tables.js',
     ]) {
-      expect([
-        deep,
-        inConsumer(
-          `try { require(${JSON.stringify(deep)}); console.log('loaded') } catch (e) { console.log(e.code) }`,
-        ),
-      ]).toEqual([deep, 'ERR_PACKAGE_PATH_NOT_EXPORTED']);
+      assert.deepEqual(
+        [
+          deep,
+          inConsumer(
+            `try { require(${JSON.stringify(deep)}); console.log('loaded') } catch (e) { console.log(e.code) }`,
+          ),
+        ],
+        [deep, 'ERR_PACKAGE_PATH_NOT_EXPORTED'],
+      );
     }
   });
 
@@ -74,34 +83,36 @@ describe('the exports map', () => {
     const resolved = inConsumer(
       "console.log(require.resolve('@mcp-abap-adt/auth-errors/tools/check-provider-shape.mjs'))",
     );
-    expect(readFileSync(resolved, 'utf8')).toBe(
+    assert.equal(
+      readFileSync(resolved, 'utf8'),
       readFileSync(join(root, 'tools/check-provider-shape.mjs'), 'utf8'),
     );
   });
 
   it('the shape-check module resolves by name and loads', () => {
-    expect(
+    assert.equal(
       inConsumer(
         "const m = require('@mcp-abap-adt/auth-errors/shape-check'); console.log([typeof m.checkProviderShape, typeof m.formatFinding, typeof m.reportLines].join())",
       ),
-    ).toBe('function,function,function');
+      'function,function,function',
+    );
   });
 
   it('the tables module resolves by name and loads', () => {
-    expect(
+    assert.equal(
       inConsumer(
         "const m = require('@mcp-abap-adt/auth-errors/tables'); console.log([typeof m.render, typeof m.contract, typeof m.rowsFor, typeof m.markdownCell, typeof m.withRegions, typeof m.tableWriteMode].join())",
       ),
-    ).toBe('function,object,function,function,function,function');
+      'function,object,function,function,function,function',
+    );
   });
 
-  it.each([
+  for (const [mode, resolution] of [
     ['node', { module: 'commonjs', moduleResolution: 'node' }],
     ['node16', { module: 'node16', moduleResolution: 'node16' }],
     ['bundler', { module: 'esnext', moduleResolution: 'bundler' }],
-  ])(
-    'a consumer on moduleResolution %s type-checks an import of the entry, the shape check and the tables',
-    (mode, resolution) => {
+  ] as const) {
+    it(`a consumer on moduleResolution ${mode} type-checks an import of the entry, the shape check and the tables`, () => {
       if (consumer === undefined) throw new Error('no consumer');
       const project = join(consumer.dir, `typed-${mode}`);
       mkdirSync(project);
@@ -142,15 +153,16 @@ describe('the exports map', () => {
         [join(root, 'node_modules/typescript/bin/tsc'), '-p', project],
         { cwd: project, encoding: 'utf8' },
       );
-      expect([mode, tsc.status, tsc.stdout]).toEqual([mode, 0, '']);
-    },
-  );
+      assert.deepEqual([mode, tsc.status, tsc.stdout], [mode, 0, '']);
+    });
+  }
 
   it('package.json resolves by name', () => {
-    expect(
+    assert.equal(
       inConsumer(
         "console.log(require('@mcp-abap-adt/auth-errors/package.json').name)",
       ),
-    ).toBe('@mcp-abap-adt/auth-errors');
+      '@mcp-abap-adt/auth-errors',
+    );
   });
 });

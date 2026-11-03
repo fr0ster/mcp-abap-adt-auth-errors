@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   AUTH_PROVIDER_ERROR_KINDS,
   type AuthProviderErrorKind,
@@ -86,73 +88,77 @@ const ONE_PER_KIND: Record<string, () => IAuthProviderError> = {
 
 describe('authError', () => {
   it('has one builder per kind, and nothing else', () => {
-    expect(Object.keys(authError).sort()).toEqual(
+    assert.deepEqual(
+      Object.keys(authError).sort(),
       [...AUTH_PROVIDER_ERROR_KINDS].sort(),
     );
     for (const kind of AUTH_PROVIDER_ERROR_KINDS) {
-      expect(typeof authError[kind]).toBe('function');
+      assert.equal(typeof authError[kind], 'function');
     }
-    expect(Object.keys(ONE_PER_KIND).sort()).toEqual(
+    assert.deepEqual(
+      Object.keys(ONE_PER_KIND).sort(),
       [...AUTH_PROVIDER_ERROR_KINDS].sort(),
     );
   });
 
   it('is frozen: no builder can be replaced', () => {
-    expect(Object.isFrozen(authError)).toBe(true);
-    expect(() => {
+    assert.equal(Object.isFrozen(authError), true);
+    assert.throws(() => {
       authError.unknown = () => ({}) as IAuthProviderError;
-    }).toThrow(TypeError);
+    }, TypeError);
   });
 
-  describe.each(AUTH_PROVIDER_ERROR_KINDS)('kind %s', (kind) => {
-    const make = (): IAuthProviderError => {
-      const builder = ONE_PER_KIND[kind];
-      if (builder === undefined) throw new Error(`no case for ${kind}`);
-      return builder();
-    };
+  for (const kind of AUTH_PROVIDER_ERROR_KINDS) {
+    describe(`kind ${kind}`, () => {
+      const make = (): IAuthProviderError => {
+        const builder = ONE_PER_KIND[kind];
+        if (builder === undefined) throw new Error(`no case for ${kind}`);
+        return builder();
+      };
 
-    it('mints an error of that kind, with words', () => {
-      const error = make();
-      expect(error.kind).toBe(kind);
-      expect(isMinted(error)).toBe(true);
-      expect(typeof error.reason).toBe('string');
-      expect(error.reason.length).toBeGreaterThan(0);
-    });
+      it('mints an error of that kind, with words', () => {
+        const error = make();
+        assert.equal(error.kind, kind);
+        assert.equal(isMinted(error), true);
+        assert.equal(typeof error.reason, 'string');
+        assert.ok(error.reason.length > 0);
+      });
 
-    it('is frozen deeply', () => {
-      expect(deeplyFrozen(make())).toBe(true);
-    });
+      it('is frozen deeply', () => {
+        assert.equal(deeplyFrozen(make()), true);
+      });
 
-    it('carries no undefined-valued key', () => {
-      expect(undefinedKeys(make())).toEqual([]);
-    });
+      it('carries no undefined-valued key', () => {
+        assert.deepEqual(undefinedKeys(make()), []);
+      });
 
-    it('mints a new object on each call', () => {
-      expect(make()).not.toBe(make());
-      expect(make()).toStrictEqual(make());
+      it('mints a new object on each call', () => {
+        assert.notEqual(make(), make());
+        assert.deepEqual(make(), make());
+      });
     });
-  });
+  }
 
   it('sets variant from the facts for the kinds that carry one', () => {
     const saml = authError['saml-assertion']({
       rule: 'duplicate-id',
       check: 'duplicateId',
     });
-    expect(saml.variant).toBe('duplicate-id');
+    assert.equal(saml.variant, 'duplicate-id');
     const snc = authError.snc({ problem: 'logon-refused' });
-    expect(snc.variant).toBe('logon-refused');
+    assert.equal(snc.variant, 'logon-refused');
     const config = authError.configuration({
       case: 'snc-qop-invalid',
       fields: ['qop'],
       allowed: 'snc-qop',
     });
-    expect(config.variant).toBe('snc-qop-invalid');
+    assert.equal(config.variant, 'snc-qop-invalid');
   });
 
   it('gives a plain kind no variant key', () => {
     const error = authError['client-certificate']({ problem: 'incomplete' });
-    expect(Object.keys(error)).not.toContain('variant');
-    expect(Object.keys(error)).not.toContain('diagnostics');
+    assert.ok(!Object.keys(error).includes('variant'));
+    assert.ok(!Object.keys(error).includes('diagnostics'));
   });
 
   it('omits an absent fact, and a fact given as undefined', () => {
@@ -164,7 +170,7 @@ describe('authError', () => {
       oauthError: undefined,
       code: 'ECONNREFUSED',
     });
-    expect(error.facts).toStrictEqual({
+    assert.deepEqual(error.facts, {
       operation: 'token-request',
       problem: 'no-response',
       code: 'ECONNREFUSED',
@@ -176,15 +182,15 @@ describe('authError', () => {
       wire: 'http',
       refused: 'logon-parameters',
     });
-    expect(Object.keys(error)).not.toContain('hint');
+    assert.ok(!Object.keys(error).includes('hint'));
   });
 
   it('keeps the facts it was given, copied', () => {
     const facts = { problem: 'expired' };
     const error = authError['client-certificate'](facts);
-    expect(error.facts).toStrictEqual({ problem: 'expired' });
-    expect(error.facts).not.toBe(facts);
-    expect(Object.isFrozen(facts)).toBe(false);
+    assert.deepEqual(error.facts, { problem: 'expired' });
+    assert.notEqual(error.facts, facts);
+    assert.equal(Object.isFrozen(facts), false);
   });
 
   describe('configuration fields', () => {
@@ -193,7 +199,7 @@ describe('authError', () => {
         case: 'required-fields-missing',
         fields: ['uaaUrl', 'clientId', 'uaaUrl', 'clientSecret', 'clientId'],
       });
-      expect(error.facts).toStrictEqual({
+      assert.deepEqual(error.facts, {
         case: 'required-fields-missing',
         fields: ['uaaUrl', 'clientId', 'clientSecret'],
       });
@@ -218,7 +224,7 @@ describe('authError', () => {
         fields: names,
       });
       const facts = error.facts as { fields: readonly string[] };
-      expect(facts.fields).toEqual([
+      assert.deepEqual(facts.fields, [
         'acsUrl',
         'audience',
         'clientId',
@@ -237,7 +243,7 @@ describe('authError', () => {
         fields,
       });
       fields.push('clientSecret');
-      expect((error.facts as { fields: string[] }).fields).toEqual([
+      assert.deepEqual((error.facts as { fields: string[] }).fields, [
         'clientId',
       ]);
     });
@@ -262,8 +268,8 @@ describe('authError', () => {
         candidates: readonly unknown[];
         moreCandidates?: number;
       };
-      expect(facts.candidates).toHaveLength(5);
-      expect(facts.moreCandidates).toBe(2);
+      assert.equal(facts.candidates.length, 5);
+      assert.equal(facts.moreCandidates, 2);
     });
 
     it('adds the cut candidates to a moreCandidates given', () => {
@@ -273,7 +279,8 @@ describe('authError', () => {
         candidates: bearer(6),
         moreCandidates: count(3),
       });
-      expect((error.facts as { moreCandidates?: number }).moreCandidates).toBe(
+      assert.equal(
+        (error.facts as { moreCandidates?: number }).moreCandidates,
         4,
       );
     });
@@ -284,10 +291,11 @@ describe('authError', () => {
         check: 'bearerConfirmation',
         candidates: bearer(5),
       });
-      expect(Object.keys(error.facts)).not.toContain('moreCandidates');
-      expect(
-        (error.facts as { candidates: readonly unknown[] }).candidates,
-      ).toHaveLength(5);
+      assert.ok(!Object.keys(error.facts).includes('moreCandidates'));
+      assert.equal(
+        (error.facts as { candidates: readonly unknown[] }).candidates.length,
+        5,
+      );
     });
 
     it('keeps at most eight SNC candidates', () => {
@@ -296,9 +304,10 @@ describe('authError', () => {
         searched: true,
         candidates: snc(11),
       });
-      expect(
-        (error.facts as { candidates: readonly unknown[] }).candidates,
-      ).toHaveLength(8);
+      assert.equal(
+        (error.facts as { candidates: readonly unknown[] }).candidates.length,
+        8,
+      );
     });
 
     it('aligns candidatePaths with the capped candidates', () => {
@@ -307,7 +316,7 @@ describe('authError', () => {
         { problem: 'library-not-found', searched: true, candidates: snc(11) },
         { candidatePaths: paths },
       );
-      expect(error.diagnostics).toStrictEqual({
+      assert.deepEqual(error.diagnostics, {
         candidatePaths: paths.slice(0, 8),
       });
     });
@@ -327,10 +336,10 @@ describe('authError', () => {
       const [kept] = (
         error.facts as { candidates: readonly { archs: string[] }[] }
       ).candidates;
-      expect(kept).not.toBe(candidate);
-      expect(kept?.archs).toEqual(['x64']);
-      expect(Object.isFrozen(kept)).toBe(true);
-      expect(Object.isFrozen(kept?.archs)).toBe(true);
+      assert.notEqual(kept, candidate);
+      assert.deepEqual(kept?.archs, ['x64']);
+      assert.equal(Object.isFrozen(kept), true);
+      assert.equal(Object.isFrozen(kept?.archs), true);
     });
   });
 
@@ -340,10 +349,10 @@ describe('authError', () => {
         { rule: 'untrusted-issuer', check: 'issuer' },
         { issuer: 'https://idp.example/' },
       );
-      expect(error.diagnostics).toStrictEqual({
+      assert.deepEqual(error.diagnostics, {
         issuer: 'https://idp.example/',
       });
-      expect(isMinted(error)).toBe(true);
+      assert.equal(isMinted(error), true);
     });
 
     it('drops a field the variant does not permit (a JavaScript caller)', () => {
@@ -351,7 +360,7 @@ describe('authError', () => {
         { rule: 'duplicate-id', check: 'duplicateId' },
         { issuer: 'https://idp.example/', id: '_a1' },
       );
-      expect(error.diagnostics).toStrictEqual({ id: '_a1' });
+      assert.deepEqual(error.diagnostics, { id: '_a1' });
     });
 
     it('drops every field of a variant that permits none', () => {
@@ -359,8 +368,8 @@ describe('authError', () => {
         { problem: 'logon-refused' },
         { library: '/opt/libsapcrypto.so' },
       );
-      expect(Object.keys(error)).not.toContain('diagnostics');
-      expect(isMinted(error)).toBe(true);
+      assert.ok(!Object.keys(error).includes('diagnostics'));
+      assert.equal(isMinted(error), true);
     });
 
     it('drops a diagnostic of a plain kind (a JavaScript caller)', () => {
@@ -368,7 +377,7 @@ describe('authError', () => {
         { problem: 'expired' },
         { library: '/opt/libsapcrypto.so' },
       );
-      expect(Object.keys(error)).not.toContain('diagnostics');
+      assert.ok(!Object.keys(error).includes('diagnostics'));
     });
 
     it('drops a refused value and still mints the error', () => {
@@ -376,9 +385,9 @@ describe('authError', () => {
         { rule: 'untrusted-issuer', check: 'issuer' },
         { issuer: 'https://idp.example/\nforged: line' },
       );
-      expect(Object.keys(error)).not.toContain('diagnostics');
-      expect(isMinted(error)).toBe(true);
-      expect(error.kind).toBe('saml-assertion');
+      assert.ok(!Object.keys(error).includes('diagnostics'));
+      assert.equal(isMinted(error), true);
+      assert.equal(error.kind, 'saml-assertion');
     });
 
     it('keeps the admitted ones of several and drops the refused', () => {
@@ -392,7 +401,7 @@ describe('authError', () => {
           strategyUri: 'http://localhost:61001/callback?code=secret',
         },
       );
-      expect(error.diagnostics).toStrictEqual({
+      assert.deepEqual(error.diagnostics, {
         strategyUri: 'http://localhost:61001/callback',
       });
     });
@@ -410,8 +419,8 @@ describe('authError', () => {
         },
       );
       const error = authError.snc({ problem: 'no-credential' }, hostile);
-      expect(Object.keys(error)).not.toContain('diagnostics');
-      expect(isMinted(error)).toBe(true);
+      assert.ok(!Object.keys(error).includes('diagnostics'));
+      assert.equal(isMinted(error), true);
     });
 
     it('freezes the diagnostics', () => {
@@ -419,17 +428,17 @@ describe('authError', () => {
         { problem: 'library-not-found', candidates: [] },
         { candidatePaths: [] },
       );
-      expect(deeplyFrozen(error)).toBe(true);
+      assert.equal(deeplyFrozen(error), true);
     });
   });
 
   describe('RF3: a minted error cannot be changed', () => {
     it('refuses an assignment to reason', () => {
       const error = authError['client-certificate']({ problem: 'expired' });
-      expect(() => {
+      assert.throws(() => {
         (error as { reason: string }).reason = 'forged';
-      }).toThrow(TypeError);
-      expect(error.reason).toBe('the client certificate has expired');
+      }, TypeError);
+      assert.equal(error.reason, 'the client certificate has expired');
     });
 
     it('refuses a change to a nested facts array', () => {
@@ -438,23 +447,23 @@ describe('authError', () => {
         fields: ['clientId'],
       });
       const fields = (error.facts as { fields: string[] }).fields;
-      expect(() => {
+      assert.throws(() => {
         fields.push('clientSecret');
-      }).toThrow(TypeError);
-      expect(() => {
+      }, TypeError);
+      assert.throws(() => {
         fields[0] = 'password';
-      }).toThrow(TypeError);
-      expect(fields).toEqual(['clientId']);
+      }, TypeError);
+      assert.deepEqual(fields, ['clientId']);
     });
 
     it('refuses a new key on the error and on its facts', () => {
       const error = authError.unknown({ operation: 'refresh' });
-      expect(() => {
+      assert.throws(() => {
         (error as unknown as Record<string, unknown>).message = 'secret';
-      }).toThrow(TypeError);
-      expect(() => {
+      }, TypeError);
+      assert.throws(() => {
         (error.facts as Record<string, unknown>).status = 500;
-      }).toThrow(TypeError);
+      }, TypeError);
     });
   });
 });
@@ -484,15 +493,15 @@ describe('a builder never throws on what a caller hands it', () => {
       },
     };
     const error = authError.unknown(facts);
-    expect(error.facts).toStrictEqual({ operation: 'refresh' });
-    expect(isMinted(error)).toBe(true);
+    assert.deepEqual(error.facts, { operation: 'refresh' });
+    assert.equal(isMinted(error), true);
   });
 
   it('facts whose every trap throws lack their required facts: the unfamiliar error', () => {
     const error = authError.unknown(hostile());
-    expect(error.kind).toBe('unknown');
-    expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
-    expect(isMinted(error)).toBe(true);
+    assert.equal(error.kind, 'unknown');
+    assert.deepEqual(error.facts, { operation: 'unfamiliar-error' });
+    assert.equal(isMinted(error), true);
   });
 
   it('reads a revoked Proxy as absent', () => {
@@ -502,7 +511,7 @@ describe('a builder never throws on what a caller hands it', () => {
       problem: 'library-not-found',
       candidates: proxy,
     });
-    expect(error.facts).toStrictEqual({ problem: 'library-not-found' });
+    assert.deepEqual(error.facts, { problem: 'library-not-found' });
   });
 
   it('reads a hostile array element as absent', () => {
@@ -510,7 +519,7 @@ describe('a builder never throws on what a caller hands it', () => {
       case: 'required-fields-missing',
       fields: ['clientId', hostile(), 'uaaUrl'],
     });
-    expect((error.facts as { fields: unknown[] }).fields).toEqual([
+    assert.deepEqual((error.facts as { fields: unknown[] }).fields, [
       'clientId',
       'uaaUrl',
     ]);
@@ -526,10 +535,10 @@ describe('a builder never throws on what a caller hands it', () => {
       problem: 'library-not-found',
       candidates: [candidate],
     });
-    expect((error.facts as { candidates: unknown[] }).candidates).toStrictEqual(
-      [{ source: 'SNC_LIB', reason: 'missing' }],
-    );
-    expect(Object.isFrozen(error)).toBe(true);
+    assert.deepEqual((error.facts as { candidates: unknown[] }).candidates, [
+      { source: 'SNC_LIB', reason: 'missing' },
+    ]);
+    assert.equal(Object.isFrozen(error), true);
   });
 
   it('drops holes and undefined elements from fields and candidates', () => {
@@ -539,7 +548,7 @@ describe('a builder never throws on what a caller hands it', () => {
       case: 'required-fields-missing',
       fields,
     });
-    expect((config.facts as { fields: unknown[] }).fields).toEqual([
+    assert.deepEqual((config.facts as { fields: unknown[] }).fields, [
       'clientId',
       'uaaUrl',
     ]);
@@ -549,7 +558,7 @@ describe('a builder never throws on what a caller hands it', () => {
       // biome-ignore lint/suspicious/noSparseArray: the hole is the case
       candidates: [, undefined, { reason: 'method-not-bearer' }],
     });
-    expect((saml.facts as { candidates: unknown[] }).candidates).toStrictEqual([
+    assert.deepEqual((saml.facts as { candidates: unknown[] }).candidates, [
       { reason: 'method-not-bearer' },
     ]);
   });
@@ -574,14 +583,16 @@ describe('a builder never throws on what a caller hands it', () => {
       case: 'required-fields-missing',
       fields,
     });
-    expect((error.facts as { fields: unknown[] }).fields).toEqual(['clientId']);
+    assert.deepEqual((error.facts as { fields: unknown[] }).fields, [
+      'clientId',
+    ]);
   });
 
   it('a __proto__ key never reaches the prototype of the facts', () => {
     const facts = JSON.parse('{"operation":"refresh","__proto__":{"x":1}}');
     const error = authError.unknown(facts);
-    expect(Object.getPrototypeOf(error.facts)).toBe(Object.prototype);
-    expect(error.facts).toStrictEqual({ operation: 'refresh' });
+    assert.equal(Object.getPrototypeOf(error.facts), Object.prototype);
+    assert.deepEqual(error.facts, { operation: 'refresh' });
   });
 });
 
@@ -784,13 +795,15 @@ describe('F1: every fact value is read own and checked, in builders and render',
     ],
   ];
 
-  it.each(OPTIONAL)('%s: dropped', (_label, kind, facts, kept) => {
-    const error = authError[kind as AuthProviderErrorKind](facts);
-    expect(error.kind).toBe(kind);
-    expect(error.facts).toStrictEqual(kept);
-    expect(JSON.stringify(error)).not.toContain('MARKER');
-    expect(render(kind, facts)).toStrictEqual(render(kind, kept));
-  });
+  for (const [_label, kind, facts, kept] of OPTIONAL) {
+    it(`${_label}: dropped`, () => {
+      const error = authError[kind as AuthProviderErrorKind](facts);
+      assert.equal(error.kind, kind);
+      assert.deepEqual(error.facts, kept);
+      assert.ok(!JSON.stringify(error).includes('MARKER'));
+      assert.deepEqual(render(kind, facts), render(kind, kept));
+    });
+  }
 
   /** [label, kind, facts with one bad required value]. */
   const REQUIRED: readonly (readonly [string, string, unknown])[] = [
@@ -836,13 +849,15 @@ describe('F1: every fact value is read own and checked, in builders and render',
     ],
   ];
 
-  it.each(REQUIRED)('%s: the unfamiliar error', (_label, kind, facts) => {
-    const error = authError[kind as AuthProviderErrorKind](facts);
-    expect(error.kind).toBe('unknown');
-    expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
-    expect(error.reason).toBe(UNFAMILIAR_REASON);
-    expect(render(kind, facts)).toStrictEqual({ reason: UNFAMILIAR_REASON });
-  });
+  for (const [_label, kind, facts] of REQUIRED) {
+    it(`${_label}: the unfamiliar error`, () => {
+      const error = authError[kind as AuthProviderErrorKind](facts);
+      assert.equal(error.kind, 'unknown');
+      assert.deepEqual(error.facts, { operation: 'unfamiliar-error' });
+      assert.equal(error.reason, UNFAMILIAR_REASON);
+      assert.deepEqual(render(kind, facts), { reason: UNFAMILIAR_REASON });
+    });
+  }
 
   it('never invokes a getter, toString or Symbol.toPrimitive', () => {
     const calls: string[] = [];
@@ -859,14 +874,14 @@ describe('F1: every fact value is read own and checked, in builders and render',
     };
     const error = authError['request-failed'](facts);
     render('request-failed', facts);
-    expect(calls).toEqual([]);
-    expect(error.reason).toBe(UNFAMILIAR_REASON);
+    assert.deepEqual(calls, []);
+    assert.equal(error.reason, UNFAMILIAR_REASON);
     const fields = authError.configuration({
       case: 'required-fields-missing',
       fields: [spy(calls), 'clientId'],
     });
-    expect(calls).toEqual([]);
-    expect((fields.facts as { fields: unknown[] }).fields).toEqual([
+    assert.deepEqual(calls, []);
+    assert.deepEqual((fields.facts as { fields: unknown[] }).fields, [
       'clientId',
     ]);
   });
@@ -887,8 +902,8 @@ describe('F3: every bearer candidate not listed is counted', () => {
       candidates: unknown[];
       moreCandidates: number;
     };
-    expect(facts.candidates).toHaveLength(5);
-    expect(facts.moreCandidates).toBe(3005);
+    assert.equal(facts.candidates.length, 5);
+    assert.equal(facts.moreCandidates, 3005);
   });
 
   it('caps the tally at 1 000 000', () => {
@@ -909,43 +924,48 @@ describe('F3: every bearer candidate not listed is counted', () => {
       check: 'bearerConfirmation',
       candidates,
     });
-    expect(
-      (error.facts as { moreCandidates: number }).moreCandidates,
-    ).toBeLessThanOrEqual(1_000_000);
+    assert.ok(
+      (error.facts as { moreCandidates: number }).moreCandidates <= 1_000_000,
+    );
   });
 });
 
 describe('isMinted', () => {
   it('is true for an error a builder minted', () => {
-    expect(isMinted(authError.unknown({ operation: 'refresh' }))).toBe(true);
+    assert.equal(isMinted(authError.unknown({ operation: 'refresh' })), true);
   });
 
   it('is false for a structural copy of a minted error', () => {
     const error = authError.unknown({ operation: 'refresh' });
-    expect(isMinted({ ...error })).toBe(false);
-    expect(isMinted(JSON.parse(JSON.stringify(error)))).toBe(false);
+    assert.equal(isMinted({ ...error }), false);
+    assert.equal(isMinted(JSON.parse(JSON.stringify(error))), false);
   });
 
-  it.each([
-    null,
-    undefined,
-    0,
-    'the client certificate has expired',
-    Symbol('x'),
-    () => undefined,
-    {},
-    [],
-  ])('is false for %p', (value) => {
-    expect(isMinted(value)).toBe(false);
-  });
+  for (const [label, value] of [
+    ['null', null],
+    ['undefined', undefined],
+    ['0', 0],
+    [
+      '"the client certificate has expired"',
+      'the client certificate has expired',
+    ],
+    ['Symbol(x)', Symbol('x')],
+    ['[Function anonymous]', () => undefined],
+    ['{}', {}],
+    ['[]', []],
+  ] as const) {
+    it(`is false for ${label}`, () => {
+      assert.equal(isMinted(value), false);
+    });
+  }
 
   it('is false for the facts or the diagnostics of a minted error', () => {
     const error = authError.snc(
       { problem: 'no-credential' },
       { library: '/opt/libsapcrypto.so' },
     );
-    expect(isMinted(error.facts)).toBe(false);
-    expect(isMinted(error.diagnostics)).toBe(false);
+    assert.equal(isMinted(error.facts), false);
+    assert.equal(isMinted(error.diagnostics), false);
   });
 });
 
@@ -955,7 +975,7 @@ describe('the branded makers in facts', () => {
       outcome: 'port-in-use',
       port: port(61001),
     });
-    expect(inUse.facts).toStrictEqual({
+    assert.deepEqual(inUse.facts, {
       outcome: 'port-in-use',
       port: 61001,
     });
@@ -963,7 +983,7 @@ describe('the branded makers in facts', () => {
       outcome: 'aborted',
       ignoredCallbacks: count(2),
     });
-    expect(aborted.facts).toStrictEqual({
+    assert.deepEqual(aborted.facts, {
       outcome: 'aborted',
       ignoredCallbacks: 2,
     });
@@ -975,12 +995,12 @@ describe('the branded makers in facts', () => {
       strategy: 'browser',
       outcome: 'aborted',
     });
-    expect(aborted.facts).toStrictEqual({
+    assert.deepEqual(aborted.facts, {
       outcome: 'aborted',
       strategy: 'browser',
       ignoredCallbacks: 2,
     });
-    expect(Object.keys(aborted.facts)).toStrictEqual([
+    assert.deepEqual(Object.keys(aborted.facts), [
       'outcome',
       'strategy',
       'ignoredCallbacks',
@@ -991,13 +1011,13 @@ describe('the branded makers in facts', () => {
       code: 'EPROTO',
       outcome: 'failed',
     });
-    expect(Object.keys(failed.facts)).toStrictEqual([
+    assert.deepEqual(Object.keys(failed.facts), [
       'outcome',
       'code',
       'status',
       'oauthError',
     ]);
-    expect(failed.facts).toStrictEqual({
+    assert.deepEqual(failed.facts, {
       outcome: 'failed',
       code: 'EPROTO',
       status: 400,

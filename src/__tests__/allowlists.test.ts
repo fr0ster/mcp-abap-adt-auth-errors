@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
 import * as contract from '@mcp-abap-adt/interfaces-auth';
 import { builtFunction, loadBuilt } from './builtPackage';
 
@@ -71,11 +73,22 @@ function members(arrayName: string): readonly string[] {
   return array;
 }
 
+/** `text` with the case of its first ASCII letter flipped; unchanged without one. */
+function flipFirstLetter(text: string): string {
+  for (let at = 0; at < text.length; at += 1) {
+    const c = text.charAt(at);
+    const lower = c >= 'a' && c <= 'z';
+    if (lower || (c >= 'A' && c <= 'Z')) {
+      const other = lower ? c.toUpperCase() : c.toLowerCase();
+      return `${text.slice(0, at)}${other}${text.slice(at + 1)}`;
+    }
+  }
+  return text;
+}
+
 /** Strings one edit away from a member, none of them a member. */
 function nearMisses(member: string, all: readonly string[]): string[] {
-  const flipped = member.replace(/[a-z]/i, (c) =>
-    c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase(),
-  );
+  const flipped = flipFirstLetter(member);
   return [
     `${member} `,
     ` ${member}`,
@@ -104,58 +117,62 @@ describe('every allowlist array of interfaces-auth has a guard', () => {
       .map(([name]) => name)
       .filter((name) => !NOT_ALLOWLISTS.has(name))
       .sort();
-    expect(GUARDS.map(([, array]) => array).sort()).toEqual(arrays);
+    assert.deepEqual(GUARDS.map(([, array]) => array).sort(), arrays);
   });
 });
 
-describe.each(GUARDS)('%s (%s)', (guardName, arrayName) => {
-  const guard = builtFunction(guardName);
-  const all = members(arrayName);
+for (const [guardName, arrayName] of GUARDS) {
+  describe(`${guardName} (${arrayName})`, () => {
+    const guard = builtFunction(guardName);
+    const all = members(arrayName);
 
-  it('answers true for every member', () => {
-    expect(all.length).toBeGreaterThan(0);
-    for (const member of all) {
-      expect([member, guard(member)]).toEqual([member, true]);
-    }
-  });
-
-  it('answers false for a near miss of every member', () => {
-    for (const member of all) {
-      for (const miss of nearMisses(member, all)) {
-        expect([miss, guard(miss)]).toEqual([miss, false]);
+    it('answers true for every member', () => {
+      assert.ok(all.length > 0);
+      for (const member of all) {
+        assert.deepEqual([member, guard(member)], [member, true]);
       }
-    }
-  });
+    });
 
-  it('answers false for the empty string and a foreign word', () => {
-    expect(guard('')).toBe(false);
-    expect(guard('NOT_ON_ANY_LIST')).toBe(false);
-  });
+    it('answers false for a near miss of every member', () => {
+      for (const member of all) {
+        for (const miss of nearMisses(member, all)) {
+          assert.deepEqual([miss, guard(miss)], [miss, false]);
+        }
+      }
+    });
 
-  it.each(NON_STRINGS)('answers false for %s', (_label, make) => {
-    for (const member of all) {
-      expect(guard(make(member))).toBe(false);
-    }
-  });
+    it('answers false for the empty string and a foreign word', () => {
+      assert.equal(guard(''), false);
+      assert.equal(guard('NOT_ON_ANY_LIST'), false);
+    });
 
-  it('answers false for a name of an Object.prototype member', () => {
-    for (const name of [
-      'constructor',
-      '__proto__',
-      'toString',
-      'hasOwnProperty',
-    ]) {
-      expect(guard(name)).toBe(false);
+    for (const [_label, make] of NON_STRINGS) {
+      it(`answers false for ${_label}`, () => {
+        for (const member of all) {
+          assert.equal(guard(make(member)), false);
+        }
+      });
     }
+
+    it('answers false for a name of an Object.prototype member', () => {
+      for (const name of [
+        'constructor',
+        '__proto__',
+        'toString',
+        'hasOwnProperty',
+      ]) {
+        assert.equal(guard(name), false);
+      }
+    });
   });
-});
+}
 
 describe('the sets are reachable only through the guards', () => {
   it('the built package exports no Set, Map or array', () => {
     for (const [name, value] of Object.entries(loadBuilt())) {
       const mutable =
         value instanceof Set || value instanceof Map || Array.isArray(value);
-      expect([name, mutable]).toEqual([name, false]);
+      assert.deepEqual([name, mutable], [name, false]);
     }
   });
 
@@ -164,7 +181,7 @@ describe('the sets are reachable only through the guards', () => {
       const guard = builtFunction(guardName);
       for (const key of Reflect.ownKeys(guard)) {
         const value: unknown = Reflect.get(guard, key);
-        expect(value instanceof Set).toBe(false);
+        assert.equal(value instanceof Set, false);
       }
     }
   });
@@ -186,10 +203,13 @@ describe('Set.prototype.has patched after load (C5)', () => {
     Set.prototype.has = function alwaysTrue(): boolean {
       return true;
     };
-    expect(new Set<string>().has('anything')).toBe(true);
+    assert.equal(new Set<string>().has('anything'), true);
     for (const [guardName, guard, all] of loaded) {
-      expect([guardName, guard('NOT_ON_ANY_LIST')]).toEqual([guardName, false]);
-      expect([guardName, guard(all[0])]).toEqual([guardName, true]);
+      assert.deepEqual(
+        [guardName, guard('NOT_ON_ANY_LIST')],
+        [guardName, false],
+      );
+      assert.deepEqual([guardName, guard(all[0])], [guardName, true]);
     }
   });
 
@@ -202,7 +222,7 @@ describe('Set.prototype.has patched after load (C5)', () => {
       return false;
     };
     for (const [guardName, guard, all] of loaded) {
-      expect([guardName, guard(all[0])]).toEqual([guardName, true]);
+      assert.deepEqual([guardName, guard(all[0])], [guardName, true]);
     }
   });
 });
