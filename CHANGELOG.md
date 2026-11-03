@@ -21,6 +21,11 @@ Nothing in the package changes: only how its tests run.
   (2874 in 23 files); a pattern match in a test is plain string code now.
 - The README's shape-check example is a `node:test` test.
 - No script calls `npx`: each tool is found on npm's own `PATH`.
+- Every test script runs through `tools/run-tests.mjs`, which finds the
+  compiled tests itself and fails when it finds none (`node --test` alone exits
+  0 on a pattern that matches nothing); `--env NAME=VALUE` replaces a shell
+  prefix. `tools/remove.mjs` replaces `rm -rf` in `clean` and `test:build`. No
+  script uses a shell-only command, so they run on Windows as well.
 
 ## [3.0.1] - 2026-10-25
 
