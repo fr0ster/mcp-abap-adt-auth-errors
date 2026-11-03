@@ -624,8 +624,8 @@ describe('relayOutcome', () => {
 });
 
 /**
- * Unhandled rejections are observed in a child process: Jest installs its own
- * `unhandledRejection` handling around a test, so a listener inside the test
+ * Unhandled rejections are observed in a child process: the test runner
+ * installs its own `unhandledRejection` listener, so a listener inside the test
  * neither sees every event nor can absorb one. The child loads the built
  * package, runs one scenario — the value answered by a logon target to
  * `relayOutcome` and by a grant thunk to `guard` — waits a macrotask, and

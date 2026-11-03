@@ -784,7 +784,7 @@ describe('the shape check: the publishing gate', () => {
 
   it('lint:check is Biome alone: it runs no other command', perTest, () => {
     const lint = scripts['lint:check'] ?? '';
-    assert.equal(lint.startsWith('npx biome check '), true);
+    assert.equal(lint.startsWith('biome check '), true);
     for (const joiner of ['&', ';', '|']) {
       assert.equal(lint.includes(joiner), false);
     }
