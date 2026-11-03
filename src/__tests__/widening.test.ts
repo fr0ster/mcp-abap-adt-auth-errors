@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { afterEach, describe, it } from 'node:test';
 import * as contract from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt } from './builtPackage';
 
@@ -48,7 +50,10 @@ const GUARDS: ReadonlyArray<readonly [string, (value: unknown) => boolean]> =
 const EVIL_CODE = 'EVIL_CODE';
 const EVIL_OAUTH = 'evil_oauth_code';
 const EVIL_RULE = 'evil-made-up-rule';
-const MARKER = /evil/i;
+/** Whether `text` holds the marker `evil`, in any case. */
+function holdsMarker(text: string): boolean {
+  return text.toLowerCase().includes('evil');
+}
 
 /** One marker per array, and the three shared ones. */
 function markersFor(arrayName: string): string[] {
@@ -220,13 +225,15 @@ function exportedValues(): Array<readonly [string, unknown]> {
 }
 
 describe('no export is a Set or a Map, nested one level', () => {
-  it.each(exportedValues())('%s', (_name, value) => {
-    expect(value instanceof Set).toBe(false);
-    expect(value instanceof Map).toBe(false);
-    expect(value instanceof WeakSet).toBe(false);
-    expect(value instanceof WeakMap).toBe(false);
-    if (Array.isArray(value)) expect(Object.isFrozen(value)).toBe(true);
-  });
+  for (const [_name, value] of exportedValues()) {
+    it(`${_name}`, () => {
+      assert.equal(value instanceof Set, false);
+      assert.equal(value instanceof Map, false);
+      assert.equal(value instanceof WeakSet, false);
+      assert.equal(value instanceof WeakMap, false);
+      if (Array.isArray(value)) assert.equal(Object.isFrozen(value), true);
+    });
+  }
 });
 
 describe('exported allowlists cannot be widened', () => {
@@ -241,7 +248,7 @@ describe('exported allowlists cannot be widened', () => {
   });
 
   it('the foreign values are refused before any attack', () => {
-    expect(JSON.stringify(foreignResults())).not.toMatch(MARKER);
+    assert.ok(!holdsMarker(JSON.stringify(foreignResults())));
   });
 
   it('after every attack, a foreign value is still refused, every guard answers as before, no word holds it', () => {
@@ -268,18 +275,15 @@ describe('exported allowlists cannot be widened', () => {
     Array.prototype.includes = originalIncludes;
     Array.prototype.indexOf = originalIndexOf;
 
-    expect(answersAfter).toBe(answersBefore);
-    expect(resultsAfter).toBe(resultsBefore);
-    expect(resultsAfter).not.toMatch(MARKER);
+    assert.equal(answersAfter, answersBefore);
+    assert.equal(resultsAfter, resultsBefore);
+    assert.ok(!holdsMarker(resultsAfter));
     // Read afresh from the namespace: no export was replaced either.
     for (const [name, guard] of GUARDS) {
-      expect([name, built[name]]).toEqual([name, guard]);
+      assert.deepEqual([name, built[name]], [name, guard]);
     }
     for (const [name, array] of ARRAYS) {
-      expect([name, JSON.stringify(array)]).not.toEqual([
-        name,
-        expect.stringMatching(MARKER),
-      ]);
+      assert.ok(!holdsMarker(JSON.stringify(array)), name);
     }
   });
 
@@ -288,7 +292,7 @@ describe('exported allowlists cannot be widened', () => {
     for (const [, guard] of GUARDS) {
       for (const [name] of ARRAYS) {
         for (const marker of markersFor(name))
-          expect(guard(marker)).toBe(false);
+          assert.equal(guard(marker), false);
       }
     }
   });

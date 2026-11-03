@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import {
   existsSync,
   mkdtempSync,
@@ -9,6 +10,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import { tableWriteMode, withRegions } from '../tables';
 import { kindsTableRegion } from './helpers/kindsTable';
 
@@ -39,39 +41,53 @@ describe('the README kinds table', () => {
       writeFileSync(README, expected);
       return;
     }
-    expect(current).toBe(expected);
+    assert.equal(current, expected);
   });
 
   it('holds one section per kind', () => {
     const { body } = kindsTableRegion();
-    expect(body.split('\n').filter((l) => l.startsWith('#### ')).length).toBe(
+    assert.equal(
+      body.split('\n').filter((l) => l.startsWith('#### ')).length,
       18,
     );
   });
 
   describe('refusing what cannot be rendered', () => {
     it('a kind without samples throws', () => {
-      expect(() => kindsTableRegion({ kinds: ['tls'], samples: {} })).toThrow(
-        'no samples for kind tls',
+      assert.throws(
+        () => kindsTableRegion({ kinds: ['tls'], samples: {} }),
+        (thrown: unknown) =>
+          thrown instanceof Error &&
+          thrown.message.includes('no samples for kind tls'),
       );
     });
 
     it('a kind without a builder throws', () => {
-      expect(() =>
-        kindsTableRegion({ kinds: ['nonesuch'], samples: { nonesuch: [{}] } }),
-      ).toThrow('no builder for nonesuch');
+      assert.throws(
+        () =>
+          kindsTableRegion({
+            kinds: ['nonesuch'],
+            samples: { nonesuch: [{}] },
+          }),
+        (thrown: unknown) =>
+          thrown instanceof Error &&
+          thrown.message.includes('no builder for nonesuch'),
+      );
     });
 
     it('a builder answering another kind throws', () => {
-      expect(() =>
-        kindsTableRegion({
-          kinds: ['tls'],
-          samples: { tls: [{ problem: 'missing-material' }] },
-          builders: {
-            tls: () => ({ kind: 'unknown', facts: {}, reason: 'r' }),
-          },
-        }),
-      ).toThrow('built unknown');
+      assert.throws(
+        () =>
+          kindsTableRegion({
+            kinds: ['tls'],
+            samples: { tls: [{ problem: 'missing-material' }] },
+            builders: {
+              tls: () => ({ kind: 'unknown', facts: {}, reason: 'r' }),
+            },
+          }),
+        (thrown: unknown) =>
+          thrown instanceof Error && thrown.message.includes('built unknown'),
+      );
     });
   });
 
@@ -90,27 +106,33 @@ describe('the README kinds table', () => {
       utimesSync(file, old, old);
       const before = readFileSync(file);
       checkOrWrite(file, { WRITE_README_TABLES: '1' });
-      expect(readFileSync(file).equals(before)).toBe(true);
-      expect(statSync(file).mtimeMs).toBe(old.getTime());
+      assert.equal(readFileSync(file).equals(before), true);
+      assert.equal(statSync(file).mtimeMs, old.getTime());
     });
 
     it('rewrites a stale file, then it equals the rendered one', () => {
       const real = readFileSync(file, 'utf8');
       writeFileSync(file, real.replace('#### `tls`', '#### `tls` stale'));
-      expect(() => checkOrWrite(file, {})).toThrow('stale');
+      assert.throws(
+        () => checkOrWrite(file, {}),
+        (thrown: unknown) =>
+          thrown instanceof Error && thrown.message.includes('stale'),
+      );
       checkOrWrite(file, { WRITE_README_TABLES: '1' });
-      expect(readFileSync(file, 'utf8')).toBe(real);
+      assert.equal(readFileSync(file, 'utf8'), real);
     });
 
     it('with CI set, throws before any write', () => {
       const real = readFileSync(file, 'utf8');
       const stale = real.replace('#### `tls`', '#### `tls` stale');
       writeFileSync(file, stale);
-      expect(() =>
-        checkOrWrite(file, { WRITE_README_TABLES: '1', CI: 'true' }),
-      ).toThrow('CI');
-      expect(readFileSync(file, 'utf8')).toBe(stale);
-      expect(existsSync(file)).toBe(true);
+      assert.throws(
+        () => checkOrWrite(file, { WRITE_README_TABLES: '1', CI: 'true' }),
+        (thrown: unknown) =>
+          thrown instanceof Error && thrown.message.includes('CI'),
+      );
+      assert.equal(readFileSync(file, 'utf8'), stale);
+      assert.equal(existsSync(file), true);
     });
   });
 });

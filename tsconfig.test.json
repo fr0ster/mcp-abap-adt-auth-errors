@@ -18,15 +18,11 @@
     "src/__typechecks__/**",
     "src/__tests__/diagnostics.test.ts",
     "src/__tests__/exportsMap.test.ts",
-    "src/__tests__/kindsTable.test.ts",
     "src/__tests__/mainEntryLoadsNothing.test.ts",
     "src/__tests__/shapeCheck.test.ts",
     "src/__tests__/shapeCheckApi.test.ts",
     "src/__tests__/shapeCheckCommand.test.ts",
     "src/__tests__/sharedAttempt.test.ts",
-    "src/__tests__/sharedAttemptReentrancy.test.ts",
-    "src/__tests__/sharedAttemptRetention.test.ts",
-    "src/__tests__/widening.test.ts",
-    "src/__tests__/words.test.ts"
+    "src/__tests__/sharedAttemptReentrancy.test.ts"
   ]
 }

@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
 import {
   ASSERTION_RULES,
   CLIENT_AUTHENTICATION_PROBLEMS,
@@ -191,18 +193,22 @@ const SAMPLES: readonly (readonly [string, string, unknown])[] = [
 ];
 
 describe('every kind × every discriminant renders', () => {
-  it.each(SAMPLES)('%s', (_label, kind, facts) => {
-    const error = build(kind, facts);
-    expect(typeof error.reason).toBe('string');
-    expect(error.reason.length).toBeGreaterThan(0);
-    for (const text of [error.reason, error.hint ?? '']) {
-      expect(text).not.toMatch(/undefined|null|\[object|NaN/);
-    }
-    if (error.hint !== undefined) expect(error.hint.length).toBeGreaterThan(0);
-    expect(render(kind, error.facts)).toStrictEqual(words(error));
-  });
+  for (const [_label, kind, facts] of SAMPLES) {
+    it(`${_label}`, () => {
+      const error = build(kind, facts);
+      assert.equal(typeof error.reason, 'string');
+      assert.ok(error.reason.length > 0);
+      for (const text of [error.reason, error.hint ?? '']) {
+        for (const leak of ['undefined', 'null', '[object', 'NaN']) {
+          assert.ok(!text.includes(leak));
+        }
+      }
+      if (error.hint !== undefined) assert.ok(error.hint.length > 0);
+      assert.deepEqual(render(kind, error.facts), words(error));
+    });
+  }
 
-  it.each([
+  for (const [kind, total] of [
     ['configuration', CONFIG_CASES.length],
     ['saml-assertion', ASSERTION_RULES.length],
     ['snc', SNC_PROBLEMS.length],
@@ -216,22 +222,24 @@ describe('every kind × every discriminant renders', () => {
     // `<operation> failed (the token endpoint gave no reason)`.
     ['request-failed', REQUEST_PROBLEMS.length - 1],
     ['connection', CONNECTION_PROBLEMS.length],
-  ])('%s: each discriminant has its own reason', (kind, total) => {
-    const reasons = new Set(
-      SAMPLES.filter(([label, k]) =>
-        kind === 'request-failed'
-          ? REQUEST_PROBLEMS.some((p) => label === `request-failed ${p}`)
-          : k === kind,
-      ).map(([, k, facts]) => build(k, facts).reason),
-    );
-    expect(reasons.size).toBe(total);
-  });
+  ] as const) {
+    it(`${kind}: each discriminant has its own reason`, () => {
+      const reasons = new Set(
+        SAMPLES.filter(([label, k]) =>
+          kind === 'request-failed'
+            ? REQUEST_PROBLEMS.some((p) => label === `request-failed ${p}`)
+            : k === kind,
+        ).map(([, k, facts]) => build(k, facts).reason),
+      );
+      assert.equal(reasons.size, total);
+    });
+  }
 
   it('distinct operations have distinct phrases', () => {
     const reasons = new Set(
       OPERATIONS.map((operation) => build('unknown', { operation }).reason),
     );
-    expect(reasons.size).toBe(OPERATIONS.length);
+    assert.equal(reasons.size, OPERATIONS.length);
   });
 });
 
@@ -289,24 +297,25 @@ describe('spnego words', () => {
   ];
 
   it('covers every problem of the contract', () => {
-    expect(ROWS.map(([p]) => p).sort()).toEqual([...SPNEGO_PROBLEMS].sort());
+    assert.deepEqual(ROWS.map(([p]) => p).sort(), [...SPNEGO_PROBLEMS].sort());
   });
 
-  it.each(ROWS)(
-    '%s: its own reason and hint, verbatim',
-    (problem, reason, hint) => {
-      expect(words(build('spnego', FACTS(problem)))).toStrictEqual(
+  for (const [problem, reason, hint] of ROWS) {
+    it(`${problem}: its own reason and hint, verbatim`, () => {
+      assert.deepEqual(
+        words(build('spnego', FACTS(problem))),
         hint === undefined ? { reason } : { reason, hint },
       );
-    },
-  );
+    });
+  }
 
   it('names the operation: presenting differs from obtaining', () => {
     const error = build(
       'spnego',
       FACTS('ntlm-token', 'presenting-negotiate-token'),
     );
-    expect(error.reason).toBe(
+    assert.equal(
+      error.reason,
       'presenting the Negotiate token failed: the token is an NTLM token, not a Kerberos one',
     );
   });
@@ -317,10 +326,10 @@ describe('spnego words', () => {
       secret: 'S3CR3T',
       code: 'KRB5KRB_AP_ERR_SKEW',
     });
-    expect(error.variant).toBe('clock-skew');
-    expect(error.facts).toStrictEqual(FACTS('clock-skew'));
-    expect(error.diagnostics).toBeUndefined();
-    expect(JSON.stringify(error)).not.toContain('S3CR3T');
+    assert.equal(error.variant, 'clock-skew');
+    assert.deepEqual(error.facts, FACTS('clock-skew'));
+    assert.equal(error.diagnostics, undefined);
+    assert.ok(!JSON.stringify(error).includes('S3CR3T'));
   });
 
   it('refuses a problem off SPNEGO_PROBLEMS, a missing or foreign operation', () => {
@@ -331,35 +340,38 @@ describe('spnego words', () => {
       { operation: 'obtaining-negotiate-token' },
     ]) {
       const error = build('spnego', facts);
-      expect(error.kind).toBe('unknown');
-      expect(error.facts).toStrictEqual({ operation: 'unfamiliar-error' });
+      assert.equal(error.kind, 'unknown');
+      assert.deepEqual(error.facts, { operation: 'unfamiliar-error' });
     }
   });
 
   it('blames the credential for no-credential only', () => {
     for (const p of SPNEGO_PROBLEMS) {
-      expect(blamesCredential(build('spnego', FACTS(p)))).toBe(
+      assert.equal(
+        blamesCredential(build('spnego', FACTS(p))),
         p === 'no-credential',
       );
     }
   });
 
   it('words kerberos-ticket for credential-refused', () => {
-    expect(
+    assert.deepEqual(
       words(build('credential-refused', { credential: 'kerberos-ticket' })),
-    ).toStrictEqual({
-      reason: 'the Kerberos ticket was refused',
-      hint: 'obtain a new ticket: kinit, or the domain logon',
-    });
+      {
+        reason: 'the Kerberos ticket was refused',
+        hint: 'obtain a new ticket: kinit, or the domain logon',
+      },
+    );
   });
 });
 
 describe('ASSERTION_RULE_CHECK', () => {
   it('names a check for every rule, and is frozen', () => {
-    expect(Object.keys(ASSERTION_RULE_CHECK).sort()).toEqual(
+    assert.deepEqual(
+      Object.keys(ASSERTION_RULE_CHECK).sort(),
       [...ASSERTION_RULES].sort(),
     );
-    expect(Object.isFrozen(ASSERTION_RULE_CHECK)).toBe(true);
+    assert.equal(Object.isFrozen(ASSERTION_RULE_CHECK), true);
   });
 });
 
@@ -991,12 +1003,14 @@ const VERBATIM: readonly (readonly [
 ];
 
 describe('verbatim rows', () => {
-  it.each(VERBATIM)('%s', (_row, kind, facts, reason, hint) => {
-    const error = build(kind, facts);
-    expect(error.reason).toBe(reason);
-    expect(error.hint).toBe(hint);
-    if (hint === undefined) expect(Object.keys(error)).not.toContain('hint');
-  });
+  for (const [_row, kind, facts, reason, hint] of VERBATIM) {
+    it(`${_row}`, () => {
+      const error = build(kind, facts);
+      assert.equal(error.reason, reason);
+      assert.equal(error.hint, hint);
+      if (hint === undefined) assert.ok(!Object.keys(error).includes('hint'));
+    });
+  }
 });
 
 /** Today's TLS words (auth-providers 5.4.2, `knownCodes.ts` `TLS_CODES`). */
@@ -1039,18 +1053,24 @@ const TLS_WORDS: Record<string, readonly [string, string]> = {
 
 describe('A15: every TLS code has today’s words', () => {
   it('covers every code of TLS_FAILURE_CODES', () => {
-    expect(Object.keys(TLS_WORDS).sort()).toEqual(
+    assert.deepEqual(
+      Object.keys(TLS_WORDS).sort(),
       [...TLS_FAILURE_CODES].sort(),
     );
   });
 
-  it.each(TLS_FAILURE_CODES)('%s', (code) => {
-    const expected = TLS_WORDS[code];
-    if (expected === undefined) throw new Error(`no words for ${code}`);
-    const error = build('tls', { operation: 'refresh', code });
-    expect(error.reason).toBe(`the refresh failed: ${expected[0]} (${code})`);
-    expect(error.hint).toBe(expected[1]);
-  });
+  for (const code of TLS_FAILURE_CODES) {
+    it(`${code}`, () => {
+      const expected = TLS_WORDS[code];
+      if (expected === undefined) throw new Error(`no words for ${code}`);
+      const error = build('tls', { operation: 'refresh', code });
+      assert.equal(
+        error.reason,
+        `the refresh failed: ${expected[0]} (${code})`,
+      );
+      assert.equal(error.hint, expected[1]);
+    });
+  }
 });
 
 /** The configuration words. */
@@ -1214,98 +1234,139 @@ const CONFIGURATION: readonly (readonly [
 
 describe('configuration words', () => {
   it('covers every case', () => {
-    expect(CONFIGURATION.map(([c]) => c).sort()).toEqual(
+    assert.deepEqual(
+      CONFIGURATION.map(([c]) => c).sort(),
       [...CONFIG_CASES].sort(),
     );
   });
 
-  it.each(CONFIGURATION)('%s', (configCase, fields, reason, hint) => {
-    const error = build('configuration', { case: configCase, fields });
-    expect(error.reason).toBe(reason);
-    expect(error.hint).toBe(hint);
-  });
+  for (const [configCase, fields, reason, hint] of CONFIGURATION) {
+    it(`${configCase}`, () => {
+      const error = build('configuration', { case: configCase, fields });
+      assert.equal(error.reason, reason);
+      assert.equal(error.hint, hint);
+    });
+  }
 
   it('the allowed set renders the same words given or not', () => {
-    expect(
+    assert.equal(
       build('configuration', {
         case: 'snc-qop-invalid',
         fields: ['qop'],
         allowed: 'snc-qop',
       }).reason,
-    ).toBe('SncLogonProvider: qop must be one of 1, 2, 3, 8, 9');
-    expect(
+      'SncLogonProvider: qop must be one of 1, 2, 3, 8, 9',
+    );
+    assert.equal(
       build('configuration', {
         case: 'basic-encoding-missing',
         fields: ['encoding'],
         allowed: 'basic-encoding',
       }).reason,
-    ).toBe("clientSecretBasic needs encoding: 'raw' or 'form'");
+      "clientSecretBasic needs encoding: 'raw' or 'form'",
+    );
   });
 
   it('names several missing OIDC endpoints', () => {
-    expect(
+    assert.equal(
       build('configuration', {
         case: 'oidc-endpoint-missing',
         fields: ['authorizationEndpoint', 'tokenEndpoint'],
       }).reason,
-    ).toBe(
       'OIDC authorizationEndpoint, tokenEndpoint are required (configure them, or use discovery)',
     );
   });
 });
 
+/** An ASCII word character, as `\w` reads one. */
+function isWordCharacter(character: string): boolean {
+  return (
+    (character >= 'a' && character <= 'z') ||
+    (character >= 'A' && character <= 'Z') ||
+    (character >= '0' && character <= '9') ||
+    character === '_'
+  );
+}
+
+/**
+ * Whether `text` speaks of time: `time` or `second` in any case, or a count
+ * of seconds — digits, optional white space, then an `s` that ends a word.
+ */
+function mentionsTime(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (lower.includes('time') || lower.includes('second')) return true;
+  for (let start = 0; start < text.length; start += 1) {
+    const first = text.charAt(start);
+    if (first < '0' || first > '9') continue;
+    let at = start + 1;
+    while (text.charAt(at) >= '0' && text.charAt(at) <= '9') at += 1;
+    while (at < text.length && text.charAt(at).trim() === '') at += 1;
+    const unit = text.charAt(at);
+    if (
+      (unit === 's' || unit === 'S') &&
+      !isWordCharacter(text.charAt(at + 1))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 describe('interactive-login words', () => {
   it('aborted, no strategy: the neutral sentence, and the tally with ignoredCallbacks', () => {
-    expect(build('interactive-login', { outcome: 'aborted' }).reason).toBe(
+    assert.equal(
+      build('interactive-login', { outcome: 'aborted' }).reason,
       'the authorization was aborted',
     );
-    expect(
+    assert.equal(
       build('interactive-login', {
         outcome: 'aborted',
         ignoredCallbacks: count(3),
       }).reason,
-    ).toBe(
       'the authorization was aborted; 3 request(s) to the callback server were refused and ignored',
     );
-    expect(
+    assert.equal(
       build('interactive-login', {
         outcome: 'aborted',
         ignoredCallbacks: count(0),
       }).reason,
-    ).toBe('the authorization was aborted');
+      'the authorization was aborted',
+    );
   });
 
   it('aborted, browser: the browser sentence, and the tally with ignoredCallbacks', () => {
-    expect(
+    assert.equal(
       build('interactive-login', { outcome: 'aborted', strategy: 'browser' })
         .reason,
-    ).toBe('the browser login was aborted');
-    expect(
+      'the browser login was aborted',
+    );
+    assert.equal(
       build('interactive-login', {
         outcome: 'aborted',
         strategy: 'browser',
         ignoredCallbacks: count(3),
       }).reason,
-    ).toBe(
       'the browser login was aborted; 3 request(s) to the callback server were refused and ignored',
     );
-    expect(
+    assert.equal(
       build('interactive-login', {
         outcome: 'aborted',
         strategy: 'browser',
         ignoredCallbacks: count(0),
       }).reason,
-    ).toBe('the browser login was aborted');
+      'the browser login was aborted',
+    );
   });
 
   it('aborted, manual: its own sentence, never the callback tally', () => {
-    expect(
+    assert.equal(
       build('interactive-login', {
         outcome: 'aborted',
         strategy: 'manual',
         ignoredCallbacks: count(3),
       }).reason,
-    ).toBe('the manual login was aborted');
+      'the manual login was aborted',
+    );
   });
 
   it('aborted: a strategy out of its set is dropped, the words are those without it', () => {
@@ -1315,11 +1376,12 @@ describe('interactive-login words', () => {
         strategy,
         ignoredCallbacks: count(3),
       });
-      expect(error.facts).toStrictEqual({
+      assert.deepEqual(error.facts, {
         outcome: 'aborted',
         ignoredCallbacks: 3,
       });
-      expect(error.reason).toBe(
+      assert.equal(
+        error.reason,
         'the authorization was aborted; 3 request(s) to the callback server were refused and ignored',
       );
     }
@@ -1332,16 +1394,18 @@ describe('interactive-login words', () => {
         status: httpStatus(400),
         oauthError,
       });
-      expect(error.facts).toStrictEqual({ outcome: 'failed', status: 400 });
-      expect(error.reason).toBe('the browser login failed (HTTP 400)');
+      assert.deepEqual(error.facts, { outcome: 'failed', status: 400 });
+      assert.equal(error.reason, 'the browser login failed (HTTP 400)');
     }
   });
 
   it('callback-closed and no-input', () => {
-    expect(
+    assert.equal(
       build('interactive-login', { outcome: 'callback-closed' }).reason,
-    ).toBe('the callback server closed before a result arrived');
-    expect(build('interactive-login', { outcome: 'no-input' }).reason).toBe(
+      'the callback server closed before a result arrived',
+    );
+    assert.equal(
+      build('interactive-login', { outcome: 'no-input' }).reason,
       'no input was received',
     );
   });
@@ -1366,24 +1430,24 @@ describe('interactive-login words', () => {
         rendered.push(error.reason, error.hint ?? '');
       }
     }
-    expect(rendered.length).toBeGreaterThan(INTERACTIVE_OUTCOMES.length);
+    assert.ok(rendered.length > INTERACTIVE_OUTCOMES.length);
     for (const text of rendered) {
-      expect(text).not.toMatch(/time|second|\bin time\b|\d+\s*s\b/i);
+      assert.ok(!mentionsTime(text));
     }
   });
 });
 
 describe('snc words', () => {
   it('library-init-failed: the architectures, never the path', () => {
-    expect(
+    assert.equal(
       build('snc', {
         problem: 'library-init-failed',
         libraryArchs: ['x64', 'arm64'],
       }).reason,
-    ).toBe(
       'the RFC SDK could not initialise the SNC library (x64/arm64) as its SNC library (SNCERR_INIT)',
     );
-    expect(build('snc', { problem: 'library-init-failed' }).reason).toBe(
+    assert.equal(
+      build('snc', { problem: 'library-init-failed' }).reason,
       'the RFC SDK could not initialise the SNC library as its SNC library (SNCERR_INIT)',
     );
   });
@@ -1402,10 +1466,12 @@ describe('snc words', () => {
       },
       { candidatePaths: ['/opt/a.so', 'C:\\SLC\\sapcrypto.dll'] },
     );
-    expect(error.reason).toBe(
+    assert.equal(
+      error.reason,
       'no usable SNC library was found: SNC_LIB_64 (missing); registry (wrong architecture)',
     );
-    expect(error.hint).toBe(
+    assert.equal(
+      error.hint,
       'set sncLib to the SNC (GSS) library of your SNC product',
     );
   });
@@ -1413,28 +1479,26 @@ describe('snc words', () => {
 
 describe('saml-assertion words', () => {
   it('names the check, then the rule', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', { rule: 'expired', check: 'notOnOrAfter' })
         .reason,
-    ).toBe(
       'the SAML assertion was refused (notOnOrAfter): the assertion has expired',
     );
   });
 
   it('a counted rule names the count', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'several-references',
         check: 'signature',
         count: count(3),
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (signature): the signature carries 3 ds:Reference; exactly one is allowed',
     );
   });
 
   it('no-bearer-qualifies lists each candidate, and how many more', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'no-bearer-qualifies',
         check: 'bearerConfirmation',
@@ -1445,19 +1509,17 @@ describe('saml-assertion words', () => {
         ],
         moreCandidates: count(4),
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (bearerConfirmation): no bearer confirmation qualifies: #1 Method is not bearer | #2 carries 2 SubjectConfirmationData; exactly one is allowed | #3 NotBefore has not arrived | and 4 more',
     );
   });
 
   it('declined names a registered status code', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'declined',
         check: 'status',
         statusCode: 'urn:oasis:names:tc:SAML:2.0:status:Responder',
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (status): the identity provider declined the login (urn:oasis:names:tc:SAML:2.0:status:Responder)',
     );
   });
@@ -1568,13 +1630,15 @@ describe('no rendered word contains a diagnostic value', () => {
     ],
   ];
 
-  it.each(CASES)('%s', (_label, kind, facts, diagnostics) => {
-    const error = build(kind, facts, diagnostics);
-    expect(error.diagnostics).toBeDefined();
-    expect(JSON.stringify(error.diagnostics)).toContain(MARKER);
-    expect(error.reason).not.toContain(MARKER);
-    expect(error.hint ?? '').not.toContain(MARKER);
-  });
+  for (const [_label, kind, facts, diagnostics] of CASES) {
+    it(`${_label}`, () => {
+      const error = build(kind, facts, diagnostics);
+      assert.notEqual(error.diagnostics, undefined);
+      assert.ok(JSON.stringify(error.diagnostics).includes(MARKER));
+      assert.ok(!error.reason.includes(MARKER));
+      assert.ok(!(error.hint ?? '').includes(MARKER));
+    });
+  }
 });
 
 const UNFAMILIAR = {
@@ -1695,17 +1759,21 @@ describe('anything this build does not know renders the unfamiliar words whole',
     ].map((kind) => [`${kind} with empty facts`, kind, {}] as const),
   ];
 
-  it.each(CASES)('%s, through render', (_label, kind, facts) => {
-    expect(render(kind, facts)).toStrictEqual(UNFAMILIAR);
-  });
+  for (const [_label, kind, facts] of CASES) {
+    it(`${_label}, through render`, () => {
+      assert.deepEqual(render(kind, facts), UNFAMILIAR);
+    });
+  }
 
-  it.each(CASES)('%s, through the builder', (_label, kind, facts) => {
-    expect(words(build(kind, facts))).toStrictEqual(UNFAMILIAR);
-  });
+  for (const [_label, kind, facts] of CASES) {
+    it(`${_label}, through the builder`, () => {
+      assert.deepEqual(words(build(kind, facts)), UNFAMILIAR);
+    });
+  }
 });
 
 describe('F2: unfamiliar-error as an operation', () => {
-  it.each([
+  for (const [kind, facts] of [
     [
       'request-failed',
       {
@@ -1724,32 +1792,32 @@ describe('F2: unfamiliar-error as an operation', () => {
     ],
     ['tls', { operation: 'unfamiliar-error', code: 'CERT_HAS_EXPIRED' }],
     ['unknown', { operation: 'unfamiliar-error', status: httpStatus(500) }],
-  ])('%s renders the unfamiliar sentence alone', (kind, facts) => {
-    expect(words(build(kind, facts))).toStrictEqual(UNFAMILIAR);
-  });
+  ] as const) {
+    it(`${kind} renders the unfamiliar sentence alone`, () => {
+      assert.deepEqual(words(build(kind, facts)), UNFAMILIAR);
+    });
+  }
 });
 
 describe('F4: counts', () => {
   it('a counted rule with a count below two uses the generic wording', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'several-issuers',
         check: 'issuer',
         count: count(1),
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (issuer): the assertion carries more than one saml:Issuer; exactly one is allowed',
     );
   });
 
   it('one candidate not shown is singular', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'no-bearer-qualifies',
         check: 'bearerConfirmation',
         moreCandidates: count(1),
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (bearerConfirmation): no bearer confirmation qualifies (1 candidate not shown)',
     );
   });
@@ -1757,13 +1825,12 @@ describe('F4: counts', () => {
 
 describe('no-bearer-qualifies with no candidate listed', () => {
   it('says how many were not shown, with no dangling "and"', () => {
-    expect(
+    assert.equal(
       build('saml-assertion', {
         rule: 'no-bearer-qualifies',
         check: 'bearerConfirmation',
         moreCandidates: count(4),
       }).reason,
-    ).toBe(
       'the SAML assertion was refused (bearerConfirmation): no bearer confirmation qualifies (4 candidates not shown)',
     );
   });
@@ -1775,21 +1842,21 @@ describe('render', () => {
       operation: 'device-poll',
       problem: 'no-access-token',
     });
-    expect(render('request-failed', error.facts)).toStrictEqual(words(error));
-    expect(error.reason).toBe('the device poll returned no access_token');
+    assert.deepEqual(render('request-failed', error.facts), words(error));
+    assert.equal(error.reason, 'the device poll returned no access_token');
   });
 
   it('answers the unfamiliar words for a kind this build does not know', () => {
-    expect(render('future-kind', {})).toStrictEqual({
+    assert.deepEqual(render('future-kind', {}), {
       reason: 'an authentication error of a kind this version does not know',
     });
-    expect(render('constructor', {})).toStrictEqual({
+    assert.deepEqual(render('constructor', {}), {
       reason: 'an authentication error of a kind this version does not know',
     });
   });
 
   it('answers the unfamiliar words for a discriminant this build does not know', () => {
-    expect(render('snc', { problem: 'future-problem' })).toStrictEqual({
+    assert.deepEqual(render('snc', { problem: 'future-problem' }), {
       reason: 'an authentication error of a kind this version does not know',
     });
   });
@@ -1910,16 +1977,23 @@ describe('blamesCredential', () => {
     ],
   ];
 
-  it.each(ROWS)('%s', (_label, kind, facts, blames) => {
-    expect(blamesCredential(build(kind, facts))).toBe(blames);
-  });
+  for (const [_label, kind, facts, blames] of ROWS) {
+    it(`${_label}`, () => {
+      assert.equal(blamesCredential(build(kind, facts)), blames);
+    });
+  }
 
-  it.each([null, undefined, 'credential-refused', {}, { kind: 'future-kind' }])(
-    'is false for %p',
-    (value) => {
-      expect(blamesCredential(value)).toBe(false);
-    },
-  );
+  for (const [label, value] of [
+    ['null', null],
+    ['undefined', undefined],
+    ['"credential-refused"', 'credential-refused'],
+    ['{}', {}],
+    ['{"kind": "future-kind"}', { kind: 'future-kind' }],
+  ] as const) {
+    it(`is false for ${label}`, () => {
+      assert.equal(blamesCredential(value), false);
+    });
+  }
 
   it('reads own, once, through the facts check: no getter is invoked', () => {
     const calls: string[] = [];
@@ -1936,9 +2010,12 @@ describe('blamesCredential', () => {
       },
       facts,
     };
-    expect(blamesCredential(error)).toBe(false);
-    expect(blamesCredential({ kind: 'credential-refused', facts })).toBe(false);
-    expect(
+    assert.equal(blamesCredential(error), false);
+    assert.equal(
+      blamesCredential({ kind: 'credential-refused', facts }),
+      false,
+    );
+    assert.equal(
       blamesCredential({
         kind: 'snc',
         facts: {
@@ -1949,11 +2026,12 @@ describe('blamesCredential', () => {
           },
         },
       }),
-    ).toBe(false);
-    expect(calls).toEqual([]);
+      false,
+    );
+    assert.deepEqual(calls, []);
   });
 
-  it.each([
+  for (const [_label, value] of [
     ['facts null', { kind: 'credential-refused', facts: null }],
     [
       'a bad credential',
@@ -1967,23 +2045,27 @@ describe('blamesCredential', () => {
       'a bad connection problem',
       { kind: 'connection', facts: { problem: 'MARKER' } },
     ],
-  ])('is false for %s', (_label, value) => {
-    expect(blamesCredential(value)).toBe(false);
-  });
+  ] as const) {
+    it(`is false for ${_label}`, () => {
+      assert.equal(blamesCredential(value), false);
+    });
+  }
 
   it('answers as for a minted error, given the same facts as a plain object', () => {
-    expect(
+    assert.equal(
       blamesCredential({
         kind: 'credential-refused',
         facts: { credential: 'token' },
       }),
-    ).toBe(true);
-    expect(
+      true,
+    );
+    assert.equal(
       blamesCredential({
         kind: 'snc',
         facts: { problem: 'logon-refused', rfcKey: 'RFC_LOGON_FAILURE' },
       }),
-    ).toBe(true);
+      true,
+    );
   });
 
   it('is false, and does not throw, for a value whose reads throw', () => {
@@ -1998,6 +2080,6 @@ describe('blamesCredential', () => {
         },
       },
     );
-    expect(blamesCredential(hostile)).toBe(false);
+    assert.equal(blamesCredential(hostile), false);
   });
 });
