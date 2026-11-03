@@ -9,7 +9,9 @@
     "declarationMap": false,
     "noEmitOnError": true
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*"
+  ],
   "exclude": [
     "node_modules",
     "dist",
@@ -25,16 +27,12 @@
     "src/__tests__/guard.test.ts",
     "src/__tests__/kindsTable.test.ts",
     "src/__tests__/mainEntryLoadsNothing.test.ts",
-    "src/__tests__/numbers.test.ts",
-    "src/__tests__/ok.test.ts",
-    "src/__tests__/readme.test.ts",
     "src/__tests__/shapeCheck.test.ts",
     "src/__tests__/shapeCheckApi.test.ts",
     "src/__tests__/shapeCheckCommand.test.ts",
     "src/__tests__/sharedAttempt.test.ts",
     "src/__tests__/sharedAttemptReentrancy.test.ts",
     "src/__tests__/sharedAttemptRetention.test.ts",
-    "src/__tests__/tables.test.ts",
     "src/__tests__/widening.test.ts",
     "src/__tests__/words.test.ts"
   ]
