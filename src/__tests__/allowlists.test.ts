@@ -73,11 +73,22 @@ function members(arrayName: string): readonly string[] {
   return array;
 }
 
+/** `text` with the case of its first ASCII letter flipped; unchanged without one. */
+function flipFirstLetter(text: string): string {
+  for (let at = 0; at < text.length; at += 1) {
+    const c = text.charAt(at);
+    const lower = c >= 'a' && c <= 'z';
+    if (lower || (c >= 'A' && c <= 'Z')) {
+      const other = lower ? c.toUpperCase() : c.toLowerCase();
+      return `${text.slice(0, at)}${other}${text.slice(at + 1)}`;
+    }
+  }
+  return text;
+}
+
 /** Strings one edit away from a member, none of them a member. */
 function nearMisses(member: string, all: readonly string[]): string[] {
-  const flipped = member.replace(/[a-z]/i, (c) =>
-    c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase(),
-  );
+  const flipped = flipFirstLetter(member);
   return [
     `${member} `,
     ` ${member}`,

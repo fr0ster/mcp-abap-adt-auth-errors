@@ -42,7 +42,11 @@ const ARRAYS: ReadonlyArray<readonly [string, readonly unknown[]]> =
 const GUARDS: ReadonlyArray<readonly [string, (value: unknown) => boolean]> =
   Object.entries(built)
     .filter(
-      ([name, value]) => /^is[A-Z]/.test(name) && typeof value === 'function',
+      ([name, value]) =>
+        name.startsWith('is') &&
+        name.charAt(2) >= 'A' &&
+        name.charAt(2) <= 'Z' &&
+        typeof value === 'function',
     )
     .map(([name, value]) => [name, value as (value: unknown) => boolean]);
 
