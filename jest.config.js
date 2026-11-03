@@ -24,6 +24,8 @@ module.exports = {
     '/src/__tests__/sharedAttempt.test.ts',
     '/src/__tests__/sharedAttemptReentrancy.test.ts',
     '/src/__tests__/diagnostics.test.ts',
+    '/src/__tests__/exportsMap.test.ts',
+    '/src/__tests__/mainEntryLoadsNothing.test.ts',
   ],
   collectCoverageFrom: [
     'src/**/*.ts',

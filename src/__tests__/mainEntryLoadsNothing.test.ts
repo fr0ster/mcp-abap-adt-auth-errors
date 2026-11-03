@@ -1,6 +1,8 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { after, before, describe, it } from 'node:test';
 import * as ts from 'typescript';
 import {
   type PackedConsumer,
@@ -65,7 +67,7 @@ describe('the source graph of src/index.ts', () => {
   const reached = reachedSpecifiers();
 
   it('is walked (a graph of several files)', () => {
-    expect(reached.length).toBeGreaterThan(10);
+    assert.ok(reached.length > 10);
   });
 
   it('reaches neither the shape check nor the tables', () => {
@@ -74,14 +76,14 @@ describe('the source graph of src/index.ts', () => {
       const parts = specifier.split('/');
       return parts.includes('shapeCheck') || parts.includes('tables');
     });
-    expect(hits).toEqual([]);
+    assert.deepEqual(hits, []);
   });
 
   it('reaches neither typescript nor fs', () => {
     const hits = reached.filter((line) =>
       forbiddenModules.includes(line.slice(line.indexOf(' -> ') + 4)),
     );
-    expect(hits).toEqual([]);
+    assert.deepEqual(hits, []);
   });
 });
 
@@ -96,11 +98,12 @@ entry.classify(new Error('x'), 'prepare');
 describe('the packed main entry in a consumer without typescript', () => {
   let consumer: PackedConsumer | undefined;
 
-  beforeAll(() => {
-    consumer = packedConsumer({ withTypescript: false });
-    writeFileSync(
-      join(consumer.dir, 'record.js'),
-      `const fs = require('node:fs');
+  before(
+    () => {
+      consumer = packedConsumer({ withTypescript: false });
+      writeFileSync(
+        join(consumer.dir, 'record.js'),
+        `const fs = require('node:fs');
 const recorded = [];
 globalThis.__recorded = recorded;
 for (const name of ['readFileSync', 'openSync', 'readdirSync', 'statSync', 'existsSync']) {
@@ -112,10 +115,12 @@ for (const name of ['readFileSync', 'openSync', 'readdirSync', 'statSync', 'exis
 }
 globalThis.__phase = 'loading';
 `,
-    );
-  }, 60_000);
+      );
+    },
+    { timeout: 60_000 },
+  );
 
-  afterAll(() => {
+  after(() => {
     consumer?.remove();
   });
 
@@ -130,11 +135,12 @@ globalThis.__phase = 'loading';
   }
 
   it('is installed without typescript', () => {
-    expect(
+    assert.equal(
       inConsumer(
         "try { require.resolve('typescript'); console.log('found'); } catch { console.log('absent'); }",
       ),
-    ).toBe('absent');
+      'absent',
+    );
   });
 
   it('loads none of the shape check, the tables or typescript', () => {
@@ -144,14 +150,14 @@ globalThis.__phase = 'loading';
       ),
     ) as string[];
     const own = cached.filter((path) => path.includes('auth-errors/dist/'));
-    expect(own.length).toBeGreaterThan(5);
+    assert.ok(own.length > 5);
     const forbidden = cached.filter(
       (path) =>
         path.includes('auth-errors/dist/shapeCheck/') ||
         path.includes('auth-errors/dist/tables') ||
         path.includes('/node_modules/typescript/'),
     );
-    expect(forbidden).toEqual([]);
+    assert.deepEqual(forbidden, []);
   });
 
   it('reads only module files, and nothing once the entry has loaded', () => {
@@ -169,21 +175,22 @@ console.log(JSON.stringify({ recorded: globalThis.__recorded, cache: Object.keys
       cache: string[];
     };
     const cache = new Set(answer.cache);
-    expect(answer.cache.length).toBeGreaterThan(5);
-    expect(answer.recorded.length).toBeGreaterThan(5);
+    assert.ok(answer.cache.length > 5);
+    assert.ok(answer.recorded.length > 5);
     const after = answer.recorded.filter((call) => call.phase === 'loaded');
-    expect(after).toEqual([]);
+    assert.deepEqual(after, []);
     const foreign = answer.recorded.filter((call) => !cache.has(call.path));
-    expect(foreign).toEqual([]);
+    assert.deepEqual(foreign, []);
   });
 
   it('loads the shape-check module and the tables without typescript', () => {
-    expect(
+    assert.equal(
       inConsumer(
         `const check = require('@mcp-abap-adt/auth-errors/shape-check');
 const tables = require('@mcp-abap-adt/auth-errors/tables');
 console.log(typeof check.checkProviderShape, typeof tables.render, typeof tables.rowsFor);`,
       ),
-    ).toBe('function function function');
+      'function function function',
+    );
   });
 });
