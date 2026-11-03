@@ -774,7 +774,7 @@ describe('the shape check: the publishing gate', () => {
   it('test:shape runs this file', perTest, () => {
     assert.equal(
       scripts['test:shape'],
-      'npm run --silent test:build && node --test .test-build/__tests__/shapeCheck.test.js',
+      'npm run --silent test:build && node tools/run-tests.mjs .test-build/__tests__/shapeCheck.test.js',
     );
   });
 
