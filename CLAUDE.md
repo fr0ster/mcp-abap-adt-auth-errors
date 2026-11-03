@@ -80,8 +80,9 @@ with their next dependency bump.
     published as `@mcp-abap-adt/auth-errors/shape-check`
     (`checkProviderShape`, `reportLines`): the caller hands it its own
     `typescript`, and the package declares no dependency on TypeScript and
-    loads none (`import type` only). Each repository runs it from a Jest test
-    with its own options constant — no copy of a script. A change to a rule is
+    loads none (`import type` only). Each repository runs it from a test of
+    its own (this one: `node:test`) with its own options constant — no copy of
+    a script. A change to a rule is
     a change for every repository: keep the module's description (its limits)
     and the README's summary current. `tools/check-provider-shape.mjs` stays as
     a thin command over the module, with the same arguments, lines and exit
@@ -101,14 +102,19 @@ npm run build        # clean + Biome errors + tsc -p tsconfig.build.json
 npm run build:fast   # tsc -p tsconfig.build.json
 npm run test:check   # tsc --noEmit over sources, tests and __typechecks__
 npm run lint:check   # Biome, --error-on-warnings, alone
-npm run test:shape   # the shape check (shapeCheck.test.ts); the publishing gate runs it after the build
+npm run test:shape   # the shape check (shapeCheck.test.ts, compiled) alone; the publishing gate runs it after the build
 npm run lint         # Biome with --write
 npm run docs:kinds   # build, then rewrite the README kinds table (its test in write mode)
-npm test             # Jest (needs a build: tests load dist/ as a consumer would)
+npm test             # tsc builds sources and tests into .test-build/ (tsconfig.test.json), node --test runs every *.test.js there; needs a build: tests load dist/ as a consumer would
+npm run test:file -- <options> <.test-build/__tests__/x.test.js>  # one compiled file
 ```
 
-Run one file: `npm test -- src/__tests__/ok.test.ts`. Never invoke
-`npx jest` directly — the npm script supplies `--experimental-vm-modules`.
+Run one file: `npm run test:file -- .test-build/__tests__/ok.test.js`; one
+case: `npm run test:file -- --test-name-pattern "<title>" .test-build/__tests__/ok.test.js`.
+`tools/run-tests.mjs` runs `node --test` for every test script: it finds the
+compiled tests itself and fails when it finds none (`node --test` alone exits 0
+on a pattern that matches nothing), and `--env NAME=VALUE` sets a variable for
+the run. No script calls `npx`, and no script uses a shell-only command.
 
 ## Layout
 
@@ -130,7 +136,7 @@ src/
 ├── sharedAttempt.ts  # the waiter rules of a shared attempt
 ├── shapeCheck/       # the shape check: index.ts (API), options.ts, program.ts, rules/, types.ts
 ├── tables.ts         # the ./tables subpath: render, contract, rowsFor, markdownCell, withRegions, tableWriteMode
-├── __tests__/        # Jest; built-package tests require dist/ by path
+├── __tests__/        # node:test + node:assert/strict, compiled into .test-build/ (git-ignored); built-package tests require dist/ by path
 │                     #   widening.test.ts — allowlists cannot be widened
 │                     #   kindsTable.test.ts — README table equals the rendered one; write mode
 │                     #   exportsMap.test.ts — packed package: five paths by name, deep paths refused
@@ -150,6 +156,12 @@ Tests first. A test meant to protect a rule is proved load-bearing: break the
 rule, watch it go red, revert. A type rule gets a `__typechecks__` file
 (`Expect<Equal<…>>`, or `@ts-expect-error` for what must not compile), which
 `test:check` compiles and `tsconfig.build.json` leaves out of `dist`.
+
+The runner, assertions, mocks and timers are Node's (`node:test`,
+`node:assert/strict`, `mock`); no test framework is installed and no regular
+expression runs in a test. A table of cases is a loop that calls `it` once per
+row. A test's bound, if any, is its own `{ timeout }`: a suite's `{ timeout }`
+bounds the whole suite, not each test.
 
 ## Plans and specs
 
