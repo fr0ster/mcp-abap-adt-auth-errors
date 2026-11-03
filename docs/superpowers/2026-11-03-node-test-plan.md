@@ -54,6 +54,11 @@ each step names the spec section it carries out.
    - A function that reads a mock's call arguments.
    - Only what the suites use: if a matcher has no call site here, it is not written.
 
+   Measured, 2026-11-03: none has a call site here. The one asymmetric matcher the
+   suites used is `expect.stringMatching` with a regular expression, which becomes plain
+   string code; no test reads `toHaveBeenCalledWith`, and the one call-argument read is
+   `calls[0].arguments[0]`. So no matchers module is written in this repository.
+
 ## The suites
 
 4. **Move the files that use neither mocks nor matchers.**

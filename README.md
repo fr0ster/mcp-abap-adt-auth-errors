@@ -739,13 +739,17 @@ either: `isMinted` is, and classification re-mints whatever it did not mint.
 
 `@mcp-abap-adt/auth-errors/shape-check` is the rules of the contract
 TypeScript cannot express, decided on the TypeScript compiler API. It is a
-module: a repository runs it from its own Jest suite, so a finding fails
+module: a repository runs it from a test of its own (with `node:test`, as
+here, or any runner), so a finding fails
 `npm test` and CI with the file, line, column, rule and what was found. It
 declares no dependency on TypeScript and loads none: the caller hands it its
 own `typescript`, so the repository states which compiler decides its rules.
 It is tested with TypeScript `^5.9.0`; another version is not refused.
 
 ```ts
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+import { it } from 'node:test';
 import ts from 'typescript';
 import {
   checkProviderShape,
@@ -760,9 +764,9 @@ const SHAPE_CHECK = {
   sites: resolve(__dirname, '../../tools'),
 } as const;
 
-it('the shape check finds nothing in this repository', () => {
-  expect(reportLines(checkProviderShape(SHAPE_CHECK))).toEqual([]);
-}, 120_000);
+it('the shape check finds nothing in this repository', { timeout: 120_000 }, () => {
+  assert.deepEqual(reportLines(checkProviderShape(SHAPE_CHECK)), []);
+});
 ```
 
 **Options.** All are stated; nothing is read from the working directory and
@@ -884,7 +888,7 @@ prints the same lines and exits with the same statuses. It now finds the
 module by name, so a repository that keeps a byte-identical copy of the file
 in its `tools/` must re-copy it once (its comparison test fails until then),
 and the copy then runs the installed module. The recommended use is no copy:
-a Jest test like the one above, with `lint:check` no longer calling the
+a test like the one above, with `lint:check` no longer calling the
 command.
 
 This repository runs rules 4 and 6 in `src/__tests__/shapeCheck.test.ts`,
@@ -947,8 +951,19 @@ npm run build        # clean build: Biome errors, then tsc
 npm run test:check   # type check: sources, tests and type tests
 npm run lint:check   # Biome alone (warnings fail)
 npm run test:shape   # the shape check, rules 4 and 6 (shapeCheck.test.ts); prepublishOnly runs it
-npm test             # Jest; needs a build first (tests load dist/)
+npm test             # tsc builds the tests into .test-build/, node --test runs them; needs a build first (tests load dist/)
 npm run docs:kinds   # rewrite the README kinds table (builds, then runs its test in write mode)
+```
+
+The tests run on Node's own runner, `node:test`, with `node:assert/strict`:
+no test framework is installed. `npm test` compiles the sources and the tests
+with the repository's `tsc` (`tsconfig.test.json`) into `.test-build/` and runs
+every compiled `*.test.js` there. One file, or one case of it, runs alone with
+its compiled path (options before the file):
+
+```bash
+npm run test:file -- .test-build/__tests__/ok.test.js
+npm run test:file -- --test-name-pattern "is frozen" .test-build/__tests__/ok.test.js
 ```
 
 ## License
