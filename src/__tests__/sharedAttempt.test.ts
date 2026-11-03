@@ -1,4 +1,6 @@
+import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
+import { describe, it, type Mock, mock } from 'node:test';
 import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt, loadBuiltModule } from './builtPackage';
 
@@ -47,19 +49,19 @@ async function flush(): Promise<void> {
 
 /** A start whose attempt is held until the test settles it. */
 function heldStart<T>(): {
-  readonly start: jest.Mock<Promise<T>, [AttemptContext]>;
+  readonly start: Mock<(attempt: AttemptContext) => Promise<T>>;
   readonly result: Deferred<T>;
   context(): AttemptContext;
 } {
   const result = deferred<T>();
-  const start = jest.fn((_: AttemptContext) => result.promise);
+  const start = mock.fn((_: AttemptContext) => result.promise);
   return {
     start,
     result,
     context(): AttemptContext {
       const call = start.mock.calls[0];
       if (call === undefined) throw new Error('start was not called');
-      return call[0];
+      return call.arguments[0];
     },
   };
 }
@@ -88,13 +90,13 @@ function track<T>(promise: Promise<T>): {
 
 /** The rejection is this copy's `interactive-login` `aborted` failure. */
 function expectAborted(reason: unknown): void {
-  expect(isAuthProviderFailure(reason)).toBe(true);
+  assert.equal(isAuthProviderFailure(reason), true);
   const error = (reason as Failure).error;
-  expect(isMinted(error)).toBe(true);
-  expect(error.kind).toBe('interactive-login');
-  expect(error.facts).toStrictEqual({ outcome: 'aborted' });
-  expect(error.reason).toBe('the authorization was aborted');
-  expect((reason as Failure).message).toBe('the authorization was aborted');
+  assert.equal(isMinted(error), true);
+  assert.equal(error.kind, 'interactive-login');
+  assert.deepEqual(error.facts, { outcome: 'aborted' });
+  assert.equal(error.reason, 'the authorization was aborted');
+  assert.equal((reason as Failure).message, 'the authorization was aborted');
 }
 
 describe('sharedAttempt — waiters', () => {
@@ -108,32 +110,29 @@ describe('sharedAttempt — waiters', () => {
 
     first.abort();
     await flush();
-    expect(a.state()).toBe('rejected');
+    assert.equal(a.state(), 'rejected');
     expectAborted(a.reason());
-    expect(b.state()).toBe('pending');
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(b.state(), 'pending');
+    assert.equal(held.context().signal.aborted, false);
 
     held.result.resolve('token');
     await flush();
-    expect(b.state()).toBe('resolved');
-    expect(b.value()).toBe('token');
-    expect(held.start).toHaveBeenCalledTimes(1);
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(b.state(), 'resolved');
+    assert.equal(b.value(), 'token');
+    assert.equal(held.start.mock.callCount(), 1);
+    assert.equal(held.context().signal.aborted, false);
   });
 
   it('a later join while the attempt runs shares it: start is called once', async () => {
     const slot = sharedAttempt<string>('token-request');
     const held = heldStart<string>();
-    const other = jest.fn(() => Promise.resolve('other'));
+    const other = mock.fn(() => Promise.resolve('other'));
     const a = slot.join(held.start);
     const b = slot.join(other);
     held.result.resolve('token');
-    await expect(Promise.all([a, b])).resolves.toStrictEqual([
-      'token',
-      'token',
-    ]);
-    expect(held.start).toHaveBeenCalledTimes(1);
-    expect(other).not.toHaveBeenCalled();
+    assert.deepEqual(await Promise.all([a, b]), ['token', 'token']);
+    assert.equal(held.start.mock.callCount(), 1);
+    assert.equal(other.mock.callCount(), 0);
   });
 
   it('every waiter aborts: the attempt signal aborts, and the slot is empty before it does', async () => {
@@ -154,17 +153,17 @@ describe('sharedAttempt — waiters', () => {
     });
 
     first.abort();
-    expect(signal.aborted).toBe(false);
+    assert.equal(signal.aborted, false);
     second.abort();
-    expect(signal.aborted).toBe(true);
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(signal.aborted, true);
+    assert.equal(fresh.start.mock.callCount(), 1);
 
     await flush();
     expectAborted(a.reason());
     expectAborted(b.reason());
     fresh.result.resolve('fresh');
     await flush();
-    expect(joinedFromAbort?.value()).toBe('fresh');
+    assert.equal(joinedFromAbort?.value(), 'fresh');
   });
 
   it('the slot is empty when the last waiter’s rejection is observed', async () => {
@@ -174,11 +173,11 @@ describe('sharedAttempt — waiters', () => {
     const fresh = heldStart<string>();
     const observed = slot.join(held.start, controller.signal).catch(() => {
       void slot.join(fresh.start);
-      return fresh.start.mock.calls.length;
+      return fresh.start.mock.callCount();
     });
     controller.abort();
-    await expect(observed).resolves.toBe(1);
-    expect(held.start).toHaveBeenCalledTimes(1);
+    assert.equal(await observed, 1);
+    assert.equal(held.start.mock.callCount(), 1);
   });
 
   it('a waiter without a signal keeps the attempt alive', async () => {
@@ -190,10 +189,10 @@ describe('sharedAttempt — waiters', () => {
     controller.abort();
     await flush();
     expectAborted(signalled.reason());
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(held.context().signal.aborted, false);
     held.result.resolve('token');
     await flush();
-    expect(unsignalled.value()).toBe('token');
+    assert.equal(unsignalled.value(), 'token');
   });
 
   it('doomed join: after every waiter aborted, a join while the old start is pending starts afresh; the late result changes nothing', async () => {
@@ -205,16 +204,16 @@ describe('sharedAttempt — waiters', () => {
 
     const fresh = heldStart<string>();
     const next = track(slot.join(fresh.start));
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(fresh.start.mock.callCount(), 1);
 
     old.result.resolve('late');
     await flush();
     expectAborted(doomed.reason());
-    expect(next.state()).toBe('pending');
+    assert.equal(next.state(), 'pending');
 
     fresh.result.resolve('fresh');
     await flush();
-    expect(next.value()).toBe('fresh');
+    assert.equal(next.value(), 'fresh');
   });
 
   it('a waiter whose signal is already aborted is refused aborted and starts nothing', async () => {
@@ -223,17 +222,17 @@ describe('sharedAttempt — waiters', () => {
     const a = track(slot.join(held.start, AbortSignal.abort()));
     await flush();
     expectAborted(a.reason());
-    expect(held.start).not.toHaveBeenCalled();
+    assert.equal(held.start.mock.callCount(), 0);
 
     // Joining a running attempt with an aborted signal neither counts nor ends it.
     const b = track(slot.join(held.start));
     const c = track(slot.join(held.start, AbortSignal.abort()));
     await flush();
     expectAborted(c.reason());
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(held.context().signal.aborted, false);
     held.result.resolve('token');
     await flush();
-    expect(b.value()).toBe('token');
+    assert.equal(b.value(), 'token');
   });
 
   it('a settled waiter leaves no listener on its signal', async () => {
@@ -243,31 +242,32 @@ describe('sharedAttempt — waiters', () => {
     const aborting = new AbortController();
     const a = slot.join(held.start, kept.signal);
     void slot.join(held.start, aborting.signal).catch(() => undefined);
-    expect(getEventListeners(kept.signal, 'abort')).toHaveLength(1);
+    assert.equal(getEventListeners(kept.signal, 'abort').length, 1);
     aborting.abort();
-    expect(getEventListeners(aborting.signal, 'abort')).toHaveLength(0);
+    assert.equal(getEventListeners(aborting.signal, 'abort').length, 0);
     held.result.resolve('token');
-    await expect(a).resolves.toBe('token');
-    expect(getEventListeners(kept.signal, 'abort')).toHaveLength(0);
+    assert.equal(await a, 'token');
+    assert.equal(getEventListeners(kept.signal, 'abort').length, 0);
     // An abort after the result changes nothing.
     kept.abort();
-    await expect(a).resolves.toBe('token');
+    assert.equal(await a, 'token');
   });
 });
 
 describe('sharedAttempt — settling', () => {
   it('a resolved attempt leaves the slot: the next join starts afresh', async () => {
     const slot = sharedAttempt<string>('token-request');
-    await expect(slot.join(() => Promise.resolve('one'))).resolves.toBe('one');
-    await expect(slot.join(() => Promise.resolve('two'))).resolves.toBe('two');
+    assert.equal(await slot.join(() => Promise.resolve('one')), 'one');
+    assert.equal(await slot.join(() => Promise.resolve('two')), 'two');
   });
 
   it('a rejected attempt leaves the slot: the next join starts afresh', async () => {
     const slot = sharedAttempt<string>('token-request');
-    await expect(
+    await assert.rejects(
       slot.join(() => Promise.reject(new Error('down'))),
-    ).rejects.toBeDefined();
-    await expect(slot.join(() => Promise.resolve('two'))).resolves.toBe('two');
+      (thrown: unknown) => thrown !== undefined,
+    );
+    assert.equal(await slot.join(() => Promise.resolve('two')), 'two');
   });
 
   it('a start that throws synchronously rejects every waiter with its classified failure, no foreign value', async () => {
@@ -285,17 +285,17 @@ describe('sharedAttempt — settling', () => {
         () => undefined,
         (r: unknown) => r,
       );
-      expect(reason).not.toBe(thrown);
-      expect(isAuthProviderFailure(reason)).toBe(true);
+      assert.notEqual(reason, thrown);
+      assert.equal(isAuthProviderFailure(reason), true);
       const error = (reason as Failure).error;
-      expect(error.kind).toBe('unknown');
-      expect(error.facts).toStrictEqual({
+      assert.equal(error.kind, 'unknown');
+      assert.deepEqual(error.facts, {
         operation: 'device-authorization',
         status: 500,
       });
-      expect(JSON.stringify(reason)).not.toContain('secret');
-      expect(String(reason)).not.toContain('secret');
-      expect((reason as { cause?: unknown }).cause).toBeUndefined();
+      assert.ok(!JSON.stringify(reason).includes('secret'));
+      assert.ok(!String(reason).includes('secret'));
+      assert.equal((reason as { cause?: unknown }).cause, undefined);
     }
   });
 
@@ -307,7 +307,7 @@ describe('sharedAttempt — settling', () => {
         () => undefined,
         (r: unknown) => r,
       );
-    expect((primitive as Failure).error.facts).toStrictEqual({
+    assert.deepEqual((primitive as Failure).error.facts, {
       operation: 'token-request',
     });
 
@@ -326,8 +326,8 @@ describe('sharedAttempt — settling', () => {
         () => undefined,
         (r: unknown) => r,
       );
-    expect(isAuthProviderFailure(reason)).toBe(true);
-    expect((reason as Failure).error).toBe(minted);
+    assert.equal(isAuthProviderFailure(reason), true);
+    assert.equal((reason as Failure).error, minted);
   });
 
   it('a start returning a thenable whose then throws is classified, not thrown', async () => {
@@ -343,8 +343,8 @@ describe('sharedAttempt — settling', () => {
         () => undefined,
         (r: unknown) => r,
       );
-    expect(isAuthProviderFailure(reason)).toBe(true);
-    expect(String(reason)).not.toContain('secret');
+    assert.equal(isAuthProviderFailure(reason), true);
+    assert.ok(!String(reason).includes('secret'));
   });
 
   it('an attempt that ends after every waiter left raises no unhandled rejection', async () => {
@@ -353,7 +353,7 @@ describe('sharedAttempt — settling', () => {
     const controller = new AbortController();
     const waiter = slot.join(held.start, controller.signal);
     controller.abort();
-    await expect(waiter).rejects.toBeDefined();
+    await assert.rejects(waiter, (thrown: unknown) => thrown !== undefined);
     held.result.reject(new Error('late failure'));
     await flush();
   });
@@ -373,15 +373,15 @@ describe('sharedAttempt — drain handoff', () => {
     await flush();
     oldController.abort();
 
-    const newWork = jest.fn(() => Promise.resolve('fresh'));
+    const newWork = mock.fn(() => Promise.resolve('fresh'));
     const next = track(slot.join((attempt) => attempt.exclusive(newWork)));
     await flush();
-    expect(newWork).not.toHaveBeenCalled();
+    assert.equal(newWork.mock.callCount(), 0);
 
     oldWork.resolve('late');
     await flush();
-    expect(newWork).toHaveBeenCalledTimes(1);
-    expect(next.value()).toBe('fresh');
+    assert.equal(newWork.mock.callCount(), 1);
+    assert.equal(next.value(), 'fresh');
     expectAborted(old.reason());
   });
 
@@ -397,7 +397,8 @@ describe('sharedAttempt — drain handoff', () => {
       .catch(() => undefined);
     await flush();
     oldController.abort();
-    await expect(slot.join(() => Promise.resolve('refreshed'))).resolves.toBe(
+    assert.equal(
+      await slot.join(() => Promise.resolve('refreshed')),
       'refreshed',
     );
   });
@@ -415,7 +416,7 @@ describe('sharedAttempt — drain handoff', () => {
     await flush();
     oldController.abort();
 
-    const newWork = jest.fn(() => Promise.resolve('fresh'));
+    const newWork = mock.fn(() => Promise.resolve('fresh'));
     let waited: ReturnType<typeof track<string>> | undefined;
     const newController = new AbortController();
     const next = track(
@@ -429,12 +430,12 @@ describe('sharedAttempt — drain handoff', () => {
     newController.abort();
     await flush();
     expectAborted(next.reason());
-    expect(waited?.state()).toBe('rejected');
+    assert.equal(waited?.state(), 'rejected');
     expectAborted(waited?.reason());
 
     oldWork.resolve('late');
     await flush();
-    expect(newWork).not.toHaveBeenCalled();
+    assert.equal(newWork.mock.callCount(), 0);
   });
 
   it('three aborted attempts chain their drains: the fourth waits for the first’s work', async () => {
@@ -446,34 +447,34 @@ describe('sharedAttempt — drain handoff', () => {
         attempt.exclusive(work);
     const abortedJoin = async (
       work: () => Promise<string>,
-    ): Promise<jest.Mock> => {
+    ): Promise<Mock<() => Promise<string>>> => {
       const controller = new AbortController();
-      const mock = jest.fn(work);
+      const counted = mock.fn(work);
       void slot
-        .join(exclusiveStart(mock), controller.signal)
+        .join(exclusiveStart(counted), controller.signal)
         .catch(() => undefined);
       await flush();
       controller.abort();
-      return mock;
+      return counted;
     };
     const first = await abortedJoin(() => firstWork.promise);
     const second = await abortedJoin(() => Promise.resolve('second'));
     const third = await abortedJoin(() => Promise.resolve('third'));
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(second).not.toHaveBeenCalled();
-    expect(third).not.toHaveBeenCalled();
+    assert.equal(first.mock.callCount(), 1);
+    assert.equal(second.mock.callCount(), 0);
+    assert.equal(third.mock.callCount(), 0);
 
-    const fourthWork = jest.fn(() => Promise.resolve('fourth'));
+    const fourthWork = mock.fn(() => Promise.resolve('fourth'));
     const fourth = track(slot.join(exclusiveStart(fourthWork)));
     await flush();
-    expect(fourthWork).not.toHaveBeenCalled();
+    assert.equal(fourthWork.mock.callCount(), 0);
 
     firstWork.resolve('late');
     await flush();
-    expect(fourthWork).toHaveBeenCalledTimes(1);
-    expect(fourth.value()).toBe('fourth');
-    expect(second).not.toHaveBeenCalled();
-    expect(third).not.toHaveBeenCalled();
+    assert.equal(fourthWork.mock.callCount(), 1);
+    assert.equal(fourth.value(), 'fourth');
+    assert.equal(second.mock.callCount(), 0);
+    assert.equal(third.mock.callCount(), 0);
   });
 
   it('a drain whose work rejected still releases the next attempt', async () => {
@@ -488,10 +489,10 @@ describe('sharedAttempt — drain handoff', () => {
       .catch(() => undefined);
     await flush();
     oldController.abort();
-    const newWork = jest.fn(() => Promise.resolve('fresh'));
+    const newWork = mock.fn(() => Promise.resolve('fresh'));
     const next = slot.join((attempt) => attempt.exclusive(newWork));
     oldWork.reject(new Error('socket closed badly'));
-    await expect(next).resolves.toBe('fresh');
+    assert.equal(await next, 'fresh');
   });
 
   it('a settled attempt hands on the drain it inherited', async () => {
@@ -507,17 +508,18 @@ describe('sharedAttempt — drain handoff', () => {
     await flush();
     oldController.abort();
     // A refresh-only attempt settles without waiting for the drain …
-    await expect(slot.join(() => Promise.resolve('refreshed'))).resolves.toBe(
+    assert.equal(
+      await slot.join(() => Promise.resolve('refreshed')),
       'refreshed',
     );
     // … and the next exclusive work still waits for the aborted one's.
-    const newWork = jest.fn(() => Promise.resolve('fresh'));
+    const newWork = mock.fn(() => Promise.resolve('fresh'));
     const next = track(slot.join((attempt) => attempt.exclusive(newWork)));
     await flush();
-    expect(newWork).not.toHaveBeenCalled();
+    assert.equal(newWork.mock.callCount(), 0);
     oldWork.resolve('late');
     await flush();
-    expect(next.value()).toBe('fresh');
+    assert.equal(next.value(), 'fresh');
   });
 
   it('exclusive called after the attempt was aborted starts nothing', async () => {
@@ -526,11 +528,11 @@ describe('sharedAttempt — drain handoff', () => {
     const controller = new AbortController();
     void slot.join(held.start, controller.signal).catch(() => undefined);
     controller.abort();
-    const work = jest.fn(() => Promise.resolve('never'));
+    const work = mock.fn(() => Promise.resolve('never'));
     const late = held.context().exclusive(work);
-    await expect(late).rejects.toBeDefined();
+    await assert.rejects(late, (thrown: unknown) => thrown !== undefined);
     expectAborted(await late.catch((r: unknown) => r));
-    expect(work).not.toHaveBeenCalled();
+    assert.equal(work.mock.callCount(), 0);
   });
 
   it('exclusive called after the abort ends at once, without waiting for a pending drain', async () => {
@@ -550,14 +552,14 @@ describe('sharedAttempt — drain handoff', () => {
     const controller = new AbortController();
     void slot.join(held.start, controller.signal).catch(() => undefined);
     controller.abort();
-    const work = jest.fn(() => Promise.resolve('never'));
+    const work = mock.fn(() => Promise.resolve('never'));
     const late = track(held.context().exclusive(work));
     await flush();
-    expect(late.state()).toBe('rejected');
+    assert.equal(late.state(), 'rejected');
     expectAborted(late.reason());
     oldWork.resolve('late');
     await flush();
-    expect(work).not.toHaveBeenCalled();
+    assert.equal(work.mock.callCount(), 0);
   });
 });
 
@@ -584,25 +586,25 @@ describe('sharedAttempt — exclusive within one attempt', () => {
       return (await Promise.all([first, second])).join('+');
     });
     await flush();
-    expect(order).toStrictEqual(['start first']);
+    assert.deepEqual(order, ['start first']);
     secondGate.resolve();
     await flush();
-    expect(order).toStrictEqual(['start first']);
+    assert.deepEqual(order, ['start first']);
     firstGate.resolve();
-    await expect(result).resolves.toBe('first+second');
-    expect(order).toStrictEqual([
+    assert.equal(await result, 'first+second');
+    assert.deepEqual(order, [
       'start first',
       'end first',
       'start second',
       'end second',
     ]);
-    expect(most).toBe(1);
+    assert.equal(most, 1);
   });
 
   it('a second exclusive call waits for the first even when the first work rejects', async () => {
     const slot = sharedAttempt<string>('browser-login');
     const firstGate = deferred<string>();
-    const second = jest.fn(() => Promise.resolve('second'));
+    const second = mock.fn(() => Promise.resolve('second'));
     const result = slot.join(async (attempt) => {
       const first = attempt.exclusive(() => firstGate.promise);
       const next = attempt.exclusive(second);
@@ -610,9 +612,9 @@ describe('sharedAttempt — exclusive within one attempt', () => {
       return next;
     });
     await flush();
-    expect(second).not.toHaveBeenCalled();
+    assert.equal(second.mock.callCount(), 0);
     firstGate.reject(new Error('closed badly'));
-    await expect(result).resolves.toBe('second');
+    assert.equal(await result, 'second');
   });
 
   it('work that synchronously aborts its last waiter and re-joins is already in the drain', async () => {
@@ -622,7 +624,7 @@ describe('sharedAttempt — exclusive within one attempt', () => {
     const firstGate = deferred<string>();
     const controller = new AbortController();
     let replacement: Promise<string> | undefined;
-    const secondWork = jest.fn(async () => {
+    const secondWork = mock.fn(async () => {
       running += 1;
       most = Math.max(most, running);
       running -= 1;
@@ -644,11 +646,11 @@ describe('sharedAttempt — exclusive within one attempt', () => {
       )
       .catch(() => undefined);
     await flush();
-    expect(replacement).toBeDefined();
-    expect(secondWork).not.toHaveBeenCalled();
+    assert.notEqual(replacement, undefined);
+    assert.equal(secondWork.mock.callCount(), 0);
     firstGate.resolve('first');
-    await expect(replacement).resolves.toBe('second');
-    expect(most).toBe(1);
+    assert.equal(await replacement, 'second');
+    assert.equal(most, 1);
   });
 
   it('an abort landing in any microtask gap after the drain settles keeps the work from starting', async () => {
@@ -686,7 +688,7 @@ describe('sharedAttempt — exclusive within one attempt', () => {
       await flush();
       if (began) startedAfterAbort.push(depth);
     }
-    expect(startedAfterAbort).toStrictEqual([]);
+    assert.deepEqual(startedAfterAbort, []);
   });
 });
 
@@ -703,10 +705,10 @@ describe('sharedAttempt — a hostile signal', () => {
     const bad = track(slot.join(held.start, hostile));
     await flush();
     expectAborted(bad.reason());
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(held.context().signal.aborted, false);
     held.result.resolve('token');
     await flush();
-    expect(good.value()).toBe('token');
+    assert.equal(good.value(), 'token');
   });
 
   it('a signal whose addEventListener throws refuses only its own waiter and starts nothing alone', async () => {
@@ -724,7 +726,7 @@ describe('sharedAttempt — a hostile signal', () => {
     const alone = track(slot.join(held.start, hostile));
     await flush();
     expectAborted(alone.reason());
-    expect(held.start).not.toHaveBeenCalled();
+    assert.equal(held.start.mock.callCount(), 0);
 
     const good = track(slot.join(held.start));
     const bad = track(slot.join(held.start, hostile));
@@ -732,12 +734,12 @@ describe('sharedAttempt — a hostile signal', () => {
     expectAborted(bad.reason());
     held.result.resolve('token');
     await flush();
-    expect(good.value()).toBe('token');
+    assert.equal(good.value(), 'token');
   });
 
   it('a signal that is not an object, or whose aborted is not a boolean, refuses its waiter', async () => {
     const slot = sharedAttempt<string>('token-request');
-    const start = jest.fn(() => Promise.resolve('token'));
+    const start = mock.fn(() => Promise.resolve('token'));
     for (const signal of [
       'abort',
       { aborted: 'no', addEventListener() {}, removeEventListener() {} },
@@ -750,7 +752,7 @@ describe('sharedAttempt — a hostile signal', () => {
         );
       expectAborted(reason);
     }
-    expect(start).not.toHaveBeenCalled();
+    assert.equal(start.mock.callCount(), 0);
   });
 
   it('a signal that fires its listener again and again, or whose removeEventListener throws, harms no other waiter', async () => {
@@ -775,16 +777,16 @@ describe('sharedAttempt — a hostile signal', () => {
     fire?.();
     await flush();
     expectAborted(bad.reason());
-    expect(held.context().signal.aborted).toBe(false);
+    assert.equal(held.context().signal.aborted, false);
     held.result.resolve('token');
     await flush();
-    expect(kept.value()).toBe('token');
-    expect(keptSignalled.value()).toBe('token');
+    assert.equal(kept.value(), 'token');
+    assert.equal(keptSignalled.value(), 'token');
   });
 
   it('a signal that fires its listener during addEventListener ends the attempt before it starts', async () => {
     const slot = sharedAttempt<string>('token-request');
-    const start = jest.fn(() => Promise.resolve('token'));
+    const start = mock.fn(() => Promise.resolve('token'));
     const eager = {
       aborted: false,
       addEventListener(_: string, listener: () => void) {
@@ -797,8 +799,8 @@ describe('sharedAttempt — a hostile signal', () => {
       (r: unknown) => r,
     );
     expectAborted(reason);
-    expect(start).not.toHaveBeenCalled();
-    await expect(slot.join(start)).resolves.toBe('token');
+    assert.equal(start.mock.callCount(), 0);
+    assert.equal(await slot.join(start), 'token');
   });
 });
 
@@ -806,17 +808,17 @@ describe('sharedAttempt — the module', () => {
   it('exports no Set or Map, nor one nested a level down', () => {
     const module = loadBuiltModule('sharedAttempt');
     for (const value of Object.values(module)) {
-      expect(value instanceof Set || value instanceof Map).toBe(false);
+      assert.equal(value instanceof Set || value instanceof Map, false);
       if (typeof value === 'object' && value !== null) {
         for (const nested of Object.values(value)) {
-          expect(nested instanceof Set || nested instanceof Map).toBe(false);
+          assert.equal(nested instanceof Set || nested instanceof Map, false);
         }
       }
     }
     const slot = sharedAttempt<string>('token-request');
-    expect(Object.isFrozen(slot)).toBe(true);
+    assert.equal(Object.isFrozen(slot), true);
     for (const value of Object.values(slot)) {
-      expect(value instanceof Set || value instanceof Map).toBe(false);
+      assert.equal(value instanceof Set || value instanceof Map, false);
     }
   });
 });
@@ -841,13 +843,13 @@ function momentOf(parties: Parties): MomentWaiter {
 describe('createParties — attached parties', () => {
   it('no party attached: a moment has no waiter signal, so its login never aborts', async () => {
     const parties = createParties();
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
     const slot = sharedAttempt<string>('token-request');
     const held = heldStart<string>();
     const waiter = track(slot.join(held.start, parties.waiterSignal()?.signal));
     held.result.resolve('token');
     await flush();
-    expect(waiter.value()).toBe('token');
+    assert.equal(waiter.value(), 'token');
   });
 
   it('two parties, one aborts: the moment continues; both abort: it is aborted', () => {
@@ -858,9 +860,9 @@ describe('createParties — attached parties', () => {
     parties.attach(b.signal);
     const moment = momentOf(parties);
     a.abort();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     b.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('a login a moment starts is released as aborted when every party aborts', async () => {
@@ -874,7 +876,7 @@ describe('createParties — attached parties', () => {
     a.abort();
     await flush();
     expectAborted(waiter.reason());
-    expect(held.context().signal.aborted).toBe(true);
+    assert.equal(held.context().signal.aborted, true);
   });
 
   it('a party attached while a moment runs joins it', () => {
@@ -885,9 +887,9 @@ describe('createParties — attached parties', () => {
     const moment = momentOf(parties);
     parties.attach(late.signal);
     a.abort();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     late.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('a released moment is reached by no later abort or attachment', () => {
@@ -898,7 +900,7 @@ describe('createParties — attached parties', () => {
     moment.release();
     moment.release();
     a.abort();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
   });
 
   it('after every party is released, a later moment has no waiter signal', () => {
@@ -909,7 +911,7 @@ describe('createParties — attached parties', () => {
     parties.attach(b.signal);
     detachA();
     b.abort();
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('the same signal attached twice is one party', () => {
@@ -918,16 +920,16 @@ describe('createParties — attached parties', () => {
     const b = new AbortController();
     const first = parties.attach(a.signal);
     parties.attach(a.signal);
-    expect(getEventListeners(a.signal, 'abort')).toHaveLength(1);
+    assert.equal(getEventListeners(a.signal, 'abort').length, 1);
     parties.attach(b.signal);
     const moment = momentOf(parties);
     b.abort();
     // `a` counted once: it still holds the moment.
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     a.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
     first();
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('detach removes the party and its listener; a later moment no longer waits on it', () => {
@@ -938,10 +940,10 @@ describe('createParties — attached parties', () => {
     parties.attach(b.signal);
     detachA();
     detachA();
-    expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
+    assert.equal(getEventListeners(a.signal, 'abort').length, 0);
     const moment = momentOf(parties);
     b.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('a party detached during a moment leaves it without aborting it', () => {
@@ -952,9 +954,9 @@ describe('createParties — attached parties', () => {
     parties.attach(b.signal);
     const moment = momentOf(parties);
     detachA();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     b.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('the only party detached during a moment leaves it unaborted; a party attached later bounds it', () => {
@@ -963,12 +965,12 @@ describe('createParties — attached parties', () => {
     const detachA = parties.attach(a.signal);
     const moment = momentOf(parties);
     detachA();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     const late = new AbortController();
     parties.attach(late.signal);
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     late.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('an aborted party is released: its listener removed, a later moment does not wait on it', () => {
@@ -978,16 +980,16 @@ describe('createParties — attached parties', () => {
     parties.attach(a.signal);
     parties.attach(b.signal);
     a.abort();
-    expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
+    assert.equal(getEventListeners(a.signal, 'abort').length, 0);
     const moment = momentOf(parties);
     b.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('an already-aborted signal is not added', () => {
     const parties = createParties();
     const detach = parties.attach(AbortSignal.abort());
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
     detach();
   });
 
@@ -1013,9 +1015,9 @@ describe('createParties — attached parties', () => {
       'abort' as unknown as AbortSignal,
       { aborted: 1 } as unknown as AbortSignal,
     ]) {
-      expect(() => parties.attach(signal)).not.toThrow();
+      assert.doesNotThrow(() => parties.attach(signal));
     }
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
 
     let fire: (() => void) | undefined;
     const repeating = {
@@ -1033,9 +1035,9 @@ describe('createParties — attached parties', () => {
     const moment = momentOf(parties);
     fire?.();
     fire?.();
-    expect(moment.signal.aborted).toBe(false);
+    assert.equal(moment.signal.aborted, false);
     good.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 
   it('listener counts return to zero', () => {
@@ -1048,20 +1050,20 @@ describe('createParties — attached parties', () => {
     second.abort();
     detaches[2]?.();
     for (const c of signals) {
-      expect(getEventListeners(c.signal, 'abort')).toHaveLength(0);
+      assert.equal(getEventListeners(c.signal, 'abort').length, 0);
     }
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('the parties object is frozen and holds no Set or Map', () => {
     const parties = createParties();
-    expect(Object.isFrozen(parties)).toBe(true);
+    assert.equal(Object.isFrozen(parties), true);
     for (const value of Object.values(parties)) {
-      expect(value instanceof Set || value instanceof Map).toBe(false);
+      assert.equal(value instanceof Set || value instanceof Map, false);
     }
     const a = new AbortController();
     parties.attach(a.signal);
-    expect(Object.isFrozen(momentOf(parties))).toBe(true);
+    assert.equal(Object.isFrozen(momentOf(parties)), true);
   });
 });
 
@@ -1102,10 +1104,10 @@ describe('a signal that aborts while its listener is registered', () => {
     const waiter = track(slot.join(held.start, signal));
     await flush();
     expectAborted(waiter.reason());
-    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    assert.equal(getEventListeners(inner, 'abort').length, 0);
     const fresh = heldStart<string>();
     void slot.join(fresh.start);
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(fresh.start.mock.callCount(), 1);
   });
 
   it('join beside a live waiter: only it is refused', async () => {
@@ -1116,18 +1118,18 @@ describe('a signal that aborts while its listener is registered', () => {
     const refused = track(slot.join(held.start, signal));
     await flush();
     expectAborted(refused.reason());
-    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    assert.equal(getEventListeners(inner, 'abort').length, 0);
     held.result.resolve('token');
     await flush();
-    expect(kept.value()).toBe('token');
+    assert.equal(kept.value(), 'token');
   });
 
   it('attach: the party is not added, no listener stays', () => {
     const parties = createParties();
     const { signal, inner } = abortingAdapter();
     const detach = parties.attach(signal);
-    expect(parties.waiterSignal()).toBeUndefined();
-    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    assert.equal(parties.waiterSignal(), undefined);
+    assert.equal(getEventListeners(inner, 'abort').length, 0);
     detach();
   });
 
@@ -1138,7 +1140,7 @@ describe('a signal that aborts while its listener is registered', () => {
     const moment = momentOf(parties);
     parties.attach(abortingAdapter().signal);
     a.abort();
-    expect(moment.signal.aborted).toBe(true);
+    assert.equal(moment.signal.aborted, true);
   });
 });
 
@@ -1180,10 +1182,10 @@ describe('a registration that aborts another party, then itself', () => {
     const moment = momentOf(parties);
     const { signal, inner } = reentrantAdapter(existing);
     parties.attach(signal);
-    expect(moment.signal.aborted).toBe(true);
-    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
-    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(moment.signal.aborted, true);
+    assert.equal(getEventListeners(existing.signal, 'abort').length, 0);
+    assert.equal(getEventListeners(inner, 'abort').length, 0);
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('join: the attempt whose waiters all aborted is aborted and leaves the slot', async () => {
@@ -1196,12 +1198,12 @@ describe('a registration that aborts another party, then itself', () => {
     await flush();
     expectAborted(first.reason());
     expectAborted(second.reason());
-    expect(held.context().signal.aborted).toBe(true);
-    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
-    expect(getEventListeners(inner, 'abort')).toHaveLength(0);
+    assert.equal(held.context().signal.aborted, true);
+    assert.equal(getEventListeners(existing.signal, 'abort').length, 0);
+    assert.equal(getEventListeners(inner, 'abort').length, 0);
     const fresh = heldStart<string>();
     void slot.join(fresh.start);
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(fresh.start.mock.callCount(), 1);
   });
 });
 
@@ -1229,10 +1231,10 @@ describe('a registration that aborts another party, then turns unreadable', () =
       },
     } as unknown as AbortSignal;
     parties.attach(signal);
-    expect(moment.signal.aborted).toBe(true);
-    expect(listeners).toHaveLength(0);
-    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(moment.signal.aborted, true);
+    assert.equal(listeners.length, 0);
+    assert.equal(getEventListeners(existing.signal, 'abort').length, 0);
+    assert.equal(parties.waiterSignal(), undefined);
   });
 });
 
@@ -1258,16 +1260,16 @@ describe('a registration that aborts another party, then throws', () => {
     const held = heldStart<string>();
     const waiter = track(slot.join(held.start, moment.signal));
     parties.attach(throwingAdapter(existing));
-    expect(moment.signal.aborted).toBe(true);
-    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
-    expect(getEventListeners(moment.signal, 'abort')).toHaveLength(0);
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(moment.signal.aborted, true);
+    assert.equal(getEventListeners(existing.signal, 'abort').length, 0);
+    assert.equal(getEventListeners(moment.signal, 'abort').length, 0);
+    assert.equal(parties.waiterSignal(), undefined);
     await flush();
     expectAborted(waiter.reason());
-    expect(held.context().signal.aborted).toBe(true);
+    assert.equal(held.context().signal.aborted, true);
     const fresh = heldStart<string>();
     void slot.join(fresh.start);
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(fresh.start.mock.callCount(), 1);
   });
 
   it('join: both waiters refused, the attempt aborted and the slot released', async () => {
@@ -1279,10 +1281,10 @@ describe('a registration that aborts another party, then throws', () => {
     await flush();
     expectAborted(first.reason());
     expectAborted(second.reason());
-    expect(held.context().signal.aborted).toBe(true);
-    expect(getEventListeners(existing.signal, 'abort')).toHaveLength(0);
+    assert.equal(held.context().signal.aborted, true);
+    assert.equal(getEventListeners(existing.signal, 'abort').length, 0);
     const fresh = heldStart<string>();
     void slot.join(fresh.start);
-    expect(fresh.start).toHaveBeenCalledTimes(1);
+    assert.equal(fresh.start.mock.callCount(), 1);
   });
 });

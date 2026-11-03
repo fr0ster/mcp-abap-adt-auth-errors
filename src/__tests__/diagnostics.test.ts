@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { describe, it, mock } from 'node:test';
 import type {
   AuthProviderErrorKind,
   IAuthProviderError,
@@ -50,13 +52,15 @@ describe('renderDiagnostics', () => {
       { problem: 'library-init-failed' },
       { library: 'C:\\sec\\sapcrypto.dll' },
     );
-    expect(renderDiagnostics(error)).toBe(
+    assert.equal(
+      renderDiagnostics(error),
       'library: "C:\\\\sec\\\\sapcrypto.dll"',
     );
   });
 
   it('renders the candidates with source, path and reason, (no path) for null', () => {
-    expect(renderDiagnostics(sncNotFound())).toBe(
+    assert.equal(
+      renderDiagnostics(sncNotFound()),
       'candidates: SNC_LIB_64 "/opt/sec/lib\\"x.so" (missing); ' +
         'registry "C:\\\\sec\\\\sapcrypto.dll" (wrong architecture); ' +
         'SNC_LIB (no path) (not a library)',
@@ -68,7 +72,7 @@ describe('renderDiagnostics', () => {
       { rule: 'untrusted-issuer', check: 'issuer' },
       { issuer: 'https://idp.example/x' },
     );
-    expect(renderDiagnostics(saml)).toBe('issuer: "https://idp.example/x"');
+    assert.equal(renderDiagnostics(saml), 'issuer: "https://idp.example/x"');
     const config = authError.configuration(
       { case: 'redirect-mismatch', fields: [] },
       {
@@ -76,18 +80,21 @@ describe('renderDiagnostics', () => {
         strategyUri: 'https://b.example/cb',
       },
     );
-    expect(renderDiagnostics(config)).toBe(
+    assert.equal(
+      renderDiagnostics(config),
       'configuredUri: "https://a.example/cb"\nstrategyUri: "https://b.example/cb"',
     );
   });
 
   it('is undefined when the error carries none', () => {
-    expect(renderDiagnostics(authError.snc({ problem: 'logon-refused' }))).toBe(
+    assert.equal(
+      renderDiagnostics(authError.snc({ problem: 'logon-refused' })),
       undefined,
     );
-    expect(
+    assert.equal(
       renderDiagnostics(authError['not-prepared']({ provider: 'snc' })),
-    ).toBe(undefined);
+      undefined,
+    );
   });
 
   it('is undefined for a copy that is not minted, diagnostics never read', () => {
@@ -95,8 +102,9 @@ describe('renderDiagnostics', () => {
       { problem: 'library-init-failed' },
       { library: '/x/lib.so' },
     );
-    expect(renderDiagnostics({ ...minted })).toBe(undefined);
-    expect(renderDiagnostics(JSON.parse(JSON.stringify(minted)))).toBe(
+    assert.equal(renderDiagnostics({ ...minted }), undefined);
+    assert.equal(
+      renderDiagnostics(JSON.parse(JSON.stringify(minted))),
       undefined,
     );
   });
@@ -129,26 +137,28 @@ describe('renderDiagnostics', () => {
     const revocable = Proxy.revocable({}, {});
     revocable.revoke();
     for (const value of [hostile, proxy, revocable.proxy, null, undefined, 3]) {
-      expect(renderDiagnostics(value)).toBe(undefined);
+      assert.equal(renderDiagnostics(value), undefined);
     }
-    expect(touched).toBe(0);
+    assert.equal(touched, 0);
   });
 
   it('is never called by render', () => {
     const calls: unknown[] = [];
     const real = built.renderDiagnostics;
-    expect(typeof real).toBe('function');
+    assert.equal(typeof real, 'function');
     // render lives in words.ts; diagnostics.ts imports it, never the reverse.
-    const spy = jest
-      .spyOn(loadBuiltDiagnostics(), 'renderDiagnostics')
-      .mockImplementation((...args: unknown[]) => {
+    const spy = mock.method(
+      loadBuiltDiagnostics(),
+      'renderDiagnostics',
+      (...args: unknown[]) => {
         calls.push(args);
         return undefined;
-      });
+      },
+    );
     render('snc', { problem: 'library-init-failed' });
     sncNotFound();
-    expect(calls).toHaveLength(0);
-    spy.mockRestore();
+    assert.equal(calls.length, 0);
+    spy.mock.restore();
   });
 });
 
@@ -162,12 +172,12 @@ describe('logFields', () => {
   it('is { error: reason, kind } with diagnostics as a separate field', () => {
     const error = sncNotFound();
     const fields = logFields(error);
-    expect(fields).toStrictEqual({
+    assert.deepEqual(fields, {
       error: error.reason,
       kind: 'snc',
       diagnostics: renderDiagnostics(error),
     });
-    expect(error.reason).not.toContain('/opt/sec');
+    assert.ok(!error.reason.includes('/opt/sec'));
   });
 
   it('carries status only when it is a fact', () => {
@@ -176,15 +186,15 @@ describe('logFields', () => {
       problem: 'refused',
       status: httpStatus(403),
     });
-    expect(logFields(withStatus).status).toBe(403);
+    assert.equal(logFields(withStatus).status, 403);
     const without = authError['request-failed']({
       operation: 'client-credentials',
       problem: 'no-response',
     });
-    expect(without.kind).toBe('request-failed');
-    expect(logFields(without).kind).toBe('request-failed');
-    expect('status' in logFields(without)).toBe(false);
-    expect('diagnostics' in logFields(without)).toBe(false);
+    assert.equal(without.kind, 'request-failed');
+    assert.equal(logFields(without).kind, 'request-failed');
+    assert.equal('status' in logFields(without), false);
+    assert.equal('diagnostics' in logFields(without), false);
   });
 
   it('classifies a non-minted value first: its reason, status and diagnostics never read', () => {
@@ -195,14 +205,15 @@ describe('logFields', () => {
       facts: { problem: 'library-init-failed' },
       diagnostics: { library: '/x' },
     };
-    expect(logFields(forged)).toStrictEqual({
+    assert.deepEqual(logFields(forged), {
       error: authError.snc({ problem: 'library-init-failed' }).reason,
       kind: 'snc',
     });
-    expect(logFields(null)).toStrictEqual(
+    assert.deepEqual(
+      logFields(null),
       logFields(authError.unknown({ operation: 'unfamiliar-error' })),
     );
-    expect(logFields(null)).toStrictEqual(logFields(undefined));
+    assert.deepEqual(logFields(null), logFields(undefined));
   });
 
   it('is total and invokes no getter, nor any trap but getOwnPropertyDescriptor', () => {
@@ -227,8 +238,8 @@ describe('logFields', () => {
         },
       },
     );
-    expect(logFields(hostile).kind).toBe('unknown');
-    expect(touched).toBe(0);
+    assert.equal(logFields(hostile).kind, 'unknown');
+    assert.equal(touched, 0);
     let invoked = 0;
     const getters = Object.defineProperty({}, 'kind', {
       get() {
@@ -236,7 +247,7 @@ describe('logFields', () => {
         return 'snc';
       },
     });
-    expect(logFields(getters).kind).toBe('unknown');
-    expect(invoked).toBe(0);
+    assert.equal(logFields(getters).kind, 'unknown');
+    assert.equal(invoked, 0);
   });
 });

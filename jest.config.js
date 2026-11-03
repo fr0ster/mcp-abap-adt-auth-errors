@@ -21,6 +21,9 @@ module.exports = {
     '/src/__tests__/widening.test.ts',
     '/src/__tests__/words.test.ts',
     '/src/__tests__/sharedAttemptRetention.test.ts',
+    '/src/__tests__/sharedAttempt.test.ts',
+    '/src/__tests__/sharedAttemptReentrancy.test.ts',
+    '/src/__tests__/diagnostics.test.ts',
   ],
   collectCoverageFrom: [
     'src/**/*.ts',

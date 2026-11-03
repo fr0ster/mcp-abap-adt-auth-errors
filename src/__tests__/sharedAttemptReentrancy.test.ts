@@ -1,4 +1,6 @@
+import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
+import { after, before, describe, it, mock } from 'node:test';
 import type { IAuthProviderError } from '@mcp-abap-adt/interfaces-auth';
 import { loadBuilt } from './builtPackage';
 
@@ -143,9 +145,9 @@ describe('re-entrancy: the reproduced cases', () => {
     const moment = parties.waiterSignal();
     a.arm('remove', () => b.abort());
     detachA();
-    expect(moment?.signal.aborted).toBe(true);
-    expect(getEventListeners(a.inner, 'abort')).toHaveLength(0);
-    expect(getEventListeners(b.signal, 'abort')).toHaveLength(0);
+    assert.equal(moment?.signal.aborted, true);
+    assert.equal(getEventListeners(a.inner, 'abort').length, 0);
+    assert.equal(getEventListeners(b.signal, 'abort').length, 0);
   });
 
   it('a join from the removal of the last aborted waiter starts afresh; the old attempt is aborted', async () => {
@@ -155,20 +157,20 @@ describe('re-entrancy: the reproduced cases', () => {
     const old = track(slot.join(starts.make(), x.signal));
     const first = starts.calls;
     let rejoined: ReturnType<typeof track> | undefined;
-    const fresh = jest.fn(starts.make());
+    const fresh = mock.fn(starts.make());
     x.arm('remove', () => {
       rejoined = track(slot.join(fresh));
     });
     x.controller.abort();
-    expect(fresh).toHaveBeenCalledTimes(1);
-    expect(first).toBe(1);
+    assert.equal(fresh.mock.callCount(), 1);
+    assert.equal(first, 1);
     await flush();
-    expect(isAborted(old.reason())).toBe(true);
+    assert.equal(isAborted(old.reason()), true);
     starts.releaseAll();
     await flush();
     starts.releaseAll();
     await flush();
-    expect(rejoined?.state()).toBe('resolved');
+    assert.equal(rejoined?.state(), 'resolved');
   });
 });
 
@@ -180,8 +182,8 @@ describe('re-entrancy: the same member, again and again', () => {
       x.arm('add', () => parties.attach(x.signal)());
       parties.attach(x.signal)();
     }
-    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(getEventListeners(x.inner, 'abort').length, 0);
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('attach whose registration fires its own listener, 100 times: no listener stays', () => {
@@ -191,8 +193,8 @@ describe('re-entrancy: the same member, again and again', () => {
       x.arm('add', (listener) => listener?.());
       parties.attach(x.signal);
     }
-    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
-    expect(parties.waiterSignal()).toBeUndefined();
+    assert.equal(getEventListeners(x.inner, 'abort').length, 0);
+    assert.equal(parties.waiterSignal(), undefined);
   });
 
   it('join whose registration fires its own listener, 100 times: each refused, no listener stays, the slot free', async () => {
@@ -205,12 +207,15 @@ describe('re-entrancy: the same member, again and again', () => {
       waiters.push(track(slot.join(starts.make(), x.signal)));
     }
     await flush();
-    expect(waiters.every((t) => isAborted(t.reason()))).toBe(true);
-    expect(getEventListeners(x.inner, 'abort')).toHaveLength(0);
-    expect(starts.calls).toBe(0);
+    assert.equal(
+      waiters.every((t) => isAborted(t.reason())),
+      true,
+    );
+    assert.equal(getEventListeners(x.inner, 'abort').length, 0);
+    assert.equal(starts.calls, 0);
     const before = starts.calls;
     void slot.join(starts.make());
-    expect(starts.calls).toBe(before + 1);
+    assert.equal(starts.calls, before + 1);
   });
 });
 
@@ -287,8 +292,8 @@ describe('re-entrancy: the matrix', () => {
   const onUnhandled = (reason: unknown): void => {
     unhandled.push(reason);
   };
-  beforeAll(() => process.on('unhandledRejection', onUnhandled));
-  afterAll(() => process.off('unhandledRejection', onUnhandled));
+  before(() => process.on('unhandledRejection', onUnhandled));
+  after(() => process.off('unhandledRejection', onUnhandled));
 
   it(`holds the invariants in all ${MATRIX.length} cases`, async () => {
     const failures: string[] = [];
@@ -297,9 +302,9 @@ describe('re-entrancy: the matrix', () => {
       const problems = await runCase(op, point, action, peer);
       for (const problem of problems) failures.push(`${label}: ${problem}`);
     }
-    expect(failures).toEqual([]);
-    expect(unhandled).toEqual([]);
-    expect(MATRIX.length).toBe(180);
+    assert.deepEqual(failures, []);
+    assert.deepEqual(unhandled, []);
+    assert.equal(MATRIX.length, 180);
   });
 });
 
