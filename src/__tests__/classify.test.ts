@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
 import { inspect } from 'node:util';
 import type {
   AuthOutcome,
@@ -102,7 +104,7 @@ function renderings(error: IAuthProviderError): string[] {
 }
 
 function expectNoMarker(error: IAuthProviderError, marker: string): void {
-  for (const text of renderings(error)) expect(text).not.toContain(marker);
+  for (const text of renderings(error)) assert.ok(!text.includes(marker));
 }
 
 describe('classify — step 1: a value minted by this copy', () => {
@@ -111,7 +113,7 @@ describe('classify — step 1: a value minted by this copy', () => {
       { problem: 'no-credential', secureLoginClient: true },
       { library: '/opt/sec/libsapcrypto.so' },
     );
-    expect(classify(minted, 'establishing')).toBe(minted);
+    assert.equal(classify(minted, 'establishing'), minted);
   });
 });
 
@@ -122,9 +124,11 @@ describe('classify — step 2: carrier extraction', () => {
       { library: '/opt/sec/libsapcrypto.so' },
     );
     const carrier = { error: minted, message: 'sk-carrier-secret' };
-    expect(classify(carrier, 'preparing')).toBe(minted);
-    expect(renderDiagnostics(classify(carrier, 'preparing'))).toContain(
-      '/opt/sec/libsapcrypto.so',
+    assert.equal(classify(carrier, 'preparing'), minted);
+    assert.ok(
+      renderDiagnostics(classify(carrier, 'preparing'))?.includes(
+        '/opt/sec/libsapcrypto.so',
+      ),
     );
   });
 
@@ -151,8 +155,8 @@ describe('classify — step 2: carrier extraction', () => {
       },
     );
     const result = classify(carrier, 'refresh');
-    expect(reads).toBe(1);
-    expect(shape(result)).toStrictEqual(shape(sample('client-certificate')));
+    assert.equal(reads, 1);
+    assert.deepEqual(shape(result), shape(sample('client-certificate')));
   });
 
   it('never invokes a getter on `error`: it reads as absent, falls through', () => {
@@ -166,32 +170,34 @@ describe('classify — step 2: carrier extraction', () => {
       },
     };
     const result = classify(carrier, 'refresh');
-    expect(invoked).toBe(0);
-    expect(shape(result)).toStrictEqual(shape(unknownWith('refresh')));
+    assert.equal(invoked, 0);
+    assert.deepEqual(shape(result), shape(unknownWith('refresh')));
   });
 
   it('a carrier whose `error` is invalid falls through to steps 4–6 on the carrier', () => {
     const tls = { error: { kind: 'evil' }, code: 'CERT_HAS_EXPIRED' };
-    expect(shape(classify(tls, 'token-request'))).toStrictEqual(
+    assert.deepEqual(
+      shape(classify(tls, 'token-request')),
       shape(
         authError.tls({ operation: 'token-request', code: 'CERT_HAS_EXPIRED' }),
       ),
     );
     const status = { error: 'nope', status: 502 };
-    expect(shape(classify(status, 'refresh'))).toStrictEqual(
+    assert.deepEqual(
+      shape(classify(status, 'refresh')),
       shape(authError.unknown({ operation: 'refresh', status: 502 })),
     );
     const bare = { error: { kind: 'tls', facts: { code: 'EVIL' } } };
-    expect(shape(classify(bare, 'refresh'))).toStrictEqual(
+    assert.deepEqual(
+      shape(classify(bare, 'refresh')),
       shape(unknownWith('refresh')),
     );
   });
 });
 
 describe('classify — step 3: structural rebuild', () => {
-  it.each(KINDS)(
-    'rebuilds a bare %s structure, re-minted, re-rendered',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`rebuilds a bare ${kind} structure, re-minted, re-rendered`, () => {
       const structure = {
         kind,
         facts: SAMPLES[kind],
@@ -199,21 +205,23 @@ describe('classify — step 3: structural rebuild', () => {
         hint: 'sk-forged-hint',
       };
       const result = classify(structure, 'refresh');
-      expect(isMinted(result)).toBe(true);
-      expect(result).not.toBe(structure);
-      expect(shape(result)).toStrictEqual(shape(sample(kind)));
-      expect(result.reason).toBe(render(kind, SAMPLES[kind]).reason);
+      assert.equal(isMinted(result), true);
+      assert.notEqual(result, structure);
+      assert.deepEqual(shape(result), shape(sample(kind)));
+      assert.equal(result.reason, render(kind, SAMPLES[kind]).reason);
       expectNoMarker(result, 'sk-forged');
-    },
-  );
+    });
+  }
 
-  it.each(KINDS)('rebuilds a %s structure carried in `error`', (kind) => {
-    const result = classify(
-      { error: { kind, facts: SAMPLES[kind] } },
-      'refresh',
-    );
-    expect(shape(result)).toStrictEqual(shape(sample(kind)));
-  });
+  for (const kind of KINDS) {
+    it(`rebuilds a ${kind} structure carried in \`error\``, () => {
+      const result = classify(
+        { error: { kind, facts: SAMPLES[kind] } },
+        'refresh',
+      );
+      assert.deepEqual(shape(result), shape(sample(kind)));
+    });
+  }
 
   it('re-mints a forged carrier without its secret reason', () => {
     const forged = {
@@ -224,9 +232,9 @@ describe('classify — step 3: structural rebuild', () => {
       },
     };
     const result = classify(forged, 'loading-certificate');
-    expect(result.kind).toBe('client-certificate');
-    expect(result.facts).toStrictEqual({ problem: 'expired' });
-    expect(result.reason).toBe(sample('client-certificate').reason);
+    assert.equal(result.kind, 'client-certificate');
+    assert.deepEqual(result.facts, { problem: 'expired' });
+    assert.equal(result.reason, sample('client-certificate').reason);
     expectNoMarker(result, 'sk-forged-carrier-secret');
   });
 
@@ -236,9 +244,9 @@ describe('classify — step 3: structural rebuild', () => {
       facts: { problem: 'bound-to-unpinned' },
       error: { kind: 'not-prepared', facts: { provider: 'snc' } },
     };
-    expect(classify(both, 'refresh').kind).toBe('not-prepared');
+    assert.equal(classify(both, 'refresh').kind, 'not-prepared');
     const outerOnly = { ...both, error: { kind: 'evil' } };
-    expect(classify(outerOnly, 'refresh').kind).toBe('token-binding');
+    assert.equal(classify(outerOnly, 'refresh').kind, 'token-binding');
   });
 
   it('an unknown kind falls through', () => {
@@ -246,10 +254,10 @@ describe('classify — step 3: structural rebuild', () => {
       { error: { kind: 'evil-kind', facts: { problem: 'expired' } } },
       'refresh',
     );
-    expect(shape(result)).toStrictEqual(shape(unknownWith('refresh')));
+    assert.deepEqual(shape(result), shape(unknownWith('refresh')));
   });
 
-  it.each([
+  for (const [kind, facts] of [
     ['client-certificate', { problem: 'stolen' }],
     ['tls', { operation: 'token-request', code: 'EVIL_CODE' }],
     ['saml-assertion', { rule: 'made-up-rule', check: 'issuer' }],
@@ -259,12 +267,15 @@ describe('classify — step 3: structural rebuild', () => {
     ['configuration', { case: 'required-fields-missing' }],
     ['renewal-declined', { trigger: 'MARKER' }],
     ['renewal-unchanged', { source: 'MARKER' }],
-  ])('facts out of their sets fall through (%s %j)', (kind, facts) => {
-    const result = classify({ kind, facts }, 'refresh', 'password');
-    expect(shape(result)).toStrictEqual(
-      shape(unknownWith('refresh', 'password')),
-    );
-  });
+  ] as const) {
+    it(`facts out of their sets fall through (${kind} ${JSON.stringify(facts)})`, () => {
+      const result = classify({ kind, facts }, 'refresh', 'password');
+      assert.deepEqual(
+        shape(result),
+        shape(unknownWith('refresh', 'password')),
+      );
+    });
+  }
 
   it('drops an optional fact out of its set, keeps the rest', () => {
     const result = classify(
@@ -280,14 +291,14 @@ describe('classify — step 3: structural rebuild', () => {
       },
       'refresh',
     );
-    expect(result.facts).toStrictEqual({
+    assert.deepEqual(result.facts, {
       operation: 'refresh',
       problem: 'refused',
       status: 401,
     });
   });
 
-  it.each([
+  for (const [_name, facts, kept, reason] of [
     [
       'aborted, manual',
       { outcome: 'aborted', strategy: 'manual', ignoredCallbacks: 2 },
@@ -318,22 +329,21 @@ describe('classify — step 3: structural rebuild', () => {
       { outcome: 'failed', status: 400 },
       'the browser login failed (HTTP 400)',
     ],
-  ])(
-    'rebuilds a foreign interactive-login (%s)',
-    (_name, facts, kept, reason) => {
+  ] as const) {
+    it(`rebuilds a foreign interactive-login (${_name})`, () => {
       for (const value of [
         { kind: 'interactive-login', facts, reason: 'sk-forged' },
         { error: { kind: 'interactive-login', facts, reason: 'sk-forged' } },
       ]) {
         const result = classify(value, 'refresh');
-        expect(isMinted(result)).toBe(true);
-        expect(result.kind).toBe('interactive-login');
-        expect(result.facts).toStrictEqual(kept);
-        expect(result.reason).toBe(reason);
+        assert.equal(isMinted(result), true);
+        assert.equal(result.kind, 'interactive-login');
+        assert.deepEqual(result.facts, kept);
+        assert.equal(result.reason, reason);
         expectNoMarker(result, 'sk-');
       }
-    },
-  );
+    });
+  }
 
   it('keeps only the declared keys of facts and drops diagnostics (index-signature limit)', () => {
     const facts: { [key: string]: string } = {
@@ -358,8 +368,8 @@ describe('classify — step 3: structural rebuild', () => {
       classify(structure, 'validating-assertion'),
       classifyRefusal(structure),
     ]) {
-      expect(Object.keys(result.facts)).toStrictEqual(['rule', 'check']);
-      expect('diagnostics' in result).toBe(false);
+      assert.deepEqual(Object.keys(result.facts), ['rule', 'check']);
+      assert.equal('diagnostics' in result, false);
       expectNoMarker(result, 'sk-index-library');
     }
   });
@@ -372,8 +382,8 @@ describe('classify — step 4: TLS failure', () => {
       status: 500,
     });
     const result = classify(thrown, 'token-request', 'client_credentials');
-    expect(result.kind).toBe('tls');
-    expect(result.facts).toStrictEqual({
+    assert.equal(result.kind, 'tls');
+    assert.deepEqual(result.facts, {
       operation: 'token-request',
       grant: 'client_credentials',
       code: 'ERR_TLS_CERT_ALTNAME_INVALID',
@@ -384,29 +394,33 @@ describe('classify — step 4: TLS failure', () => {
 
 describe('classify — step 5: status, OAuth error, system code', () => {
   it('reads `status`', () => {
-    expect(classify({ status: 401 }, 'refresh').facts).toStrictEqual({
+    assert.deepEqual(classify({ status: 401 }, 'refresh').facts, {
       operation: 'refresh',
       status: 401,
     });
   });
 
   it('reads `response.status` when `status` is absent, `status` first', () => {
-    expect(
-      classify({ response: { status: 503 } }, 'refresh').facts,
-    ).toStrictEqual({ operation: 'refresh', status: 503 });
-    expect(
+    assert.deepEqual(classify({ response: { status: 503 } }, 'refresh').facts, {
+      operation: 'refresh',
+      status: 503,
+    });
+    assert.deepEqual(
       classify({ status: 401, response: { status: 503 } }, 'refresh').facts,
-    ).toStrictEqual({ operation: 'refresh', status: 401 });
-    expect(
+      { operation: 'refresh', status: 401 },
+    );
+    assert.deepEqual(
       classify({ status: 4011, response: { status: 503 } }, 'refresh').facts,
-    ).toStrictEqual({ operation: 'refresh', status: 503 });
+      { operation: 'refresh', status: 503 },
+    );
   });
 
   it('reads `oauthError`, else `response.data.error`, registered only', () => {
-    expect(
+    assert.deepEqual(
       classify({ oauthError: 'invalid_grant' }, 'refresh').facts,
-    ).toStrictEqual({ operation: 'refresh', oauthError: 'invalid_grant' });
-    expect(
+      { operation: 'refresh', oauthError: 'invalid_grant' },
+    );
+    assert.deepEqual(
       classify(
         {
           response: {
@@ -420,15 +434,16 @@ describe('classify — step 5: status, OAuth error, system code', () => {
         'refresh',
         'password',
       ).facts,
-    ).toStrictEqual({
+      {
+        operation: 'refresh',
+        grant: 'password',
+        status: 400,
+        oauthError: 'invalid_client',
+      },
+    );
+    assert.deepEqual(classify({ oauthError: 'evil_error' }, 'refresh').facts, {
       operation: 'refresh',
-      grant: 'password',
-      status: 400,
-      oauthError: 'invalid_client',
     });
-    expect(
-      classify({ oauthError: 'evil_error' }, 'refresh').facts,
-    ).toStrictEqual({ operation: 'refresh' });
   });
 
   it('reads an allowlisted system `code`', () => {
@@ -436,19 +451,19 @@ describe('classify — step 5: status, OAuth error, system code', () => {
       code: 'ECONNREFUSED',
     });
     const result = classify(thrown, 'oidc-discovery');
-    expect(result.kind).toBe('unknown');
-    expect(result.facts).toStrictEqual({
+    assert.equal(result.kind, 'unknown');
+    assert.deepEqual(result.facts, {
       operation: 'oidc-discovery',
       code: 'ECONNREFUSED',
     });
-    expect(classify({ code: 'EVIL_CODE' }, 'refresh').facts).toStrictEqual({
+    assert.deepEqual(classify({ code: 'EVIL_CODE' }, 'refresh').facts, {
       operation: 'refresh',
     });
   });
 });
 
 describe('classify — step 6: anything else', () => {
-  it.each([
+  for (const [_label, value] of [
     ['null', null],
     ['undefined', undefined],
     ['a string', 'sk-string-secret'],
@@ -459,13 +474,16 @@ describe('classify — step 6: anything else', () => {
     ['a function', () => 'sk-function'],
     ['an empty object', {}],
     ['an array', ['sk-array']],
-  ])('%s answers unknown with the operation and grant', (_label, value) => {
-    const result = classify(value, 'browser-login', 'authorization_code');
-    expect(shape(result)).toStrictEqual(
-      shape(unknownWith('browser-login', 'authorization_code')),
-    );
-    expect(isMinted(result)).toBe(true);
-  });
+  ] as const) {
+    it(`${_label} answers unknown with the operation and grant`, () => {
+      const result = classify(value, 'browser-login', 'authorization_code');
+      assert.deepEqual(
+        shape(result),
+        shape(unknownWith('browser-login', 'authorization_code')),
+      );
+      assert.equal(isMinted(result), true);
+    });
+  }
 });
 
 describe('classify — hostile values', () => {
@@ -492,16 +510,18 @@ describe('classify — hostile values', () => {
 
   it('a Proxy whose every trap throws', () => {
     const result = classify(new Proxy({}, throwing()), 'refresh');
-    expect(shape(result)).toStrictEqual(shape(unknownWith('refresh')));
+    assert.deepEqual(shape(result), shape(unknownWith('refresh')));
   });
 
   it('a revoked Proxy', () => {
     const { proxy, revoke } = Proxy.revocable({ status: 401 }, {});
     revoke();
-    expect(shape(classify(proxy, 'refresh'))).toStrictEqual(
+    assert.deepEqual(
+      shape(classify(proxy, 'refresh')),
       shape(unknownWith('refresh')),
     );
-    expect(shape(classify({ error: proxy }, 'refresh'))).toStrictEqual(
+    assert.deepEqual(
+      shape(classify({ error: proxy }, 'refresh')),
       shape(unknownWith('refresh')),
     );
   });
@@ -515,14 +535,18 @@ describe('classify — hostile values', () => {
         },
       },
     );
-    expect(() => value instanceof Error).toThrow('sk-prototype');
-    expect(classify(value, 'refresh').facts).toStrictEqual({
+    assert.throws(
+      () => value instanceof Error,
+      (thrown: unknown) =>
+        thrown instanceof Error && thrown.message.includes('sk-prototype'),
+    );
+    assert.deepEqual(classify(value, 'refresh').facts, {
       operation: 'refresh',
       status: 401,
     });
   });
 
-  it.each([
+  for (const key of [
     'status',
     'code',
     'response',
@@ -530,19 +554,21 @@ describe('classify — hostile values', () => {
     'oauthError',
     'kind',
     'facts',
-  ])('a getter throwing on `%s` is never invoked', (key) => {
-    let invoked = 0;
-    const value = Object.defineProperty({}, key, {
-      get() {
-        invoked += 1;
-        throw new Error('sk-getter');
-      },
-      enumerable: true,
+  ]) {
+    it(`a getter throwing on \`${key}\` is never invoked`, () => {
+      let invoked = 0;
+      const value = Object.defineProperty({}, key, {
+        get() {
+          invoked += 1;
+          throw new Error('sk-getter');
+        },
+        enumerable: true,
+      });
+      const result = classify(value, 'refresh');
+      assert.equal(invoked, 0);
+      assert.deepEqual(shape(result), shape(unknownWith('refresh')));
     });
-    const result = classify(value, 'refresh');
-    expect(invoked).toBe(0);
-    expect(shape(result)).toStrictEqual(shape(unknownWith('refresh')));
-  });
+  }
 
   it('getters nested in `response` and `response.data` are never invoked', () => {
     let invoked = 0;
@@ -559,16 +585,16 @@ describe('classify — hostile values', () => {
         getter,
       ),
     };
-    expect(classify(value, 'refresh').facts).toStrictEqual({
+    assert.deepEqual(classify(value, 'refresh').facts, {
       operation: 'refresh',
     });
-    expect(invoked).toBe(0);
+    assert.equal(invoked, 0);
   });
 
   it('an invalid operation answers the unfamiliar error, never throws', () => {
     const result = classify(new Proxy({}, throwing()), 'evil-operation');
-    expect(result.kind).toBe('unknown');
-    expect(result.facts).toStrictEqual({ operation: 'unfamiliar-error' });
+    assert.equal(result.kind, 'unknown');
+    assert.deepEqual(result.facts, { operation: 'unfamiliar-error' });
   });
 });
 
@@ -589,26 +615,25 @@ describe('classify — exception text excluded', () => {
     });
   }
 
-  it.each(KINDS)(
-    '%s: an Error with the marker everywhere, bare and carried',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`${kind}: an Error with the marker everywhere, bare and carried`, () => {
       for (const value of [
         markedError(kind),
         { error: markedError(kind) },
         Object.assign(new Error(MARKER), { error: markedError(kind) }),
       ]) {
         const result = classify(value, 'refresh');
-        expect(shape(result)).toStrictEqual(shape(sample(kind)));
+        assert.deepEqual(shape(result), shape(sample(kind)));
         expectNoMarker(result, MARKER);
       }
-    },
-  );
+    });
+  }
 
   it('an Error with only free text answers unknown without it', () => {
     const error = new Error(MARKER, { cause: MARKER });
     error.name = MARKER;
     const result = classify(error, 'refresh');
-    expect(shape(result)).toStrictEqual(shape(unknownWith('refresh')));
+    assert.deepEqual(shape(result), shape(unknownWith('refresh')));
     expectNoMarker(result, MARKER);
   });
 });
@@ -618,7 +643,7 @@ describe('classify — re-mint across copies (RF3 included)', () => {
   let secondBuilders: Record<AuthProviderErrorKind, Builder>;
   let secondIsMinted: (value: unknown) => boolean;
 
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
     secondBuilders = second.exports.authError as Record<
       AuthProviderErrorKind,
@@ -626,54 +651,52 @@ describe('classify — re-mint across copies (RF3 included)', () => {
     >;
     secondIsMinted = second.exports.isMinted as (value: unknown) => boolean;
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
 
   it('the second copy has its own minted set', () => {
     const theirs = secondBuilders['client-certificate']({ problem: 'expired' });
-    expect(secondIsMinted(theirs)).toBe(true);
-    expect(isMinted(theirs)).toBe(false);
+    assert.equal(secondIsMinted(theirs), true);
+    assert.equal(isMinted(theirs), false);
   });
 
-  it.each(KINDS)(
-    '%s minted by the other copy: same kind and facts, re-rendered',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`${kind} minted by the other copy: same kind and facts, re-rendered`, () => {
       const theirs = secondBuilders[kind](SAMPLES[kind]);
       const result = classify(theirs, 'refresh');
-      expect(result).not.toBe(theirs);
-      expect(isMinted(result)).toBe(true);
-      expect(shape(result)).toStrictEqual(shape(sample(kind)));
-    },
-  );
+      assert.notEqual(result, theirs);
+      assert.equal(isMinted(result), true);
+      assert.deepEqual(shape(result), shape(sample(kind)));
+    });
+  }
 
-  it.each(KINDS)(
-    '%s: structuredClone and a JSON round-trip classify alike, without diagnostics',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`${kind}: structuredClone and a JSON round-trip classify alike, without diagnostics`, () => {
       const ours = sample(kind);
       for (const copy of [
         structuredClone(ours),
         JSON.parse(JSON.stringify(ours)),
       ]) {
         const result = classify(copy, 'refresh');
-        expect(isMinted(result)).toBe(true);
-        expect(result.kind).toBe(ours.kind);
-        expect(result.facts).toStrictEqual(ours.facts);
-        expect('diagnostics' in result).toBe(false);
+        assert.equal(isMinted(result), true);
+        assert.equal(result.kind, ours.kind);
+        assert.deepEqual(result.facts, ours.facts);
+        assert.equal('diagnostics' in result, false);
       }
-    },
-  );
+    });
+  }
 
   it('a clone of a minted error with diagnostics loses them', () => {
     const ours = authError.snc(
       { problem: 'library-init-failed' },
       { library: '/opt/sk-clone/libsapcrypto.so' },
     );
-    expect(renderDiagnostics(ours)).toContain('sk-clone');
+    assert.ok(renderDiagnostics(ours)?.includes('sk-clone'));
     for (const copy of [
       structuredClone(ours),
       JSON.parse(JSON.stringify(ours)),
     ]) {
       const result = classify(copy, 'refresh');
-      expect(result.facts).toStrictEqual(ours.facts);
+      assert.deepEqual(result.facts, ours.facts);
       expectNoMarker(result, 'sk-clone');
     }
   });
@@ -695,10 +718,10 @@ describe('forged diagnostics', () => {
   const samlFacts = { rule: 'untrusted-issuer', check: 'issuer' };
 
   let second: SecondCopy;
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
 
   /** (a) and (b): structurally valid, not minted, with forged diagnostics. */
   const forgedA = () => ({
@@ -733,8 +756,8 @@ describe('forged diagnostics', () => {
     const render2 = second.exports.renderDiagnostics as (
       e: unknown,
     ) => string | undefined;
-    expect(render2(secondA())).toContain(JWT_MARKER);
-    expect(render2(secondB())).toContain('sk-exception-in-issuer');
+    assert.ok(render2(secondA())?.includes(JWT_MARKER));
+    assert.ok(render2(secondB())?.includes('sk-exception-in-issuer'));
   });
 
   type Case = [string, () => unknown, string, string, object];
@@ -771,29 +794,27 @@ describe('forged diagnostics', () => {
     ],
   ];
 
-  it.each(cases())(
-    '%s through classify: kind and facts kept, no diagnostics, marker in no rendering',
-    (_label, make, marker, kind, facts) => {
+  for (const [_label, make, marker, kind, facts] of cases()) {
+    it(`${_label} through classify: kind and facts kept, no diagnostics, marker in no rendering`, () => {
       const result = classify(make(), 'establishing');
-      expect(result.kind).toBe(kind);
-      expect(result.facts).toStrictEqual(facts);
-      expect('diagnostics' in result).toBe(false);
+      assert.equal(result.kind, kind);
+      assert.deepEqual(result.facts, facts);
+      assert.equal('diagnostics' in result, false);
       expectNoMarker(result, marker);
-    },
-  );
+    });
+  }
 
-  it.each(cases().slice(0, 4))(
-    '%s through classifyOutcome: kind and facts kept, no diagnostics, marker in no rendering',
-    (_label, make, marker, kind, facts) => {
+  for (const [_label, make, marker, kind, facts] of cases().slice(0, 4)) {
+    it(`${_label} through classifyOutcome: kind and facts kept, no diagnostics, marker in no rendering`, () => {
       const value = make();
       const result = classifyRefusal(value);
-      expect(result).not.toBe(value);
-      expect(result.kind).toBe(kind);
-      expect(result.facts).toStrictEqual(facts);
-      expect('diagnostics' in result).toBe(false);
+      assert.notEqual(result, value);
+      assert.equal(result.kind, kind);
+      assert.deepEqual(result.facts, facts);
+      assert.equal('diagnostics' in result, false);
       expectNoMarker(result, marker);
-    },
-  );
+    });
+  }
 
   it('positive: the same errors minted by this copy keep their diagnostics, the same object', () => {
     const a = authError.snc(sncFacts, { library: JWT_MARKER });
@@ -801,12 +822,12 @@ describe('forged diagnostics', () => {
       issuer: EXCEPTION_MARKER,
     });
     for (const minted of [a, b]) {
-      expect(renderDiagnostics(minted)).toBeDefined();
-      expect(classify(minted, 'establishing')).toBe(minted);
-      expect(classify({ error: minted }, 'establishing')).toBe(minted);
-      expect(classifyRefusal(minted)).toBe(minted);
+      assert.notEqual(renderDiagnostics(minted), undefined);
+      assert.equal(classify(minted, 'establishing'), minted);
+      assert.equal(classify({ error: minted }, 'establishing'), minted);
+      assert.equal(classifyRefusal(minted), minted);
     }
-    expect(renderDiagnostics(a)).toContain(JWT_MARKER);
+    assert.ok(renderDiagnostics(a)?.includes(JWT_MARKER));
   });
 });
 
@@ -814,18 +835,18 @@ describe('classifyOutcome', () => {
   const fallback = authError['not-prepared']({ provider: 'certificate' });
 
   it('{ ok: true } answers the frozen OK', () => {
-    expect(classifyOutcome({ ok: true }, fallback)).toBe(OK);
-    expect(classifyOutcome(OK, fallback)).toBe(OK);
+    assert.equal(classifyOutcome({ ok: true }, fallback), OK);
+    assert.equal(classifyOutcome(OK, fallback), OK);
   });
 
   it('a minted refusal is answered as itself, in a fresh frozen outcome', () => {
     const refusal = sample('credential-refused');
     const input = { ok: false, refusal };
     const outcome = classifyOutcome(input, fallback);
-    expect(outcome).not.toBe(input);
-    expect(outcome).toStrictEqual({ ok: false, refusal });
-    expect(outcome.ok === false && outcome.refusal).toBe(refusal);
-    expect(Object.isFrozen(outcome)).toBe(true);
+    assert.notEqual(outcome, input);
+    assert.deepEqual(outcome, { ok: false, refusal });
+    assert.equal(outcome.ok === false && outcome.refusal, refusal);
+    assert.equal(Object.isFrozen(outcome), true);
   });
 
   it('a structural refusal is rebuilt, its reason never read', () => {
@@ -840,15 +861,16 @@ describe('classifyOutcome', () => {
       },
       fallback,
     );
-    expect(outcome.ok).toBe(false);
+    assert.equal(outcome.ok, false);
     if (outcome.ok) return;
-    expect(shape(outcome.refusal)).toStrictEqual(
+    assert.deepEqual(
+      shape(outcome.refusal),
       shape(sample('client-certificate')),
     );
     expectNoMarker(outcome.refusal, 'sk-outcome-secret');
   });
 
-  it.each([
+  for (const [_label, value] of [
     ['null', null],
     ['undefined', undefined],
     ['a string', 'ok'],
@@ -863,18 +885,20 @@ describe('classifyOutcome', () => {
     ],
     ['a function', () => ({ ok: true })],
     ['a symbol', Symbol('ok')],
-  ])('%s answers the fallback', (_label, value) => {
-    const outcome = classifyOutcome(value, fallback);
-    expect(outcome).toStrictEqual({ ok: false, refusal: fallback });
-    expect(outcome.ok === false && outcome.refusal).toBe(fallback);
-  });
+  ] as const) {
+    it(`${_label} answers the fallback`, () => {
+      const outcome = classifyOutcome(value, fallback);
+      assert.deepEqual(outcome, { ok: false, refusal: fallback });
+      assert.equal(outcome.ok === false && outcome.refusal, fallback);
+    });
+  }
 
   describe('the fallback itself is classified', () => {
     let second: SecondCopy;
-    beforeAll(() => {
+    before(() => {
       second = loadSecondCopy();
     });
-    afterAll(() => second.remove());
+    after(() => second.remove());
     const sncFacts = { problem: 'no-credential', secureLoginClient: false };
 
     it('a forged fallback is rebuilt: its reason and diagnostics are dropped', () => {
@@ -886,12 +910,12 @@ describe('classifyOutcome', () => {
         diagnostics: { library: 'sk-fallback-diagnostics' },
       } as unknown as IAuthProviderError;
       const outcome = classifyOutcome(null, forged);
-      expect(outcome.ok).toBe(false);
+      assert.equal(outcome.ok, false);
       if (outcome.ok) return;
-      expect(outcome.refusal).not.toBe(forged);
-      expect(isMinted(outcome.refusal)).toBe(true);
-      expect(outcome.refusal.kind).toBe('snc');
-      expect(outcome.refusal.diagnostics).toBeUndefined();
+      assert.notEqual(outcome.refusal, forged);
+      assert.equal(isMinted(outcome.refusal), true);
+      assert.equal(outcome.refusal.kind, 'snc');
+      assert.equal(outcome.refusal.diagnostics, undefined);
       expectNoMarker(outcome.refusal, 'sk-fallback');
     });
 
@@ -900,11 +924,11 @@ describe('classifyOutcome', () => {
         second.exports.authError as Record<AuthProviderErrorKind, Builder>
       ).snc(sncFacts, { library: 'sk-second-copy-diagnostics' });
       const outcome = classifyOutcome({ ok: 'no' }, foreign);
-      expect(outcome.ok).toBe(false);
+      assert.equal(outcome.ok, false);
       if (outcome.ok) return;
-      expect(outcome.refusal).not.toBe(foreign);
-      expect(isMinted(outcome.refusal)).toBe(true);
-      expect(outcome.refusal.diagnostics).toBeUndefined();
+      assert.notEqual(outcome.refusal, foreign);
+      assert.equal(isMinted(outcome.refusal), true);
+      assert.equal(outcome.refusal.diagnostics, undefined);
       expectNoMarker(outcome.refusal, 'sk-second-copy');
     });
 
@@ -912,9 +936,10 @@ describe('classifyOutcome', () => {
       const outcome = classifyOutcome(undefined, {
         reason: 'sk-garbage',
       } as unknown as IAuthProviderError);
-      expect(outcome.ok).toBe(false);
+      assert.equal(outcome.ok, false);
       if (outcome.ok) return;
-      expect(shape(outcome.refusal)).toStrictEqual(
+      assert.deepEqual(
+        shape(outcome.refusal),
         shape(unknownWith('unfamiliar-error')),
       );
       expectNoMarker(outcome.refusal, 'sk-garbage');
@@ -925,7 +950,7 @@ describe('classifyOutcome', () => {
         library: '/usr/lib/libsapcrypto.so',
       });
       const outcome = classifyOutcome(null, own);
-      expect(outcome.ok === false && outcome.refusal).toBe(own);
+      assert.equal(outcome.ok === false && outcome.refusal, own);
     });
   });
 
@@ -939,15 +964,15 @@ describe('classifyOutcome', () => {
     };
     const onOk = Object.defineProperty({}, 'ok', getter);
     const onRefusal = Object.defineProperty({ ok: false }, 'refusal', getter);
-    expect(classifyOutcome(onOk, fallback)).toStrictEqual({
+    assert.deepEqual(classifyOutcome(onOk, fallback), {
       ok: false,
       refusal: fallback,
     });
-    expect(classifyOutcome(onRefusal, fallback)).toStrictEqual({
+    assert.deepEqual(classifyOutcome(onRefusal, fallback), {
       ok: false,
       refusal: fallback,
     });
-    expect(invoked).toBe(0);
+    assert.equal(invoked, 0);
   });
 
   it('a Proxy whose every trap throws, and a revoked Proxy, answer the fallback', () => {
@@ -966,7 +991,7 @@ describe('classifyOutcome', () => {
     const { proxy, revoke } = Proxy.revocable({ ok: true }, {});
     revoke();
     for (const value of [hostile, proxy, { ok: false, refusal: proxy }]) {
-      expect(classifyOutcome(value, fallback)).toStrictEqual({
+      assert.deepEqual(classifyOutcome(value, fallback), {
         ok: false,
         refusal: fallback,
       });
@@ -1002,8 +1027,9 @@ describe('classifyOutcome', () => {
       },
     );
     const outcome = classifyOutcome(value, fallback);
-    expect(reads).toBe(1);
-    expect(outcome.ok === false && outcome.refusal.kind).toBe(
+    assert.equal(reads, 1);
+    assert.equal(
+      outcome.ok === false && outcome.refusal.kind,
       'client-certificate',
     );
   });
@@ -1019,10 +1045,11 @@ describe('logFields and renderDiagnostics route a non-minted input through class
       diagnostics: { library: '/sk-log-library' },
     };
     const fields = logFields(forged);
-    expect(fields).toStrictEqual(
+    assert.deepEqual(
+      fields,
       logFields(authError.snc({ problem: 'library-init-failed' })),
     );
-    expect(JSON.stringify(fields)).not.toContain('sk-log');
+    assert.ok(!JSON.stringify(fields).includes('sk-log'));
   });
 
   it('logFields of a carrier is the fields of what classify answers', () => {
@@ -1030,8 +1057,9 @@ describe('logFields and renderDiagnostics route a non-minted input through class
       { problem: 'library-init-failed' },
       { library: '/opt/sec/libsapcrypto.so' },
     );
-    expect(logFields({ error: minted })).toStrictEqual(logFields(minted));
-    expect(logFields({ status: 401 })).toStrictEqual(
+    assert.deepEqual(logFields({ error: minted }), logFields(minted));
+    assert.deepEqual(
+      logFields({ status: 401 }),
       logFields(
         authError.unknown({ operation: 'unfamiliar-error', status: 401 }),
       ),
@@ -1044,6 +1072,6 @@ describe('logFields and renderDiagnostics route a non-minted input through class
       facts: { problem: 'library-init-failed' },
       diagnostics: { library: '/sk-render-library' },
     };
-    expect(renderDiagnostics(forged)).toBeUndefined();
+    assert.equal(renderDiagnostics(forged), undefined);
   });
 });

@@ -13,6 +13,10 @@ module.exports = {
     '/src/__tests__/admission.test.ts',
     '/src/__tests__/allowlists.test.ts',
     '/src/__tests__/builders.test.ts',
+    '/src/__tests__/classify.test.ts',
+    '/src/__tests__/exhaustive.test.ts',
+    '/src/__tests__/failure.test.ts',
+    '/src/__tests__/guard.test.ts',
   ],
   collectCoverageFrom: [
     'src/**/*.ts',

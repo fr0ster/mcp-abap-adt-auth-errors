@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
 import { inspect } from 'node:util';
 import type {
   AuthOutcome,
@@ -118,20 +120,22 @@ function failureRenderings(failure: Failure): string[] {
 
 describe('the built package exports', () => {
   it('AuthProviderFailure, readFailure, isAuthProviderFailure, OK', () => {
-    expect(typeof built.AuthProviderFailure).toBe('function');
-    expect(typeof built.readFailure).toBe('function');
-    expect(typeof built.isAuthProviderFailure).toBe('function');
-    expect(built.OK).toStrictEqual({ ok: true });
-    expect(Object.isFrozen(built.OK)).toBe(true);
+    assert.equal(typeof built.AuthProviderFailure, 'function');
+    assert.equal(typeof built.readFailure, 'function');
+    assert.equal(typeof built.isAuthProviderFailure, 'function');
+    assert.deepEqual(built.OK, { ok: true });
+    assert.equal(Object.isFrozen(built.OK), true);
   });
 });
 
 describe('AuthProviderFailure — the instance', () => {
-  it.each(KINDS)('%s: message is reason, or reason — hint', (kind) => {
-    const error = sample(kind);
-    const failure = new AuthProviderFailure(error);
-    expect(failure.message).toBe(messageOf(error));
-  });
+  for (const kind of KINDS) {
+    it(`${kind}: message is reason, or reason — hint`, () => {
+      const error = sample(kind);
+      const failure = new AuthProviderFailure(error);
+      assert.equal(failure.message, messageOf(error));
+    });
+  }
 
   it('the message format, with a hint and without one', () => {
     const words = KINDS.map((kind) => sample(kind));
@@ -140,22 +144,25 @@ describe('AuthProviderFailure — the instance', () => {
     if (withHint === undefined || withoutHint === undefined) {
       throw new Error('the samples must hold a kind with and without a hint');
     }
-    expect(new AuthProviderFailure(withHint).message).toBe(
+    assert.equal(
+      new AuthProviderFailure(withHint).message,
       `${withHint.reason} — ${withHint.hint}`,
     );
-    expect(new AuthProviderFailure(withoutHint).message).toBe(
+    assert.equal(
+      new AuthProviderFailure(withoutHint).message,
       withoutHint.reason,
     );
   });
 
   it('is an Error named AuthProviderFailure, without a cause', () => {
     const failure = new AuthProviderFailure(sample('tls'));
-    expect(failure).toBeInstanceOf(Error);
-    expect(failure).toBeInstanceOf(AuthProviderFailure);
-    expect(failure.name).toBe('AuthProviderFailure');
-    expect(Object.hasOwn(failure, 'name')).toBe(true);
-    expect('cause' in failure).toBe(false);
-    expect(String(failure)).toBe(
+    assert.ok(failure instanceof Error);
+    assert.ok(failure instanceof AuthProviderFailure);
+    assert.equal(failure.name, 'AuthProviderFailure');
+    assert.equal(Object.hasOwn(failure, 'name'), true);
+    assert.equal('cause' in failure, false);
+    assert.equal(
+      String(failure),
       `AuthProviderFailure: ${messageOf(sample('tls'))}`,
     );
   });
@@ -163,13 +170,13 @@ describe('AuthProviderFailure — the instance', () => {
   it('holds the minted error itself, as an own data property', () => {
     const error = sample('snc');
     const failure = new AuthProviderFailure(error);
-    expect(failure.error).toBe(error);
+    assert.equal(failure.error, error);
     const descriptor = Object.getOwnPropertyDescriptor(failure, 'error');
-    expect(descriptor).toBeDefined();
-    expect(descriptor && 'value' in descriptor).toBe(true);
+    assert.notEqual(descriptor, undefined);
+    assert.equal(descriptor && 'value' in descriptor, true);
     // classify reads `error` only as an own data property: it gets it back.
-    expect(classify(failure, 'refresh')).toBe(error);
-    expect(readFailure(failure, 'refresh')).toBe(error);
+    assert.equal(classify(failure, 'refresh'), error);
+    assert.equal(readFailure(failure, 'refresh'), error);
   });
 
   it('error and message cannot be reassigned, deleted or redefined', () => {
@@ -178,28 +185,32 @@ describe('AuthProviderFailure — the instance', () => {
     const message = failure.message;
     for (const key of ['error', 'message'] as const) {
       const descriptor = Object.getOwnPropertyDescriptor(failure, key);
-      expect(descriptor).toMatchObject({
-        enumerable: true,
-        writable: false,
-        configurable: false,
-      });
+      assert.deepEqual(
+        {
+          enumerable: descriptor?.enumerable,
+          writable: descriptor?.writable,
+          configurable: descriptor?.configurable,
+        },
+        { enumerable: true, writable: false, configurable: false },
+      );
     }
     const writable = failure as unknown as Record<string, unknown>;
-    expect(() => {
+    assert.throws(() => {
       writable.error = sample('tls');
-    }).toThrow(TypeError);
-    expect(() => {
+    }, TypeError);
+    assert.throws(() => {
       writable.message = 'sk-assigned';
-    }).toThrow(TypeError);
-    expect(() => {
+    }, TypeError);
+    assert.throws(() => {
       delete writable.error;
-    }).toThrow(TypeError);
-    expect(() =>
-      Object.defineProperty(failure, 'error', { value: sample('tls') }),
-    ).toThrow(TypeError);
-    expect(failure.error).toBe(error);
-    expect(failure.message).toBe(message);
-    expect(classify(failure, 'refresh')).toBe(error);
+    }, TypeError);
+    assert.throws(
+      () => Object.defineProperty(failure, 'error', { value: sample('tls') }),
+      TypeError,
+    );
+    assert.equal(failure.error, error);
+    assert.equal(failure.message, message);
+    assert.equal(classify(failure, 'refresh'), error);
   });
 
   it('a subclass’s prototype accessor `error` cannot intercept the field', () => {
@@ -218,28 +229,31 @@ describe('AuthProviderFailure — the instance', () => {
       configurable: true,
     });
     const failure = new Sub(error);
-    expect(invoked).toBe(0);
-    expect(Object.getOwnPropertyDescriptor(failure, 'error')?.value).toBe(
+    assert.equal(invoked, 0);
+    assert.equal(
+      Object.getOwnPropertyDescriptor(failure, 'error')?.value,
       error,
     );
-    expect(failure.error).toBe(error);
-    expect(classify(failure, 'refresh')).toBe(error);
+    assert.equal(failure.error, error);
+    assert.equal(classify(failure, 'refresh'), error);
   });
 
   it('stack: its header is the fixed words, nothing of the input', () => {
     const error = sample('tls');
     const failure = new AuthProviderFailure(error);
-    expect(failure.stack?.split('\n')[0]).toBe(
+    assert.equal(
+      failure.stack?.split('\n')[0],
       `AuthProviderFailure: ${messageOf(error)}`,
     );
     const forged = new AuthProviderFailure({
       kind: 'tls',
       reason: 'sk-stack-marker',
     } as unknown as IAuthProviderError);
-    expect(forged.stack?.split('\n')[0]).toBe(
+    assert.equal(
+      forged.stack?.split('\n')[0],
       `AuthProviderFailure: ${messageOf(UNFAMILIAR())}`,
     );
-    expect(forged.stack).not.toContain('sk-stack-marker');
+    assert.equal(forged.stack?.includes('sk-stack-marker'), false);
   });
 
   it('no diagnostics in the message', () => {
@@ -247,10 +261,10 @@ describe('AuthProviderFailure — the instance', () => {
       { problem: 'library-init-failed' },
       { library: '/opt/sk-diag-marker/libsapcrypto.so' },
     );
-    expect(renderDiagnostics(error)).toContain('sk-diag-marker');
+    assert.ok(renderDiagnostics(error)?.includes('sk-diag-marker'));
     const failure = new AuthProviderFailure(error);
-    expect(failure.message).not.toContain('sk-diag-marker');
-    expect(String(failure)).not.toContain('sk-diag-marker');
+    assert.ok(!failure.message.includes('sk-diag-marker'));
+    assert.ok(!String(failure).includes('sk-diag-marker'));
   });
 
   it('JSON.stringify and a pino-style enumerable copy hold only name, message, error', () => {
@@ -260,26 +274,18 @@ describe('AuthProviderFailure — the instance', () => {
     );
     const failure = new AuthProviderFailure(error);
     const json = JSON.parse(JSON.stringify(failure)) as Record<string, unknown>;
-    expect(Object.keys(json).sort()).toStrictEqual([
-      'error',
-      'message',
-      'name',
-    ]);
-    expect(json.name).toBe('AuthProviderFailure');
-    expect(json.message).toBe(messageOf(error));
-    expect(json.error).toStrictEqual(shape(error));
+    assert.deepEqual(Object.keys(json).sort(), ['error', 'message', 'name']);
+    assert.equal(json.name, 'AuthProviderFailure');
+    assert.equal(json.message, messageOf(error));
+    assert.deepEqual(json.error, shape(error));
 
     // pino's serializer copies the enumerable own properties.
     const copy: Record<string, unknown> = {};
     for (const key in failure) {
       copy[key] = (failure as unknown as Record<string, unknown>)[key];
     }
-    expect(Object.keys(copy).sort()).toStrictEqual([
-      'error',
-      'message',
-      'name',
-    ]);
-    expect(copy.error).toBe(error);
+    assert.deepEqual(Object.keys(copy).sort(), ['error', 'message', 'name']);
+    assert.equal(copy.error, error);
   });
 });
 
@@ -287,9 +293,9 @@ describe('AuthProviderFailure — an unminted argument', () => {
   it('RF3: structuredClone of a minted error becomes the fixed unknown, operation unfamiliar-error (documented behaviour; the constructor takes no operation)', () => {
     for (const kind of KINDS) {
       const failure = new AuthProviderFailure(structuredClone(sample(kind)));
-      expect(isMinted(failure.error)).toBe(true);
-      expect(shape(failure.error)).toStrictEqual(shape(UNFAMILIAR()));
-      expect(failure.message).toBe(messageOf(UNFAMILIAR()));
+      assert.equal(isMinted(failure.error), true);
+      assert.deepEqual(shape(failure.error), shape(UNFAMILIAR()));
+      assert.equal(failure.message, messageOf(UNFAMILIAR()));
     }
   });
 
@@ -320,9 +326,9 @@ describe('AuthProviderFailure — an unminted argument', () => {
       throwing,
     ]) {
       const failure = new AuthProviderFailure(value as IAuthProviderError);
-      expect(shape(failure.error)).toStrictEqual(shape(UNFAMILIAR()));
+      assert.deepEqual(shape(failure.error), shape(UNFAMILIAR()));
       for (const text of failureRenderings(failure)) {
-        expect(text).not.toContain('sk-');
+        assert.ok(!text.includes('sk-'));
       }
     }
   });
@@ -331,30 +337,33 @@ describe('AuthProviderFailure — an unminted argument', () => {
 describe('readFailure', () => {
   it('is classify with the operation', () => {
     const thrown = { status: 503, code: 'ECONNRESET' };
-    expect(shape(readFailure(thrown, 'refresh'))).toStrictEqual(
+    assert.deepEqual(
+      shape(readFailure(thrown, 'refresh')),
       shape(classify(thrown, 'refresh')),
     );
-    expect(shape(readFailure(new Error('sk-x'), 'device-poll'))).toStrictEqual(
+    assert.deepEqual(
+      shape(readFailure(new Error('sk-x'), 'device-poll')),
       shape(authError.unknown({ operation: 'device-poll' })),
     );
   });
 
   it('a minted error, bare or in this copy’s failure, is answered as itself', () => {
     const error = sample('connection');
-    expect(readFailure(error, 'refresh')).toBe(error);
-    expect(readFailure(new AuthProviderFailure(error), 'refresh')).toBe(error);
+    assert.equal(readFailure(error, 'refresh'), error);
+    assert.equal(readFailure(new AuthProviderFailure(error), 'refresh'), error);
   });
 });
 
 describe('isAuthProviderFailure', () => {
   let second: SecondCopy;
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
 
   it('true for this copy’s instance', () => {
-    expect(isAuthProviderFailure(new AuthProviderFailure(sample('tls')))).toBe(
+    assert.equal(
+      isAuthProviderFailure(new AuthProviderFailure(sample('tls'))),
       true,
     );
   });
@@ -367,18 +376,19 @@ describe('isAuthProviderFailure', () => {
     >;
     for (const kind of KINDS) {
       const theirs = new SecondFailure(secondBuilders[kind](SAMPLES[kind]));
-      expect(theirs).not.toBeInstanceOf(AuthProviderFailure);
-      expect(isAuthProviderFailure(theirs)).toBe(true);
+      assert.ok(!(theirs instanceof AuthProviderFailure));
+      assert.equal(isAuthProviderFailure(theirs), true);
     }
   });
 
   it('true for a structural object: the name and an error that rebuilds', () => {
-    expect(
+    assert.equal(
       isAuthProviderFailure({
         name: 'AuthProviderFailure',
         error: shape(sample('snc')),
       }),
-    ).toBe(true);
+      true,
+    );
   });
 
   it('a forged structural value passes, and readFailure answers rebuilt words, not the forged ones', () => {
@@ -394,32 +404,38 @@ describe('isAuthProviderFailure', () => {
         diagnostics: { library: 'sk-forged-diagnostics' },
       },
     };
-    expect(isAuthProviderFailure(forged)).toBe(true);
+    assert.equal(isAuthProviderFailure(forged), true);
     const read = readFailure(forged, 'refresh');
-    expect(isMinted(read)).toBe(true);
-    expect(shape(read)).toStrictEqual(shape(authError.tls(facts)));
+    assert.equal(isMinted(read), true);
+    assert.deepEqual(shape(read), shape(authError.tls(facts)));
     for (const text of errorRenderings(read)) {
-      expect(text).not.toContain('sk-forged');
+      assert.ok(!text.includes('sk-forged'));
     }
   });
 
   it('false without the name, with another name, or with an invalid error', () => {
     const error = sample('tls');
-    expect(isAuthProviderFailure({ error })).toBe(false);
-    expect(isAuthProviderFailure({ name: 'Error', error })).toBe(false);
-    expect(
+    assert.equal(isAuthProviderFailure({ error }), false);
+    assert.equal(isAuthProviderFailure({ name: 'Error', error }), false);
+    assert.equal(
       isAuthProviderFailure({ name: 'AuthProviderFailure', error: {} }),
-    ).toBe(false);
-    expect(
+      false,
+    );
+    assert.equal(
       isAuthProviderFailure({
         name: 'AuthProviderFailure',
         error: { kind: 'tls', facts: { code: 'EVIL_CODE' } },
       }),
-    ).toBe(false);
-    expect(
+      false,
+    );
+    assert.equal(
       isAuthProviderFailure({ name: 'AuthProviderFailure', error: 'x' }),
-    ).toBe(false);
-    expect(isAuthProviderFailure(new Error('AuthProviderFailure'))).toBe(false);
+      false,
+    );
+    assert.equal(
+      isAuthProviderFailure(new Error('AuthProviderFailure')),
+      false,
+    );
   });
 
   it('false for primitives, functions, and hostile values; never throws', () => {
@@ -446,7 +462,7 @@ describe('isAuthProviderFailure', () => {
       revocable.proxy,
       throwing,
     ]) {
-      expect(isAuthProviderFailure(value)).toBe(false);
+      assert.equal(isAuthProviderFailure(value), false);
     }
   });
 
@@ -465,8 +481,8 @@ describe('isAuthProviderFailure', () => {
         return sample('tls');
       },
     });
-    expect(isAuthProviderFailure(withGetters)).toBe(false);
-    expect(invoked).toBe(0);
+    assert.equal(isAuthProviderFailure(withGetters), false);
+    assert.equal(invoked, 0);
 
     const asked: PropertyKey[] = [];
     const target = new AuthProviderFailure(sample('tls'));
@@ -480,10 +496,10 @@ describe('isAuthProviderFailure', () => {
         return Reflect.getOwnPropertyDescriptor(t, key);
       },
     });
-    expect(isAuthProviderFailure(watched)).toBe(true);
-    expect(asked).not.toContain('message');
-    expect(asked).not.toContain('stack');
-    expect(asked).not.toContain('cause');
+    assert.equal(isAuthProviderFailure(watched), true);
+    assert.ok(!asked.includes('message'));
+    assert.ok(!asked.includes('stack'));
+    assert.ok(!asked.includes('cause'));
   });
 });
 
@@ -499,7 +515,7 @@ describe('a second copy’s AuthProviderFailure of every kind (C4)', () => {
   let second: SecondCopy;
   let SecondFailure: FailureClass;
   let secondBuilders: Record<AuthProviderErrorKind, Builder>;
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
     SecondFailure = second.exports.AuthProviderFailure as FailureClass;
     secondBuilders = second.exports.authError as Record<
@@ -507,34 +523,32 @@ describe('a second copy’s AuthProviderFailure of every kind (C4)', () => {
       Builder
     >;
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
 
-  it.each(KINDS)(
-    '%s through classify and readFailure: same kind and facts, re-rendered, minted here',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`${kind} through classify and readFailure: same kind and facts, re-rendered, minted here`, () => {
       const theirs = new SecondFailure(secondBuilders[kind](SAMPLES[kind]));
       for (const result of [
         classify(theirs, 'refresh'),
         readFailure(theirs, 'refresh'),
       ]) {
-        expect(result).not.toBe(theirs.error);
-        expect(isMinted(result)).toBe(true);
-        expect(shape(result)).toStrictEqual(shape(sample(kind)));
-        expect('diagnostics' in result).toBe(false);
+        assert.notEqual(result, theirs.error);
+        assert.equal(isMinted(result), true);
+        assert.deepEqual(shape(result), shape(sample(kind)));
+        assert.equal('diagnostics' in result, false);
       }
-    },
-  );
+    });
+  }
 
-  it.each(KINDS)(
-    '%s through classifyOutcome, the failure’s error as the refusal: same kind and facts, re-rendered',
-    (kind) => {
+  for (const kind of KINDS) {
+    it(`${kind} through classifyOutcome, the failure’s error as the refusal: same kind and facts, re-rendered`, () => {
       const theirs = new SecondFailure(secondBuilders[kind](SAMPLES[kind]));
       const result = classifyRefusal(theirs.error);
-      expect(result).not.toBe(theirs.error);
-      expect(isMinted(result)).toBe(true);
-      expect(shape(result)).toStrictEqual(shape(sample(kind)));
-    },
-  );
+      assert.notEqual(result, theirs.error);
+      assert.equal(isMinted(result), true);
+      assert.deepEqual(shape(result), shape(sample(kind)));
+    });
+  }
 });
 
 describe('forged diagnostics', () => {
@@ -546,11 +560,11 @@ describe('forged diagnostics', () => {
 
   let second: SecondCopy;
   let SecondFailure: FailureClass;
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
     SecondFailure = second.exports.AuthProviderFailure as FailureClass;
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
 
   const secondBuilders = () =>
     second.exports.authError as Record<AuthProviderErrorKind, Builder>;
@@ -585,9 +599,9 @@ describe('forged diagnostics', () => {
     const render2 = second.exports.renderDiagnostics as (
       e: unknown,
     ) => string | undefined;
-    expect(render2(failureA().error)).toContain(JWT_MARKER);
-    expect(render2(failureB().error)).toContain('sk-exception-in-issuer');
-    expect(inspect(failureA(), { depth: null })).toContain(JWT_MARKER);
+    assert.ok(render2(failureA().error)?.includes(JWT_MARKER));
+    assert.ok(render2(failureB().error)?.includes('sk-exception-in-issuer'));
+    assert.ok(inspect(failureA(), { depth: null }).includes(JWT_MARKER));
   });
 
   type Case = [string, () => unknown, string, string, object];
@@ -629,58 +643,57 @@ describe('forged diagnostics', () => {
     }
   };
 
-  it.each(cases())(
-    '%s thrown, read with readFailure, wrapped here: kind and facts kept, no diagnostics, marker in no rendering',
-    (_label, make, marker, kind, facts) => {
+  for (const [_label, make, marker, kind, facts] of cases()) {
+    it(`${_label} thrown, read with readFailure, wrapped here: kind and facts kept, no diagnostics, marker in no rendering`, () => {
       const result = readFailure(caught(make()), 'establishing');
-      expect(isMinted(result)).toBe(true);
-      expect(result.kind).toBe(kind);
-      expect(result.facts).toStrictEqual(facts);
-      expect('diagnostics' in result).toBe(false);
+      assert.equal(isMinted(result), true);
+      assert.equal(result.kind, kind);
+      assert.deepEqual(result.facts, facts);
+      assert.equal('diagnostics' in result, false);
       for (const text of errorRenderings(result)) {
-        expect(text).not.toContain(marker);
+        assert.ok(!text.includes(marker));
       }
       const failure = new AuthProviderFailure(result);
-      expect(failure.error).toBe(result);
+      assert.equal(failure.error, result);
       for (const text of failureRenderings(failure)) {
-        expect(text).not.toContain(marker);
+        assert.ok(!text.includes(marker));
       }
-    },
-  );
+    });
+  }
 
-  it.each(cases().filter(([label]) => label.startsWith('(d)')))(
-    '%s through classify and classifyOutcome (the failure’s error as the refusal): no diagnostics, marker in no rendering',
-    (_label, make, marker, kind, facts) => {
+  for (const [_label, make, marker, kind, facts] of cases().filter(([label]) =>
+    label.startsWith('(d)'),
+  )) {
+    it(`${_label} through classify and classifyOutcome (the failure’s error as the refusal): no diagnostics, marker in no rendering`, () => {
       const theirs = make() as Failure;
       for (const result of [
         classify(theirs, 'establishing'),
         classifyRefusal(theirs.error),
       ]) {
-        expect(result.kind).toBe(kind);
-        expect(result.facts).toStrictEqual(facts);
-        expect('diagnostics' in result).toBe(false);
+        assert.equal(result.kind, kind);
+        assert.deepEqual(result.facts, facts);
+        assert.equal('diagnostics' in result, false);
         for (const text of errorRenderings(result)) {
-          expect(text).not.toContain(marker);
+          assert.ok(!text.includes(marker));
         }
       }
-    },
-  );
+    });
+  }
 
-  it.each([
+  for (const [_label, make, marker] of [
     A('(a)', forgedA),
     B('(b)', forgedB),
     A('(c)', secondA),
     B('(c)', secondB),
-  ])(
-    '%s handed to the constructor directly: the fixed unknown, marker in no rendering',
-    (_label, make, marker) => {
+  ]) {
+    it(`${_label} handed to the constructor directly: the fixed unknown, marker in no rendering`, () => {
       const failure = new AuthProviderFailure(make() as IAuthProviderError);
-      expect(shape(failure.error)).toStrictEqual(shape(UNFAMILIAR()));
+      assert.deepEqual(shape(failure.error), shape(UNFAMILIAR()));
       for (const text of failureRenderings(failure)) {
-        expect(text).not.toContain(marker);
+        assert.ok(!text.includes(marker));
       }
-    },
-  );
+    });
+  }
 
   it('positive: a same-copy failure carrying diagnostics keeps them through readFailure, the same object', () => {
     const a = authError.snc(sncFacts, { library: JWT_MARKER });
@@ -689,12 +702,12 @@ describe('forged diagnostics', () => {
     });
     for (const minted of [a, b]) {
       const failure = new AuthProviderFailure(minted);
-      expect(failure.error).toBe(minted);
-      expect(readFailure(caught(failure), 'establishing')).toBe(minted);
-      expect(renderDiagnostics(minted)).toBeDefined();
-      expect(failure.message).not.toContain(JWT_MARKER);
-      expect(failure.message).not.toContain('sk-exception-in-issuer');
+      assert.equal(failure.error, minted);
+      assert.equal(readFailure(caught(failure), 'establishing'), minted);
+      assert.notEqual(renderDiagnostics(minted), undefined);
+      assert.ok(!failure.message.includes(JWT_MARKER));
+      assert.ok(!failure.message.includes('sk-exception-in-issuer'));
     }
-    expect(renderDiagnostics(a)).toContain(JWT_MARKER);
+    assert.ok(renderDiagnostics(a)?.includes(JWT_MARKER));
   });
 });

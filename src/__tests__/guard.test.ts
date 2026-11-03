@@ -1,4 +1,6 @@
+import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { after, before, describe, it } from 'node:test';
 import { inspect } from 'node:util';
 import type {
   AuthOutcome,
@@ -123,18 +125,18 @@ describe('guard', () => {
     const refusal = authError['not-prepared']({ provider: 'snc' });
     const answer = { ok: false, refusal };
     const outcome = await guard('establishing', () => answer);
-    expect(refusalOf(outcome)).toBe(refusal);
-    expect(Object.isFrozen(outcome)).toBe(true);
-    await expect(guard('establishing', async () => OK)).resolves.toBe(OK);
-    await expect(guard('establishing', () => ({ ok: true }))).resolves.toBe(OK);
+    assert.equal(refusalOf(outcome), refusal);
+    assert.equal(Object.isFrozen(outcome), true);
+    assert.equal(await guard('establishing', async () => OK), OK);
+    assert.equal(await guard('establishing', () => ({ ok: true })), OK);
   });
 
   describe('a non-throwing body’s answer is classified', () => {
     let second: SecondCopy;
-    beforeAll(() => {
+    before(() => {
       second = loadSecondCopy();
     });
-    afterAll(() => second.remove());
+    after(() => second.remove());
 
     it('a forged refusal is rebuilt: its reason and diagnostics are dropped', async () => {
       const forged = {
@@ -147,11 +149,11 @@ describe('guard', () => {
         },
       };
       const refusal = refusalOf(await guard('token-request', () => forged));
-      expect(isMinted(refusal)).toBe(true);
-      expect(refusal.kind).toBe('client-certificate');
-      expect(refusal.diagnostics).toBeUndefined();
+      assert.equal(isMinted(refusal), true);
+      assert.equal(refusal.kind, 'client-certificate');
+      assert.equal(refusal.diagnostics, undefined);
       for (const text of renderings(refusal)) {
-        expect(text).not.toContain('sk-forged');
+        assert.ok(!text.includes('sk-forged'));
       }
     });
 
@@ -168,73 +170,70 @@ describe('guard', () => {
           refusal: theirs,
         })),
       );
-      expect(refusal).not.toBe(theirs);
-      expect(isMinted(refusal)).toBe(true);
-      expect(refusal.kind).toBe('snc');
-      expect(refusal.diagnostics).toBeUndefined();
+      assert.notEqual(refusal, theirs);
+      assert.equal(isMinted(refusal), true);
+      assert.equal(refusal.kind, 'snc');
+      assert.equal(refusal.diagnostics, undefined);
       for (const text of renderings(refusal)) {
-        expect(text).not.toContain('sk-second-copy');
+        assert.ok(!text.includes('sk-second-copy'));
       }
     });
 
-    it.each([
+    for (const [_label, answer] of [
       ['a string', 'SECRET-STRING'],
       ['an unforgeable refusal', { ok: false, refusal: { reason: 'SECRET' } }],
       ['a getter on ok', Object.defineProperty({}, 'ok', { get: () => true })],
       ['undefined', undefined],
-    ])(
-      '%s answers the fallback: unknown with the operation and the kept grant',
-      async (_label, answer) => {
+    ] as const) {
+      it(`${_label} answers the fallback: unknown with the operation and the kept grant`, async () => {
         const outcome = await guard(
           'token-request',
           () => answer as never,
           () => 'client_credentials',
         );
         const refusal = refusalOf(outcome);
-        expect(isMinted(refusal)).toBe(true);
-        expect(refusal.kind).toBe('unknown');
-        expect(refusal.facts).toStrictEqual({
+        assert.equal(isMinted(refusal), true);
+        assert.equal(refusal.kind, 'unknown');
+        assert.deepEqual(refusal.facts, {
           operation: 'token-request',
           grant: 'client_credentials',
         });
-        expect(JSON.stringify(outcome)).not.toContain('SECRET');
-      },
-    );
+        assert.ok(!JSON.stringify(outcome).includes('SECRET'));
+      });
+    }
 
     it('a thenable resolving to a non-outcome answers the fallback', async () => {
       const outcome = await guard('preparing', () =>
         Promise.resolve('SECRET-STRING' as never),
       );
-      expect(refusalOf(outcome).facts).toStrictEqual({
+      assert.deepEqual(refusalOf(outcome).facts, {
         operation: 'preparing',
       });
     });
   });
 
-  it.each(hostileValues())(
-    'a body throwing %s answers Oops with the operation, never rejects',
-    async (_label, value) => {
+  for (const [_label, value] of hostileValues()) {
+    it(`a body throwing ${_label} answers Oops with the operation, never rejects`, async () => {
       const outcome = await guard('authorizing', () => {
         throw value;
       });
       const refusal = refusalOf(outcome);
-      expect(isMinted(refusal)).toBe(true);
-      expect(refusal.kind).toBe('unknown');
-      expect(refusal.facts).toStrictEqual({ operation: 'authorizing' });
-    },
-  );
+      assert.equal(isMinted(refusal), true);
+      assert.equal(refusal.kind, 'unknown');
+      assert.deepEqual(refusal.facts, { operation: 'authorizing' });
+    });
+  }
 
-  it.each(hostileValues())(
-    'an async body rejecting with %s answers Oops, never rejects',
-    async (_label, value) => {
+  for (const [_label, value] of hostileValues()) {
+    it(`an async body rejecting with ${_label} answers Oops, never rejects`, async () => {
       const outcome = await guard('authorizing', async () => {
         throw value;
       });
-      expect(refusalOf(outcome).facts).toStrictEqual({
+      assert.deepEqual(refusalOf(outcome).facts, {
         operation: 'authorizing',
       });
-    },
-  );
+    });
+  }
 
   it('a body answering a thenable whose `then` getter throws answers Oops', async () => {
     const thenable = Object.defineProperty({}, 'then', {
@@ -243,7 +242,7 @@ describe('guard', () => {
       },
     });
     const outcome = await guard('preparing', () => thenable);
-    expect(refusalOf(outcome).facts).toStrictEqual({ operation: 'preparing' });
+    assert.deepEqual(refusalOf(outcome).facts, { operation: 'preparing' });
   });
 
   it('a body throwing this copy’s minted error answers it as it is', async () => {
@@ -251,7 +250,7 @@ describe('guard', () => {
     const outcome = await guard('establishing', () => {
       throw new AuthProviderFailure(minted);
     });
-    expect(refusalOf(outcome)).toBe(minted);
+    assert.equal(refusalOf(outcome), minted);
   });
 
   it('a valid grant is the refusal’s grant', async () => {
@@ -262,26 +261,28 @@ describe('guard', () => {
       },
       () => 'client_credentials',
     );
-    expect(refusalOf(outcome).facts).toStrictEqual({
+    assert.deepEqual(refusalOf(outcome).facts, {
       operation: 'refresh',
       grant: 'client_credentials',
     });
   });
 
-  it.each([
+  for (const [_label, value] of [
     ['a value off the list', 'sk-not-a-grant'],
     ['a number', 7],
     ['an object', { grant: 'password' }],
-  ])('a grant thunk answering %s is ignored', async (_label, value) => {
-    const outcome = await guard(
-      'refresh',
-      () => {
-        throw new Error('sk-x');
-      },
-      () => value,
-    );
-    expect(refusalOf(outcome).facts).toStrictEqual({ operation: 'refresh' });
-  });
+  ] as const) {
+    it(`a grant thunk answering ${_label} is ignored`, async () => {
+      const outcome = await guard(
+        'refresh',
+        () => {
+          throw new Error('sk-x');
+        },
+        () => value,
+      );
+      assert.deepEqual(refusalOf(outcome).facts, { operation: 'refresh' });
+    });
+  }
 
   it('a grant thunk that throws answers Oops with the operation and no grant; the body never runs', async () => {
     let ran = false;
@@ -295,12 +296,12 @@ describe('guard', () => {
         throw new Error('sk-grant');
       },
     );
-    expect(ran).toBe(false);
+    assert.equal(ran, false);
     const refusal = refusalOf(outcome);
-    expect(isMinted(refusal)).toBe(true);
-    expect(refusal.facts).toStrictEqual({ operation: 'establishing' });
+    assert.equal(isMinted(refusal), true);
+    assert.deepEqual(refusal.facts, { operation: 'establishing' });
     for (const text of renderings(refusal)) {
-      expect(text).not.toContain('sk-grant');
+      assert.ok(!text.includes('sk-grant'));
     }
   });
 
@@ -322,7 +323,7 @@ describe('guard', () => {
       },
       () => provider.grant,
     );
-    expect(refusalOf(outcome).facts).toStrictEqual({
+    assert.deepEqual(refusalOf(outcome).facts, {
       operation: 'authorizing',
       grant: 'password',
     });
@@ -331,10 +332,10 @@ describe('guard', () => {
 
 describe('relayOutcome', () => {
   let second: SecondCopy;
-  beforeAll(() => {
+  before(() => {
     second = loadSecondCopy();
   });
-  afterAll(() => second.remove());
+  after(() => second.remove());
   const secondBuilders = () =>
     second.exports.authError as Record<AuthProviderErrorKind, Builder>;
 
@@ -347,8 +348,8 @@ describe('relayOutcome', () => {
       'tls-material',
       'establishing',
     );
-    expect(relayed.outcome).toBe(OK);
-    expect(relayed.thrown).toBe(false);
+    assert.equal(relayed.outcome, OK);
+    assert.equal(relayed.thrown, false);
   });
 
   it('a same-copy minted refusal, returned: the same object, thrown false', () => {
@@ -358,9 +359,9 @@ describe('relayOutcome', () => {
     });
     const answer = { ok: false, refusal };
     const relayed = relayOutcome(() => answer, 'tls-material', 'establishing');
-    expect(relayed.thrown).toBe(false);
-    expect(relayed.outcome).not.toBe(answer);
-    expect(refusalOf(relayed.outcome)).toBe(refusal);
+    assert.equal(relayed.thrown, false);
+    assert.notEqual(relayed.outcome, answer);
+    assert.equal(refusalOf(relayed.outcome), refusal);
   });
 
   it('a foreign-copy refusal, returned: rebuilt without diagnostics, minted here', () => {
@@ -374,17 +375,17 @@ describe('relayOutcome', () => {
       'logon-parameters',
       'establishing',
     );
-    expect(relayed.thrown).toBe(false);
-    expect(relayed.outcome).not.toBe(answer);
+    assert.equal(relayed.thrown, false);
+    assert.notEqual(relayed.outcome, answer);
     const refusal = refusalOf(relayed.outcome);
-    expect(refusal).not.toBe(theirs);
-    expect(isMinted(refusal)).toBe(true);
-    expect(refusal.kind).toBe('snc');
-    expect(refusal.facts).toStrictEqual(theirs.facts);
-    expect('diagnostics' in refusal).toBe(false);
+    assert.notEqual(refusal, theirs);
+    assert.equal(isMinted(refusal), true);
+    assert.equal(refusal.kind, 'snc');
+    assert.deepEqual(refusal.facts, theirs.facts);
+    assert.equal('diagnostics' in refusal, false);
   });
 
-  it.each([
+  for (const [_label, value] of [
     ...hostileValues(),
     ['{ ok: false } without a refusal', { ok: false }],
     ['{ ok: false, refusal: free text }', { ok: false, refusal: 'sk-text' }],
@@ -394,22 +395,20 @@ describe('relayOutcome', () => {
       { ok: false, refusal: { kind: 'sk-kind', facts: {} } },
     ],
     ['a Promise', Promise.resolve({ ok: true })],
-  ])(
-    'a target returning %s: the logon-target fallback, wire unknown, thrown false',
-    (_label, value) => {
+  ]) {
+    it(`a target returning ${_label}: the logon-target fallback, wire unknown, thrown false`, () => {
       for (const refused of ['tls-material', 'logon-parameters']) {
         const relayed = relayOutcome(() => value, refused, 'establishing');
-        expect(relayed.thrown).toBe(false);
+        assert.equal(relayed.thrown, false);
         const refusal = refusalOf(relayed.outcome);
-        expect(isMinted(refusal)).toBe(true);
-        expect(shape(refusal)).toStrictEqual(fallbackShape(refused));
+        assert.equal(isMinted(refusal), true);
+        assert.deepEqual(shape(refusal), fallbackShape(refused));
       }
-    },
-  );
+    });
+  }
 
-  it.each(hostileValues())(
-    'a target throwing %s: classified with the operation, thrown true',
-    (_label, value) => {
+  for (const [_label, value] of hostileValues()) {
+    it(`a target throwing ${_label}: classified with the operation, thrown true`, () => {
       const relayed = relayOutcome(
         () => {
           throw value;
@@ -417,13 +416,13 @@ describe('relayOutcome', () => {
         'tls-material',
         'establishing',
       );
-      expect(relayed.thrown).toBe(true);
+      assert.equal(relayed.thrown, true);
       const refusal = refusalOf(relayed.outcome);
-      expect(isMinted(refusal)).toBe(true);
-      expect(refusal.kind).toBe('unknown');
-      expect(refusal.facts).toStrictEqual({ operation: 'establishing' });
-    },
-  );
+      assert.equal(isMinted(refusal), true);
+      assert.equal(refusal.kind, 'unknown');
+      assert.deepEqual(refusal.facts, { operation: 'establishing' });
+    });
+  }
 
   it('the same minted refusal returned and thrown: the same error, the disposition differs', () => {
     const refusal = authError['logon-target']({
@@ -442,16 +441,16 @@ describe('relayOutcome', () => {
       'logon-parameters',
       'establishing',
     );
-    expect(refusalOf(returned.outcome)).toBe(refusal);
-    expect(refusalOf(thrown.outcome)).toBe(refusal);
-    expect(returned.thrown).toBe(false);
-    expect(thrown.thrown).toBe(true);
+    assert.equal(refusalOf(returned.outcome), refusal);
+    assert.equal(refusalOf(thrown.outcome), refusal);
+    assert.equal(returned.thrown, false);
+    assert.equal(thrown.thrown, true);
   });
 
   it('an invalid `refused` from a caller past the types: a minted fallback, never a throw', () => {
     const relayed = relayOutcome(() => 'garbage', 'sk-refused', 'establishing');
-    expect(relayed.thrown).toBe(false);
-    expect(isMinted(refusalOf(relayed.outcome))).toBe(true);
+    assert.equal(relayed.thrown, false);
+    assert.equal(isMinted(refusalOf(relayed.outcome)), true);
   });
 
   describe('forged diagnostics', () => {
@@ -527,10 +526,10 @@ describe('relayOutcome', () => {
     ];
 
     function expectClean(refusal: IAuthProviderError, marker: string): void {
-      expect(isMinted(refusal)).toBe(true);
-      expect('diagnostics' in refusal).toBe(false);
+      assert.equal(isMinted(refusal), true);
+      assert.equal('diagnostics' in refusal, false);
       for (const text of renderings(refusal)) {
-        expect(text).not.toContain(marker);
+        assert.ok(!text.includes(marker));
       }
     }
 
@@ -538,46 +537,46 @@ describe('relayOutcome', () => {
       const render2 = second.exports.renderDiagnostics as (
         e: unknown,
       ) => string | undefined;
-      expect(render2(secondA())).toContain(JWT_MARKER);
-      expect(render2(failureB().error)).toContain('sk-exception-in-issuer');
+      assert.ok(render2(secondA())?.includes(JWT_MARKER));
+      assert.ok(render2(failureB().error)?.includes('sk-exception-in-issuer'));
     });
 
-    it.each(errors())(
-      '%s returned as the refusal: kind and facts kept, no diagnostics, marker in no rendering, thrown false',
-      (_label, make, marker, kind, facts) => {
+    for (const [_label, make, marker, kind, facts] of errors()) {
+      it(`${_label} returned as the refusal: kind and facts kept, no diagnostics, marker in no rendering, thrown false`, () => {
         const value = make();
         const relayed = relayOutcome(
           () => ({ ok: false, refusal: value }),
           'tls-material',
           'establishing',
         );
-        expect(relayed.thrown).toBe(false);
+        assert.equal(relayed.thrown, false);
         const refusal = refusalOf(relayed.outcome);
-        expect(refusal).not.toBe(value);
-        expect(refusal.kind).toBe(kind);
-        expect(refusal.facts).toStrictEqual(facts);
+        assert.notEqual(refusal, value);
+        assert.equal(refusal.kind, kind);
+        assert.deepEqual(refusal.facts, facts);
         expectClean(refusal, marker);
-      },
-    );
+      });
+    }
 
-    it.each(carriers())(
-      '%s returned as the refusal: a carrier is no refusal — the fallback, marker in no rendering, thrown false',
-      (_label, make, marker) => {
+    for (const [_label, make, marker] of carriers()) {
+      it(`${_label} returned as the refusal: a carrier is no refusal — the fallback, marker in no rendering, thrown false`, () => {
         const relayed = relayOutcome(
           () => ({ ok: false, refusal: make() }),
           'tls-material',
           'establishing',
         );
-        expect(relayed.thrown).toBe(false);
+        assert.equal(relayed.thrown, false);
         const refusal = refusalOf(relayed.outcome);
-        expect(shape(refusal)).toStrictEqual(fallbackShape('tls-material'));
+        assert.deepEqual(shape(refusal), fallbackShape('tls-material'));
         expectClean(refusal, marker);
-      },
-    );
+      });
+    }
 
-    it.each([...errors(), ...carriers()])(
-      '%s thrown: kind and facts kept, no diagnostics, marker in no rendering, thrown true',
-      (_label, make, marker, kind, facts) => {
+    for (const [_label, make, marker, kind, facts] of [
+      ...errors(),
+      ...carriers(),
+    ]) {
+      it(`${_label} thrown: kind and facts kept, no diagnostics, marker in no rendering, thrown true`, () => {
         const value = make();
         const relayed = relayOutcome(
           () => {
@@ -586,14 +585,14 @@ describe('relayOutcome', () => {
           'tls-material',
           'establishing',
         );
-        expect(relayed.thrown).toBe(true);
+        assert.equal(relayed.thrown, true);
         const refusal = refusalOf(relayed.outcome);
-        expect(refusal).not.toBe(value);
-        expect(refusal.kind).toBe(kind);
-        expect(refusal.facts).toStrictEqual(facts);
+        assert.notEqual(refusal, value);
+        assert.equal(refusal.kind, kind);
+        assert.deepEqual(refusal.facts, facts);
         expectClean(refusal, marker);
-      },
-    );
+      });
+    }
 
     it('positive: same-copy minted errors with diagnostics, returned, are the same object; thrown in this copy’s failure, too', () => {
       const a = authError.snc(sncFacts, { library: JWT_MARKER });
@@ -601,14 +600,14 @@ describe('relayOutcome', () => {
         issuer: EXCEPTION_MARKER,
       });
       for (const minted of [a, b]) {
-        expect(renderDiagnostics(minted)).toBeDefined();
+        assert.notEqual(renderDiagnostics(minted), undefined);
         const returned = relayOutcome(
           () => ({ ok: false, refusal: minted }),
           'tls-material',
           'establishing',
         );
-        expect(returned.thrown).toBe(false);
-        expect(refusalOf(returned.outcome)).toBe(minted);
+        assert.equal(returned.thrown, false);
+        assert.equal(refusalOf(returned.outcome), minted);
         const thrown = relayOutcome(
           () => {
             throw new AuthProviderFailure(minted);
@@ -616,10 +615,10 @@ describe('relayOutcome', () => {
           'tls-material',
           'establishing',
         );
-        expect(thrown.thrown).toBe(true);
-        expect(refusalOf(thrown.outcome)).toBe(minted);
+        assert.equal(thrown.thrown, true);
+        assert.equal(refusalOf(thrown.outcome), minted);
       }
-      expect(renderDiagnostics(a)).toContain(JWT_MARKER);
+      assert.ok(renderDiagnostics(a)?.includes(JWT_MARKER));
     });
   });
 });
@@ -729,22 +728,24 @@ function runScenario(name: string): ChildReport {
 
 /** What every scenario answers: the fallback, not thrown; guard's grant ignored. */
 function expectFallback(report: ChildReport): void {
-  expect(report.threw).toBe(false);
-  expect(report.relayThrown).toBe(false);
-  expect(report.relayKind).toBe('logon-target');
-  expect(report.relayWire).toBe('unknown');
-  expect(report.guardFacts).toStrictEqual({ operation: 'refresh' });
+  assert.equal(report.threw, false);
+  assert.equal(report.relayThrown, false);
+  assert.equal(report.relayKind, 'logon-target');
+  assert.equal(report.relayWire, 'unknown');
+  assert.deepEqual(report.guardFacts, { operation: 'refresh' });
 }
 
 describe('a rejecting plain native promise is never left unhandled', () => {
-  it.each([
+  for (const [_label, name] of [
     ['a target / grant answering Promise.reject', 'plain'],
     ['an async target / grant that throws', 'async'],
-  ])('%s: the fallback, no unhandled rejection', (_label, name) => {
-    const report = runScenario(name);
-    expectFallback(report);
-    expect(report.unhandled).toBe(0);
-  });
+  ] as const) {
+    it(`${_label}: the fallback, no unhandled rejection`, () => {
+      const report = runScenario(name);
+      expectFallback(report);
+      assert.equal(report.unhandled, 0);
+    });
+  }
 
   it('a foreign thenable’s `then` is never called', () => {
     let called = 0;
@@ -754,7 +755,7 @@ describe('a rejecting plain native promise is never left unhandled', () => {
       },
     });
     relayOutcome(() => thenable, 'tls-material', 'establishing');
-    expect(called).toBe(0);
+    assert.equal(called, 0);
   });
 });
 
@@ -762,37 +763,40 @@ describe('no foreign code runs while a promise is handled (the limit)', () => {
   it('a Promise subclass: neither its species getter nor its constructor runs; its rejection stays unhandled (the limit)', () => {
     const report = runScenario('subclass');
     expectFallback(report);
-    expect(report.calls).toStrictEqual([]);
-    expect(report.unhandled).toBeGreaterThan(0);
+    assert.deepEqual(report.calls, []);
+    assert.ok(report.unhandled > 0);
   });
 
   it('a Promise subclass whose species getter throws: nothing thrown out, never run', () => {
     const report = runScenario('speciesThrows');
     expectFallback(report);
-    expect(report.calls).toStrictEqual([]);
-    expect(report.unhandled).toBeGreaterThan(0);
+    assert.deepEqual(report.calls, []);
+    assert.ok(report.unhandled > 0);
   });
 
   it('a native promise with an own `constructor` getter: the getter never runs', () => {
     const report = runScenario('ownConstructor');
     expectFallback(report);
-    expect(report.calls).toStrictEqual([]);
+    assert.deepEqual(report.calls, []);
   });
 
   it('a Proxy around a promise: no trap runs but classifyOutcome’s guarded own-property reads', () => {
     const report = runScenario('proxy');
     expectFallback(report);
-    expect(
+    assert.deepEqual(
       report.calls.filter((call) => call !== 'trap getOwnPropertyDescriptor'),
-    ).toStrictEqual([]);
+      [],
+    );
   });
 
-  it.each([
+  for (const [_label, name] of [
     ['Promise.prototype.constructor', 'patchedConstructor'],
     ['Promise[Symbol.species]', 'patchedSpecies'],
-  ])('a patched %s: never run', (_label, name) => {
-    const report = runScenario(name);
-    expectFallback(report);
-    expect(report.calls).toStrictEqual([]);
-  });
+  ] as const) {
+    it(`a patched ${_label}: never run`, () => {
+      const report = runScenario(name);
+      expectFallback(report);
+      assert.deepEqual(report.calls, []);
+    });
+  }
 });
