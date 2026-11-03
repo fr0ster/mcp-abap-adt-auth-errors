@@ -9,6 +9,36 @@ each step names the spec section it carries out.
    number of tests and the full list of test titles. These are the before-list that step 9
    compares with (spec §3, the goal's first invariant). The counts go into this plan.
 
+   Recorded (Measured, 2026-11-03, Jest 30, `npm test -- --json`): 23 files, 2874 tests, all
+   passing. Two files hold a repeated title: `failure.test.ts` (one title twice) and
+   `words.test.ts` (one title three times), so the comparison counts titles, not a set.
+
+   | File | Tests |
+   |---|---|
+   | `admission.test.ts` | 711 |
+   | `allowlists.test.ts` | 449 |
+   | `builders.test.ts` | 157 |
+   | `classify.test.ts` | 180 |
+   | `diagnostics.test.ts` | 11 |
+   | `exhaustive.test.ts` | 15 |
+   | `exportsMap.test.ts` | 9 |
+   | `failure.test.ts` | 92 |
+   | `guard.test.ts` | 93 |
+   | `kindsTable.test.ts` | 8 |
+   | `mainEntryLoadsNothing.test.ts` | 7 |
+   | `numbers.test.ts` | 50 |
+   | `ok.test.ts` | 3 |
+   | `readme.test.ts` | 3 |
+   | `shapeCheck.test.ts` | 66 |
+   | `shapeCheckApi.test.ts` | 48 |
+   | `shapeCheckCommand.test.ts` | 21 |
+   | `sharedAttempt.test.ts` | 56 |
+   | `sharedAttemptReentrancy.test.ts` | 6 |
+   | `sharedAttemptRetention.test.ts` | 13 |
+   | `tables.test.ts` | 24 |
+   | `widening.test.ts` | 247 |
+   | `words.test.ts` | 605 |
+
 ## The runner
 
 2. **The test build** (spec §2).
